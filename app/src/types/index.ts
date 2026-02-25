@@ -182,13 +182,18 @@ export const BEHAVIORAL_CATEGORIES = {
   PROJECT: { label: '프로젝트 경험 심층' },
 } as const;
 
+// Resume list item
+export interface ResumeItem {
+  id: string;
+  name: string;
+  skills: string[];
+  createdAt: string;
+}
+
 // API Request/Response types
 export interface SetupInterviewRequest {
+  resumeId: string;
   jobPostingId?: string;
-  type: InterviewType;
-  categories: string[];
-  difficulty: Difficulty;
-  totalQuestions: number;
 }
 
 export interface EvaluateAnswerRequest {

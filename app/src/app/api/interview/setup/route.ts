@@ -5,11 +5,8 @@ import { questionService } from '@/services/question.service';
 import { z } from 'zod';
 
 const setupSchema = z.object({
+  resumeId: z.string(),
   jobPostingId: z.string().optional(),
-  type: z.enum(['TECHNICAL', 'BEHAVIORAL', 'MIXED']),
-  categories: z.array(z.string()).min(1),
-  difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED']),
-  totalQuestions: z.number().min(3).max(15).default(5),
 });
 
 export async function POST(request: NextRequest) {
@@ -20,11 +17,31 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const params = setupSchema.parse(body);
+    const { resumeId, jobPostingId } = setupSchema.parse(body);
 
-    // Generate questions
+    // Verify resume ownership
+    const resume = await prisma.resume.findFirst({
+      where: { id: resumeId, userId: session.user.id },
+    });
+    if (!resume) {
+      return NextResponse.json({ error: '이력서를 찾을 수 없습니다' }, { status: 404 });
+    }
+
+    // AI가 면접 설정 자동 결정
+    const plan = await questionService.planInterview({
+      resumeId,
+      jobPostingId,
+      userId: session.user.id,
+    });
+
+    // 결정된 설정으로 질문 생성
     const questions = await questionService.generateQuestions({
-      ...params,
+      type: plan.type,
+      categories: plan.categories,
+      difficulty: plan.difficulty,
+      totalQuestions: plan.totalQuestions,
+      resumeId,
+      jobPostingId,
       userId: session.user.id,
     });
 
@@ -32,11 +49,12 @@ export async function POST(request: NextRequest) {
     const interviewSession = await prisma.interviewSession.create({
       data: {
         userId: session.user.id,
-        jobPostingId: params.jobPostingId,
-        type: params.type,
-        categories: params.categories,
-        difficulty: params.difficulty,
-        totalQuestions: params.totalQuestions,
+        resumeId,
+        jobPostingId: jobPostingId || null,
+        type: plan.type,
+        categories: plan.categories,
+        difficulty: plan.difficulty,
+        totalQuestions: plan.totalQuestions,
         status: 'IN_PROGRESS',
       },
     });
@@ -53,6 +71,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       sessionId: interviewSession.id,
+      plan,
       questions,
     });
   } catch (error) {

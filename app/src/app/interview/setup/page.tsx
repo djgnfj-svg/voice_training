@@ -4,62 +4,51 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
 import { useToast } from '@/hooks/useToast';
-import { Loader2, Settings, Mic } from 'lucide-react';
-import type { ParsedJobPosting, CompanyAnalysis, InterviewType, Difficulty } from '@/types';
-import { TECHNICAL_CATEGORIES } from '@/types';
+import { Loader2, Mic, Sparkles, ArrowRight, SkipForward } from 'lucide-react';
+import type { ParsedJobPosting, CompanyAnalysis } from '@/types';
 
-const difficultyLabels: Record<Difficulty, string> = {
-  BEGINNER: '초급',
-  INTERMEDIATE: '중급',
-  ADVANCED: '고급',
-};
-
-const typeLabels: Record<InterviewType, string> = {
-  TECHNICAL: '기술면접',
-  BEHAVIORAL: '인성면접',
-  MIXED: '혼합면접',
-};
-
-const allCategories = Object.entries(TECHNICAL_CATEGORIES).flatMap(([key, cat]) =>
-  cat.subcategories.map((sub) => ({ id: `${key}_${sub}`, label: sub, parent: cat.label }))
-);
+type Step = 'resume' | 'job-posting' | 'start';
 
 export default function InterviewSetupPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<Step>('resume');
 
-  // Job posting state
+  const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
     parsedData: ParsedJobPosting;
     companyAnalysis: CompanyAnalysis;
   } | null>(null);
 
-  // Interview settings
-  const [type, setType] = useState<InterviewType>('TECHNICAL');
-  const [difficulty, setDifficulty] = useState<Difficulty>('INTERMEDIATE');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [totalQuestions, setTotalQuestions] = useState(5);
+  const goToJobPosting = () => {
+    if (!selectedResumeId) {
+      toast({ title: '이력서를 선택해주세요', variant: 'destructive' });
+      return;
+    }
+    setStep('job-posting');
+  };
 
-  const toggleCategory = (categoryId: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(categoryId)
-        ? prev.filter((c) => c !== categoryId)
-        : [...prev, categoryId]
-    );
+  const skipJobPosting = () => {
+    setStep('start');
+  };
+
+  const handleJobPostingAnalyzed = (data: {
+    id: string;
+    parsedData: ParsedJobPosting;
+    companyAnalysis: CompanyAnalysis;
+  }) => {
+    setJobPostingData(data);
+    setStep('start');
   };
 
   const startInterview = async () => {
-    if (selectedCategories.length === 0) {
-      toast({ title: '카테고리를 선택해주세요', variant: 'destructive' });
+    if (!selectedResumeId) {
+      toast({ title: '이력서를 선택해주세요', variant: 'destructive' });
       return;
     }
 
@@ -69,11 +58,8 @@ export default function InterviewSetupPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          resumeId: selectedResumeId,
           jobPostingId: jobPostingData?.id,
-          type,
-          categories: selectedCategories,
-          difficulty,
-          totalQuestions,
         }),
       });
 
@@ -83,10 +69,9 @@ export default function InterviewSetupPage() {
       }
 
       const data = await res.json();
-      const { sessionId, questions } = data;
+      const { sessionId, plan, questions } = data;
 
-      // Store questions in sessionStorage for the session page
-      sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ questions }));
+      sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ plan, questions }));
 
       router.push(`/interview/session/${sessionId}`);
     } catch (error: any) {
@@ -99,124 +84,132 @@ export default function InterviewSetupPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">면접 설정</h1>
-        <p className="text-muted-foreground">면접 유형과 카테고리를 선택하세요</p>
+        <h1 className="text-3xl font-bold">면접 시작</h1>
+        <p className="text-muted-foreground">
+          이력서를 선택하고, 선택적으로 채용 공고를 입력하면 AI가 맞춤 면접을 설계합니다
+        </p>
       </div>
 
-      {/* Step 1: Job Posting (Optional) */}
-      {!jobPostingData ? (
-        <JobPostingInput onAnalyzed={setJobPostingData} />
-      ) : (
-        <JobPostingResult
-          parsedData={jobPostingData.parsedData}
-          companyAnalysis={jobPostingData.companyAnalysis}
-        />
+      {/* Step indicators */}
+      <div className="flex items-center gap-2 text-sm">
+        <span className={step === 'resume' ? 'font-bold text-primary' : 'text-muted-foreground'}>
+          1. 이력서 선택
+        </span>
+        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+        <span className={step === 'job-posting' ? 'font-bold text-primary' : 'text-muted-foreground'}>
+          2. 채용공고 (선택)
+        </span>
+        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+        <span className={step === 'start' ? 'font-bold text-primary' : 'text-muted-foreground'}>
+          3. 면접 시작
+        </span>
+      </div>
+
+      {/* Step 1: Resume Selection */}
+      {step === 'resume' && (
+        <>
+          <ResumeSelector
+            selectedId={selectedResumeId}
+            onSelect={setSelectedResumeId}
+          />
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={goToJobPosting}
+            disabled={!selectedResumeId}
+          >
+            다음: 채용공고 입력
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </>
       )}
 
-      {/* Step 2: Interview Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            면접 설정
-          </CardTitle>
-          <CardDescription>면접 유형, 카테고리, 난이도를 선택하세요</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Type */}
-          <div className="space-y-2">
-            <Label>면접 유형</Label>
-            <Select value={type} onValueChange={(v) => setType(v as InterviewType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(typeLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Step 2: Job Posting (optional) */}
+      {step === 'job-posting' && (
+        <>
+          {!jobPostingData ? (
+            <>
+              <JobPostingInput onAnalyzed={handleJobPostingAnalyzed} />
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full"
+                onClick={skipJobPosting}
+              >
+                <SkipForward className="mr-2 h-4 w-4" />
+                건너뛰기 (이력서만으로 면접 진행)
+              </Button>
+            </>
+          ) : (
+            <JobPostingResult
+              parsedData={jobPostingData.parsedData}
+              companyAnalysis={jobPostingData.companyAnalysis}
+            />
+          )}
+        </>
+      )}
 
-          {/* Difficulty */}
-          <div className="space-y-2">
-            <Label>난이도</Label>
-            <Select value={difficulty} onValueChange={(v) => setDifficulty(v as Difficulty)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(difficultyLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Step 3: Start Interview */}
+      {step === 'start' && (
+        <>
+          {jobPostingData && (
+            <JobPostingResult
+              parsedData={jobPostingData.parsedData}
+              companyAnalysis={jobPostingData.companyAnalysis}
+            />
+          )}
 
-          {/* Question Count */}
-          <div className="space-y-2">
-            <Label>질문 수</Label>
-            <Select value={totalQuestions.toString()} onValueChange={(v) => setTotalQuestions(parseInt(v))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[3, 5, 7, 10, 15].map((n) => (
-                  <SelectItem key={n} value={n.toString()}>{n}문제</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                AI 면접 설계
+              </CardTitle>
+              <CardDescription>
+                {jobPostingData
+                  ? '채용 공고와 이력서를 기반으로 AI가 면접 유형, 카테고리, 난이도, 질문 수를 자동으로 결정합니다'
+                  : '이력서를 기반으로 AI가 면접 유형, 카테고리, 난이도, 질문 수를 자동으로 결정합니다'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                {jobPostingData ? (
+                  <>
+                    <li>- 공고의 요구 기술과 이력서 스킬을 비교하여 카테고리 선택</li>
+                    <li>- 경력 수준에 맞는 난이도 자동 조절</li>
+                    <li>- 강점 검증 + 약점 보완 질문을 균형 있게 배치</li>
+                  </>
+                ) : (
+                  <>
+                    <li>- 이력서의 기술스택과 프로젝트 경험을 분석하여 카테고리 선택</li>
+                    <li>- 경력 수준에 맞는 난이도 자동 조절</li>
+                    <li>- 프로젝트 심층 + 기술 역량 + 성장 관련 질문을 균형 있게 배치</li>
+                  </>
+                )}
+              </ul>
+            </CardContent>
+          </Card>
 
-          {/* Categories */}
-          <div className="space-y-2">
-            <Label>카테고리 (복수 선택 가능)</Label>
-            <div className="space-y-4">
-              {Object.entries(TECHNICAL_CATEGORIES).map(([key, cat]) => (
-                <div key={key}>
-                  <p className="mb-2 text-sm font-medium text-muted-foreground">{cat.label}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {cat.subcategories.map((sub) => {
-                      const id = `${key}_${sub}`;
-                      const isSelected = selectedCategories.includes(id);
-                      return (
-                        <Badge
-                          key={id}
-                          variant={isSelected ? 'default' : 'outline'}
-                          className="cursor-pointer"
-                          onClick={() => toggleCategory(id)}
-                        >
-                          {sub}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Start Button */}
-      <Button
-        size="lg"
-        className="w-full"
-        onClick={startInterview}
-        disabled={loading || selectedCategories.length === 0}
-      >
-        {loading ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            면접 준비 중...
-          </>
-        ) : (
-          <>
-            <Mic className="mr-2 h-4 w-4" />
-            면접 시작하기
-          </>
-        )}
-      </Button>
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={startInterview}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                AI가 면접을 설계하고 있습니다...
+              </>
+            ) : (
+              <>
+                <Mic className="mr-2 h-4 w-4" />
+                면접 시작하기
+              </>
+            )}
+          </Button>
+        </>
+      )}
     </div>
   );
 }

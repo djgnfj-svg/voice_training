@@ -5,7 +5,12 @@ import { RESUME_PARSING_PROMPT } from '@/prompts/resume';
 import type { ParsedResume } from '@/types';
 
 export class ResumeService {
-  async uploadAndParse(userId: string, file: Buffer, filename: string): Promise<ParsedResume> {
+  async uploadAndParse(
+    userId: string,
+    file: Buffer,
+    filename: string,
+    name: string
+  ) {
     // Upload to MinIO
     const key = `resumes/${userId}/${Date.now()}_${filename}`;
     const url = await uploadFile(key, file, 'application/pdf');
@@ -18,16 +23,17 @@ export class ResumeService {
     // Parse with GPT
     const parsedResume = await this.parseResume(text);
 
-    // Update user record
-    await prisma.user.update({
-      where: { id: userId },
+    // Create Resume record
+    const resume = await prisma.resume.create({
       data: {
-        resumeUrl: url,
-        parsedResume: parsedResume as any,
+        userId,
+        name,
+        fileUrl: url,
+        parsedData: parsedResume as any,
       },
     });
 
-    return parsedResume;
+    return resume;
   }
 
   private async parseResume(text: string): Promise<ParsedResume> {
@@ -46,12 +52,45 @@ export class ResumeService {
     return JSON.parse(content) as ParsedResume;
   }
 
-  async getUserResume(userId: string): Promise<ParsedResume | null> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { parsedResume: true },
+  async getUserResumes(userId: string) {
+    return prisma.resume.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        parsedData: true,
+        createdAt: true,
+      },
     });
-    return (user?.parsedResume as unknown as ParsedResume) || null;
+  }
+
+  async getResumeById(id: string, userId: string) {
+    return prisma.resume.findFirst({
+      where: { id, userId },
+    });
+  }
+
+  async deleteResume(id: string, userId: string) {
+    const resume = await prisma.resume.findFirst({
+      where: { id, userId },
+    });
+    if (!resume) throw new Error('Resume not found');
+
+    await prisma.resume.delete({ where: { id } });
+    return resume;
+  }
+
+  async renameResume(id: string, userId: string, name: string) {
+    const resume = await prisma.resume.findFirst({
+      where: { id, userId },
+    });
+    if (!resume) throw new Error('Resume not found');
+
+    return prisma.resume.update({
+      where: { id },
+      data: { name },
+    });
   }
 }
 

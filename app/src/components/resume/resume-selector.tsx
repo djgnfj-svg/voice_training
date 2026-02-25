@@ -1,0 +1,159 @@
+'use client';
+
+import { useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/useToast';
+import { Upload, FileText, CheckCircle, Loader2, Plus } from 'lucide-react';
+import type { ResumeItem } from '@/types';
+
+interface ResumeSelectorProps {
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}
+
+export function ResumeSelector({ selectedId, onSelect }: ResumeSelectorProps) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: resumes, isLoading } = useQuery<ResumeItem[]>({
+    queryKey: ['resumes'],
+    queryFn: async () => {
+      const res = await fetch('/api/resume');
+      if (!res.ok) throw new Error('Failed to fetch resumes');
+      return res.json();
+    },
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/resume', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Upload failed');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['resumes'] });
+      onSelect(data.id);
+      toast({ title: '이력서가 업로드되었습니다' });
+    },
+    onError: (error: Error) => {
+      toast({ title: '업로드 실패', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const handleFileSelect = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      if (!file.name.endsWith('.pdf')) {
+        toast({ title: 'PDF 파일만 업로드 가능합니다', variant: 'destructive' });
+        return;
+      }
+      uploadMutation.mutate(file);
+    };
+    input.click();
+  }, [uploadMutation, toast]);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          이력서 선택
+        </CardTitle>
+        <CardDescription>면접에 사용할 이력서를 선택하세요</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {resumes && resumes.length > 0 ? (
+          <div className="grid gap-3">
+            {resumes.map((resume) => (
+              <div
+                key={resume.id}
+                className={`cursor-pointer rounded-lg border-2 p-4 transition-colors ${
+                  selectedId === resume.id
+                    ? 'border-primary bg-primary/5'
+                    : 'border-transparent bg-muted/50 hover:border-muted-foreground/25'
+                }`}
+                onClick={() => onSelect(resume.id)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {selectedId === resume.id && (
+                      <CheckCircle className="h-4 w-4 text-primary" />
+                    )}
+                    <span className="font-medium">{resume.name}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(resume.createdAt).toLocaleDateString('ko-KR')}
+                  </span>
+                </div>
+                {resume.skills.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {resume.skills.slice(0, 5).map((skill) => (
+                      <Badge key={skill} variant="secondary" className="text-xs">
+                        {skill}
+                      </Badge>
+                    ))}
+                    {resume.skills.length > 5 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{resume.skills.length - 5}
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-4 text-center text-muted-foreground">
+            <FileText className="mx-auto mb-2 h-8 w-8" />
+            <p className="text-sm">등록된 이력서가 없습니다</p>
+            <p className="text-xs">아래에서 새 이력서를 업로드해주세요</p>
+          </div>
+        )}
+
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={handleFileSelect}
+          disabled={uploadMutation.isPending}
+        >
+          {uploadMutation.isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              분석 중...
+            </>
+          ) : (
+            <>
+              <Plus className="mr-2 h-4 w-4" />
+              새 이력서 업로드
+            </>
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

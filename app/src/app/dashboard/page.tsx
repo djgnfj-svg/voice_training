@@ -9,7 +9,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) return null;
 
-  const [sessionCount, recentSessions, user] = await Promise.all([
+  const [sessionCount, recentSessions, resumeCount] = await Promise.all([
     prisma.interviewSession.count({
       where: { userId: session.user.id, status: 'COMPLETED' },
     }),
@@ -19,9 +19,8 @@ export default async function DashboardPage() {
       take: 5,
       select: { id: true, type: true, overallScore: true, createdAt: true, categories: true },
     }),
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { parsedResume: true },
+    prisma.resume.count({
+      where: { userId: session.user.id },
     }),
   ]);
 
@@ -34,8 +33,6 @@ export default async function DashboardPage() {
             recentSessions.filter((s) => s.overallScore !== null).length
         )
       : 0;
-
-  const hasResume = !!user?.parsedResume;
 
   return (
     <div className="space-y-6">
@@ -70,7 +67,7 @@ export default async function DashboardPage() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{hasResume ? '등록됨' : '미등록'}</div>
+            <div className="text-2xl font-bold">{resumeCount}개</div>
           </CardContent>
         </Card>
         <Card>
