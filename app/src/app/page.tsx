@@ -70,11 +70,8 @@ export default function LandingPage() {
             음성으로 답변하고, 실시간 피드백과 종합 리포트를 받아보세요.
           </p>
           <div className="flex items-center justify-center gap-4">
-            <Link href="/register">
-              <Button size="lg">무료로 시작하기</Button>
-            </Link>
-            <Link href="/login">
-              <Button size="lg" variant="outline">로그인</Button>
+            <Link href="/dashboard">
+              <Button size="lg">바로 시작하기</Button>
             </Link>
           </div>
         </section>

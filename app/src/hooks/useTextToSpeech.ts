@@ -11,64 +11,70 @@ interface TextToSpeechHook {
 
 export function useTextToSpeech(): TextToSpeechHook {
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-
-  const isSupported =
-    typeof window !== 'undefined' && 'speechSynthesis' in window;
-
-  const speak = useCallback(
-    (text: string): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        if (!isSupported) {
-          reject(new Error('Speech synthesis not supported'));
-          return;
-        }
-
-        // Cancel any ongoing speech
-        window.speechSynthesis.cancel();
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'ko-KR';
-        utterance.rate = 0.95;
-        utterance.pitch = 1;
-        utterance.volume = 1;
-
-        // Try to find a Korean voice
-        const voices = window.speechSynthesis.getVoices();
-        const koreanVoice = voices.find(
-          (v) => v.lang === 'ko-KR' || v.lang.startsWith('ko')
-        );
-        if (koreanVoice) {
-          utterance.voice = koreanVoice;
-        }
-
-        utterance.onstart = () => setIsSpeaking(true);
-        utterance.onend = () => {
-          setIsSpeaking(false);
-          resolve();
-        };
-        utterance.onerror = (event) => {
-          setIsSpeaking(false);
-          if (event.error !== 'canceled') {
-            reject(new Error(`Speech synthesis error: ${event.error}`));
-          } else {
-            resolve();
-          }
-        };
-
-        utteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
-      });
-    },
-    [isSupported]
-  );
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const stop = useCallback(() => {
-    if (isSupported) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
+    abortRef.current?.abort();
+    abortRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
     }
-  }, [isSupported]);
+    setIsSpeaking(false);
+  }, []);
 
-  return { isSpeaking, isSupported, speak, stop };
+  const speak = useCallback(
+    async (text: string): Promise<void> => {
+      stop();
+
+      const abortController = new AbortController();
+      abortRef.current = abortController;
+
+      try {
+        const res = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+          signal: abortController.signal,
+        });
+
+        if (!res.ok) throw new Error('TTS request failed');
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+
+        await new Promise<void>((resolve, reject) => {
+          const audio = new Audio(url);
+          audioRef.current = audio;
+
+          audio.onplay = () => setIsSpeaking(true);
+          audio.onended = () => {
+            setIsSpeaking(false);
+            URL.revokeObjectURL(url);
+            audioRef.current = null;
+            resolve();
+          };
+          audio.onerror = () => {
+            setIsSpeaking(false);
+            URL.revokeObjectURL(url);
+            audioRef.current = null;
+            reject(new Error('Audio playback failed'));
+          };
+
+          audio.play().catch(reject);
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
+        setIsSpeaking(false);
+        throw error;
+      }
+    },
+    [stop]
+  );
+
+  return { isSpeaking, isSupported: true, speak, stop };
 }

@@ -1,32 +1,6 @@
 version: '3.8'
 
 services:
-  app:
-    build:
-      context: ./app
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - DATABASE_URL=postgresql://voice_training:voice_training_dev@postgres:5432/voice_training
-      - REDIS_URL=redis://redis:6379
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin123
-      - MINIO_BUCKET=voice-training
-      - NEXTAUTH_URL=http://localhost:3000
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-me}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - NODE_ENV=production
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_started
-    restart: unless-stopped
-
   postgres:
     image: postgres:16-alpine
     ports:
