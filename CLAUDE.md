@@ -54,6 +54,12 @@
 - `output: 'standalone'` 사용하지 않음 (Vercel에서 불필요)
 - Redis 없음 — `lib/redis.ts`가 연결 실패 시 graceful 무시 (캐시만 스킵)
 
+## TODO
+- [ ] 한국어 입력 정확도 강화 (음성 인식 개선)
+- [ ] 꼬리질문 기능 (답변 기반 후속 질문 자동 생성)
+- [ ] GitHub 프로필/레포 분석 (이력서 보완 자료로 활용)
+- [ ] 심화 면접을 위한 깊은 분석 (기술 스택별 심층 질문 생성)
+
 ## 환경 변수
 - `app/.env.local` — DB, Anthropic API 키, NextAuth, Google OAuth 등
 - Vercel 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `ANTHROPIC_API_KEY`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSpeechRecognition } from './useSpeechRecognition';
+import { normalizeTranscript } from '@/lib/transcript';
 
 export interface CunningQA {
   question: string;
@@ -140,7 +141,7 @@ export function useCunningMode({
 
   const submitQuestion = useCallback(
     (text?: string) => {
-      const question = (text || speech.transcript).trim();
+      const question = normalizeTranscript(text || speech.transcript);
       if (question.length < 10) return;
 
       clearSilenceTimer();

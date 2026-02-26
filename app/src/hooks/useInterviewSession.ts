@@ -3,7 +3,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { useSpeechRecognition } from './useSpeechRecognition';
 import { useTextToSpeech } from './useTextToSpeech';
-import type { InterviewQuestion, AnswerEvaluation } from '@/types';
+import { normalizeTranscript } from '@/lib/transcript';
+import type { InterviewQuestion, AnswerEvaluation, InterviewType } from '@/types';
 
 type SessionPhase = 'idle' | 'asking' | 'listening' | 'evaluating' | 'feedback' | 'completed';
 
@@ -14,6 +15,9 @@ interface InterviewSessionState {
   currentQuestionIndex: number;
   answers: AnswerWithEval[];
   startTime: number | null;
+  interviewType: InterviewType | null;
+  isFollowUp: boolean;
+  followUpEvaluation: AnswerEvaluation | null;
 }
 
 interface AnswerWithEval {
@@ -31,6 +35,9 @@ export function useInterviewSession() {
     currentQuestionIndex: 0,
     answers: [],
     startTime: null,
+    interviewType: null,
+    isFollowUp: false,
+    followUpEvaluation: null,
   });
 
   const answerStartTimeRef = useRef<number>(0);
@@ -38,7 +45,7 @@ export function useInterviewSession() {
   const tts = useTextToSpeech();
 
   const startSession = useCallback(
-    async (sessionId: string, questions: InterviewQuestion[]) => {
+    async (sessionId: string, questions: InterviewQuestion[], interviewType?: InterviewType) => {
       setState({
         phase: 'asking',
         sessionId,
@@ -46,6 +53,9 @@ export function useInterviewSession() {
         currentQuestionIndex: 0,
         answers: [],
         startTime: Date.now(),
+        interviewType: interviewType || null,
+        isFollowUp: false,
+        followUpEvaluation: null,
       });
 
       // Speak the first question
@@ -65,7 +75,7 @@ export function useInterviewSession() {
 
     speech.stopListening();
     const responseTimeSec = Math.round((Date.now() - answerStartTimeRef.current) / 1000);
-    const transcript = speech.transcript;
+    const transcript = normalizeTranscript(speech.transcript);
 
     setState((prev) => ({ ...prev, phase: 'evaluating' }));
 
@@ -134,6 +144,8 @@ export function useInterviewSession() {
       ...prev,
       currentQuestionIndex: nextIndex,
       phase: 'asking',
+      isFollowUp: false,
+      followUpEvaluation: null,
     }));
 
     // Speak next question
@@ -162,6 +174,69 @@ export function useInterviewSession() {
     await nextQuestion();
   }, [state.currentQuestionIndex, speech, nextQuestion]);
 
+  const startFollowUp = useCallback(async () => {
+    const currentAnswer = state.answers.find(
+      (a) => a.questionIndex === state.currentQuestionIndex
+    );
+    const followUpQuestion = currentAnswer?.evaluation?.followUpQuestion;
+    if (!followUpQuestion) return;
+
+    setState((prev) => ({
+      ...prev,
+      isFollowUp: true,
+      followUpEvaluation: null,
+      phase: 'asking',
+    }));
+
+    await tts.speak(followUpQuestion);
+    answerStartTimeRef.current = Date.now();
+    setState((prev) => ({ ...prev, phase: 'listening' }));
+    speech.resetTranscript();
+    speech.startListening();
+  }, [state.answers, state.currentQuestionIndex, tts, speech]);
+
+  const submitFollowUpAnswer = useCallback(async () => {
+    const currentAnswer = state.answers.find(
+      (a) => a.questionIndex === state.currentQuestionIndex
+    );
+    const followUpQuestion = currentAnswer?.evaluation?.followUpQuestion;
+    if (!followUpQuestion) return;
+
+    speech.stopListening();
+    const transcript = normalizeTranscript(speech.transcript);
+
+    setState((prev) => ({ ...prev, phase: 'evaluating' }));
+
+    try {
+      const res = await fetch('/api/interview/practice-evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionText: followUpQuestion,
+          answerTranscript: transcript,
+          interviewType: state.interviewType || 'MIXED',
+        }),
+      });
+
+      if (!res.ok) throw new Error('Follow-up evaluation failed');
+
+      const evaluation: AnswerEvaluation = await res.json();
+
+      setState((prev) => ({
+        ...prev,
+        phase: 'feedback',
+        followUpEvaluation: evaluation,
+      }));
+    } catch (error) {
+      console.error('Follow-up evaluation error:', error);
+      setState((prev) => ({
+        ...prev,
+        phase: 'feedback',
+        followUpEvaluation: null,
+      }));
+    }
+  }, [state.answers, state.currentQuestionIndex, state.interviewType, speech]);
+
   return {
     ...state,
     speech,
@@ -170,6 +245,8 @@ export function useInterviewSession() {
     submitAnswer,
     nextQuestion,
     skipQuestion,
+    startFollowUp,
+    submitFollowUpAnswer,
     currentQuestion: state.questions[state.currentQuestionIndex] || null,
     totalQuestions: state.questions.length,
     progress: state.questions.length

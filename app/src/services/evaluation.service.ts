@@ -1,5 +1,6 @@
 import { openai, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
+import { correctTranscript } from '@/lib/transcript-server';
 import { TECHNICAL_EVALUATION_PROMPT, BEHAVIORAL_EVALUATION_PROMPT } from '@/prompts/evaluation';
 import type { AnswerEvaluation, InterviewType } from '@/types';
 
@@ -12,6 +13,8 @@ export class EvaluationService {
   }): Promise<AnswerEvaluation> {
     const { questionText, answerTranscript, interviewType } = params;
 
+    const { correctedText, wasChanged } = await correctTranscript(answerTranscript);
+
     const isBehavioral = interviewType === 'BEHAVIORAL';
     const promptTemplate = isBehavioral
       ? BEHAVIORAL_EVALUATION_PROMPT
@@ -19,7 +22,7 @@ export class EvaluationService {
 
     const prompt = promptTemplate
       .replace('{question}', questionText)
-      .replace('{answer}', answerTranscript);
+      .replace('{answer}', correctedText);
 
     const response = await openai.chat.completions.create({
       model: MODELS.EVALUATION,
@@ -31,7 +34,13 @@ export class EvaluationService {
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error('Failed to evaluate answer');
 
-    return JSON.parse(content) as AnswerEvaluation;
+    const evaluation = JSON.parse(content) as AnswerEvaluation;
+
+    if (wasChanged) {
+      evaluation.correctedTranscript = correctedText;
+    }
+
+    return evaluation;
   }
 
   async evaluateAnswer(params: {
@@ -62,7 +71,7 @@ export class EvaluationService {
         sessionId_questionIndex: { sessionId, questionIndex },
       },
       data: {
-        answerTranscript,
+        answerTranscript: evaluation.correctedTranscript || answerTranscript,
         scores: evaluation.scores as any,
         overallScore: evaluation.overallScore,
         briefFeedback: evaluation.briefFeedback,

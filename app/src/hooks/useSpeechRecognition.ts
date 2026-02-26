@@ -56,7 +56,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'ko-KR';
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 3;
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = '';
@@ -65,7 +65,16 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
-          finalTranscript += result[0].transcript;
+          // confidence 기반 최적 대안 선택
+          let bestIdx = 0;
+          let bestConf = result[0].confidence;
+          for (let j = 1; j < result.length; j++) {
+            if (result[j].confidence > bestConf) {
+              bestConf = result[j].confidence;
+              bestIdx = j;
+            }
+          }
+          finalTranscript += result[bestIdx].transcript;
         } else {
           interim += result[0].transcript;
         }

@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSpeechRecognition } from './useSpeechRecognition';
 import { useTextToSpeech } from './useTextToSpeech';
+import { normalizeTranscript } from '@/lib/transcript';
 import type { AnswerEvaluation, InterviewType } from '@/types';
 
 type PracticePhase = 'loading' | 'reviewing' | 'practicing' | 'comparing' | 'summary';
@@ -76,7 +77,7 @@ export function usePracticeSession(sessionId: string) {
 
   const submitPractice = useCallback(() => {
     speech.stopListening();
-    const transcript = speech.transcript;
+    const transcript = normalizeTranscript(speech.transcript);
 
     setResults(prev => [
       ...prev.filter(r => r.questionIndex !== currentIndex),

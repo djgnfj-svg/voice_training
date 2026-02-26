@@ -93,6 +93,7 @@ export class ReportService {
       detailedFeedback: a.detailedFeedback || '',
       modelAnswer: a.modelAnswer || '',
       responseTimeSec: a.responseTimeSec || undefined,
+      followUpQuestion: a.followUpQuestion || undefined,
     }));
 
     const report: InterviewReport = {

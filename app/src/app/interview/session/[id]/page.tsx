@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { useInterviewSession } from '@/hooks/useInterviewSession';
-import { Mic, MicOff, SkipForward, Send, Volume2, Loader2, CheckCircle } from 'lucide-react';
-import type { InterviewQuestion } from '@/types';
+import { Mic, MicOff, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle } from 'lucide-react';
+import type { InterviewQuestion, InterviewType } from '@/types';
 
 export default function InterviewSessionPage() {
   const params = useParams();
@@ -64,7 +64,15 @@ export default function InterviewSessionPage() {
   // Start session when questions are loaded
   useEffect(() => {
     if (initialized && questions.length > 0 && interview.phase === 'idle') {
-      interview.startSession(sessionId, questions);
+      let interviewType: InterviewType | undefined;
+      try {
+        const stored = sessionStorage.getItem(`interview_${sessionId}`);
+        if (stored) {
+          const data = JSON.parse(stored);
+          if (data.plan?.type) interviewType = data.plan.type;
+        }
+      } catch {}
+      interview.startSession(sessionId, questions, interviewType);
     }
   }, [initialized, questions, interview.phase, sessionId]);
 
@@ -151,13 +159,23 @@ export default function InterviewSessionPage() {
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
                 <Volume2 className="h-8 w-8 animate-pulse text-primary" />
               </div>
-              <p className="text-sm text-muted-foreground">질문을 읽고 있습니다...</p>
+              <p className="text-sm text-muted-foreground">
+                {interview.isFollowUp ? '꼬리질문을 읽고 있습니다...' : '질문을 읽고 있습니다...'}
+              </p>
             </div>
           )}
 
           {/* Listening phase - Recording */}
           {interview.phase === 'listening' && (
             <div className="space-y-4">
+              {/* Follow-up question display */}
+              {interview.isFollowUp && currentAnswer?.evaluation?.followUpQuestion && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">꼬리질문</p>
+                  <p className="mt-1 text-sm">{currentAnswer.evaluation.followUpQuestion}</p>
+                </div>
+              )}
+
               <div className="flex flex-col items-center gap-4">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
                   <Mic className="h-8 w-8 text-red-500" />
@@ -175,12 +193,19 @@ export default function InterviewSessionPage() {
               </div>
 
               <div className="flex items-center justify-center gap-3">
-                <Button variant="outline" onClick={interview.skipQuestion}>
-                  <SkipForward className="mr-2 h-4 w-4" />
-                  건너뛰기
-                </Button>
+                {interview.isFollowUp ? (
+                  <Button variant="outline" onClick={interview.nextQuestion}>
+                    <SkipForward className="mr-2 h-4 w-4" />
+                    건너뛰기
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={interview.skipQuestion}>
+                    <SkipForward className="mr-2 h-4 w-4" />
+                    건너뛰기
+                  </Button>
+                )}
                 <Button
-                  onClick={interview.submitAnswer}
+                  onClick={interview.isFollowUp ? interview.submitFollowUpAnswer : interview.submitAnswer}
                   disabled={!interview.speech.transcript}
                 >
                   <Send className="mr-2 h-4 w-4" />
@@ -194,12 +219,14 @@ export default function InterviewSessionPage() {
           {interview.phase === 'evaluating' && (
             <div className="flex flex-col items-center gap-4">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">답변을 평가하고 있습니다...</p>
+              <p className="text-sm text-muted-foreground">
+                {interview.isFollowUp ? '꼬리질문 답변을 평가하고 있습니다...' : '답변을 평가하고 있습니다...'}
+              </p>
             </div>
           )}
 
-          {/* Feedback phase */}
-          {interview.phase === 'feedback' && currentAnswer?.evaluation && (
+          {/* Feedback phase — main question */}
+          {interview.phase === 'feedback' && !interview.isFollowUp && currentAnswer?.evaluation && (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
@@ -215,10 +242,81 @@ export default function InterviewSessionPage() {
                 </div>
               </div>
 
+              {currentAnswer.evaluation.correctedTranscript && (
+                <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
+                  <p className="text-xs font-medium text-blue-600 dark:text-blue-400">AI 교정 텍스트</p>
+                  <p className="mt-1 text-sm">{currentAnswer.evaluation.correctedTranscript}</p>
+                </div>
+              )}
+
               <div className="rounded-lg bg-muted/50 p-4">
                 <p className="text-sm font-medium">피드백</p>
                 <p className="mt-1 text-sm">{currentAnswer.evaluation.briefFeedback}</p>
               </div>
+
+              {/* Follow-up question prompt */}
+              {currentAnswer.evaluation.followUpQuestion && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">꼬리질문</p>
+                  <p className="mt-1 text-sm">{currentAnswer.evaluation.followUpQuestion}</p>
+                  <Button
+                    variant="outline"
+                    className="mt-3 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900"
+                    onClick={interview.startFollowUp}
+                  >
+                    <MessageCircle className="mr-2 h-4 w-4" />
+                    꼬리질문 답변하기
+                  </Button>
+                </div>
+              )}
+
+              <Button className="w-full" onClick={interview.nextQuestion}>
+                {interview.currentQuestionIndex + 1 >= interview.totalQuestions ? (
+                  <>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    면접 완료 및 리포트 보기
+                  </>
+                ) : (
+                  '다음 질문'
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Feedback phase — follow-up question */}
+          {interview.phase === 'feedback' && interview.isFollowUp && (
+            <div className="space-y-4">
+              {/* Follow-up question text */}
+              {currentAnswer?.evaluation?.followUpQuestion && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">꼬리질문</p>
+                  <p className="mt-1 text-sm">{currentAnswer.evaluation.followUpQuestion}</p>
+                </div>
+              )}
+
+              {interview.followUpEvaluation ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
+                      <span className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                        {interview.followUpEvaluation.overallScore}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium">꼬리질문 점수: {interview.followUpEvaluation.overallScore}/100</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/50 p-4">
+                    <p className="text-sm font-medium">피드백</p>
+                    <p className="mt-1 text-sm">{interview.followUpEvaluation.briefFeedback}</p>
+                  </div>
+                </>
+              ) : (
+                <p className="text-center text-sm text-muted-foreground">
+                  꼬리질문 평가에 실패했습니다.
+                </p>
+              )}
 
               <Button className="w-full" onClick={interview.nextQuestion}>
                 {interview.currentQuestionIndex + 1 >= interview.totalQuestions ? (
@@ -234,7 +332,7 @@ export default function InterviewSessionPage() {
           )}
 
           {/* Feedback phase without evaluation (skipped or error) */}
-          {interview.phase === 'feedback' && !currentAnswer?.evaluation && (
+          {interview.phase === 'feedback' && !interview.isFollowUp && !currentAnswer?.evaluation && (
             <div className="space-y-4">
               <p className="text-center text-sm text-muted-foreground">
                 {currentAnswer?.transcript === '(건너뜀)' ? '질문을 건너뛰었습니다.' : '평가에 실패했습니다.'}

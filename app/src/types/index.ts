@@ -76,6 +76,7 @@ export interface AnswerEvaluation {
   detailedFeedback: string;
   modelAnswer: string;
   followUpQuestion?: string;
+  correctedTranscript?: string;
 }
 
 export interface EvaluationScores {
@@ -127,6 +128,7 @@ export interface AnswerReport {
   detailedFeedback: string;
   modelAnswer: string;
   responseTimeSec?: number;
+  followUpQuestion?: string;
 }
 
 export interface SpeechAnalysis {

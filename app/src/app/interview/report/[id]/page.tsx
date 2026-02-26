@@ -246,6 +246,16 @@ export default function ReportPage() {
                     {answer.modelAnswer}
                   </div>
                 </div>
+
+                {/* Follow-up question */}
+                {answer.followUpQuestion && (
+                  <div>
+                    <p className="mb-1 text-sm font-medium text-muted-foreground">꼬리질문</p>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950">
+                      {answer.followUpQuestion}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
