@@ -7,6 +7,7 @@ import { z } from 'zod';
 const setupSchema = z.object({
   resumeId: z.string(),
   jobPostingId: z.string().optional(),
+  deepMode: z.boolean().optional().default(false),
 });
 
 export async function POST(request: NextRequest) {
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { resumeId, jobPostingId } = setupSchema.parse(body);
+    const { resumeId, jobPostingId, deepMode } = setupSchema.parse(body);
 
     // Verify resume ownership
     const resume = await prisma.resume.findFirst({
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
       resumeId,
       jobPostingId,
       userId: session.user.id,
+      deepMode,
     });
 
     // 결정된 설정으로 질문 생성
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
       resumeId,
       jobPostingId,
       userId: session.user.id,
+      deepMode,
     });
 
     // Create session

@@ -39,6 +39,10 @@
 
 ## 주요 플로우
 - **면접 연습**: 이력서 선택(필수) → 채용공고 입력(선택) → AI 자동 설계 → 면접 시작
+- **심화 면접**: Setup에서 심화 모드 토글 ON → 질문 뱅크 매칭 → 이력서 프로젝트/기술 직접 언급하는 3~5개 심화 질문 → 꼬리질문 필수 생성
+  - 질문 뱅크: `app/src/data/questions/*.json` (8개 JSON, 서비스에서 직접 import)
+  - 프롬프트: `DEEP_INTERVIEW_PLAN_PROMPT`, `DEEP_INTERVIEW_QUESTION_PROMPT`, `DEEP_TECHNICAL_EVALUATION_PROMPT`
+  - `questionSource: 'deep_technical'`로 심화 세션 식별
 - **꼬리질문**: feedback에서 followUpQuestion 표시 → "꼬리질문 답변하기" → TTS → 음성인식 → `/api/interview/practice-evaluate` (stateless) → 피드백 → 다음 질문
 - **컨닝 모드**: 이력서 선택 → (채용공고 텍스트) → 마이크 실시간 감지 → 2초 침묵 시 자동 답변 생성 (DB 저장 없음, stateless)
 
@@ -62,7 +66,6 @@
 
 ## TODO
 - [ ] GitHub 프로필/레포 분석 (이력서 보완 자료로 활용)
-- [ ] 심화 면접을 위한 깊은 분석 (기술 스택별 심층 질문 생성)
 
 ## 환경 변수
 - `app/.env.local` — DB, Anthropic API 키, NextAuth, Google OAuth 등

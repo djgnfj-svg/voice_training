@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
 import { useToast } from '@/hooks/useToast';
-import { Loader2, Mic, Sparkles, ArrowRight, SkipForward } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical } from 'lucide-react';
 import type { ParsedJobPosting, CompanyAnalysis } from '@/types';
 
 type Step = 'resume' | 'job-posting' | 'start';
@@ -19,6 +21,7 @@ export default function InterviewSetupPage() {
   const [step, setStep] = useState<Step>('resume');
 
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
+  const [deepMode, setDeepMode] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
     parsedData: ParsedJobPosting;
@@ -60,6 +63,7 @@ export default function InterviewSetupPage() {
         body: JSON.stringify({
           resumeId: selectedResumeId,
           jobPostingId: jobPostingData?.id,
+          deepMode,
         }),
       });
 
@@ -71,7 +75,7 @@ export default function InterviewSetupPage() {
       const data = await res.json();
       const { sessionId, plan, questions } = data;
 
-      sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ plan, questions }));
+      sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ plan, questions, deepMode }));
 
       router.push(`/interview/session/${sessionId}`);
     } catch (error: any) {
@@ -187,6 +191,39 @@ export default function InterviewSetupPage() {
                   </>
                 )}
               </ul>
+            </CardContent>
+          </Card>
+
+          <Card className={deepMode ? 'border-violet-300 dark:border-violet-800' : ''}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FlaskConical className="h-5 w-5" />
+                면접 모드
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="deep-mode" className="text-sm font-medium">심화 면접</Label>
+                  <p className="text-sm text-muted-foreground">
+                    3~5개의 질문으로 기술적 깊이를 집중 검증합니다
+                  </p>
+                </div>
+                <Switch
+                  id="deep-mode"
+                  checked={deepMode}
+                  onCheckedChange={setDeepMode}
+                />
+              </div>
+              {deepMode && (
+                <div className="mt-3 rounded-lg bg-violet-50 p-3 dark:bg-violet-950/30">
+                  <ul className="space-y-1 text-sm text-violet-700 dark:text-violet-300">
+                    <li>- 이력서의 프로젝트/기술을 직접 언급하는 질문</li>
+                    <li>- INTERMEDIATE 이상 난이도, 점진적 깊이 증가</li>
+                    <li>- 매 질문 후 꼬리질문으로 더 깊이 파고듦</li>
+                  </ul>
+                </div>
+              )}
             </CardContent>
           </Card>
 

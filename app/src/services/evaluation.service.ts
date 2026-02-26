@@ -1,7 +1,7 @@
 import { openai, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
 import { correctTranscript } from '@/lib/transcript-server';
-import { TECHNICAL_EVALUATION_PROMPT, BEHAVIORAL_EVALUATION_PROMPT } from '@/prompts/evaluation';
+import { TECHNICAL_EVALUATION_PROMPT, BEHAVIORAL_EVALUATION_PROMPT, DEEP_TECHNICAL_EVALUATION_PROMPT } from '@/prompts/evaluation';
 import type { AnswerEvaluation, InterviewType } from '@/types';
 
 export class EvaluationService {
@@ -10,19 +10,32 @@ export class EvaluationService {
     questionText: string;
     answerTranscript: string;
     interviewType: InterviewType;
+    deepMode?: boolean;
+    relatedKeyPoints?: string[];
   }): Promise<AnswerEvaluation> {
-    const { questionText, answerTranscript, interviewType } = params;
+    const { questionText, answerTranscript, interviewType, deepMode, relatedKeyPoints } = params;
 
     const { correctedText, wasChanged } = await correctTranscript(answerTranscript);
 
-    const isBehavioral = interviewType === 'BEHAVIORAL';
-    const promptTemplate = isBehavioral
-      ? BEHAVIORAL_EVALUATION_PROMPT
-      : TECHNICAL_EVALUATION_PROMPT;
+    let promptTemplate: string;
+    if (deepMode) {
+      promptTemplate = DEEP_TECHNICAL_EVALUATION_PROMPT;
+    } else if (interviewType === 'BEHAVIORAL') {
+      promptTemplate = BEHAVIORAL_EVALUATION_PROMPT;
+    } else {
+      promptTemplate = TECHNICAL_EVALUATION_PROMPT;
+    }
 
-    const prompt = promptTemplate
+    let prompt = promptTemplate
       .replace('{question}', questionText)
       .replace('{answer}', correctedText);
+
+    if (deepMode) {
+      const keyPointsStr = relatedKeyPoints && relatedKeyPoints.length > 0
+        ? relatedKeyPoints.map(kp => `- ${kp}`).join('\n')
+        : '(참고 핵심 포인트 없음)';
+      prompt = prompt.replace('{relatedKeyPoints}', keyPointsStr);
+    }
 
     const response = await openai.chat.completions.create({
       model: MODELS.EVALUATION,
@@ -48,8 +61,10 @@ export class EvaluationService {
     questionIndex: number;
     answerTranscript: string;
     responseTimeSec?: number;
+    deepMode?: boolean;
+    relatedKeyPoints?: string[];
   }): Promise<AnswerEvaluation> {
-    const { sessionId, questionIndex, answerTranscript, responseTimeSec } = params;
+    const { sessionId, questionIndex, answerTranscript, responseTimeSec, deepMode, relatedKeyPoints } = params;
 
     const session = await prisma.interviewSession.findUnique({
       where: { id: sessionId },
@@ -64,6 +79,8 @@ export class EvaluationService {
       questionText,
       answerTranscript,
       interviewType: session.type as InterviewType,
+      deepMode,
+      relatedKeyPoints,
     });
 
     await prisma.interviewAnswer.update({

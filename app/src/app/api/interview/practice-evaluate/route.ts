@@ -8,6 +8,8 @@ const schema = z.object({
   questionText: z.string().min(1),
   answerTranscript: z.string().min(1),
   interviewType: z.enum(['TECHNICAL', 'BEHAVIORAL', 'MIXED']),
+  deepMode: z.boolean().optional(),
+  relatedKeyPoints: z.array(z.string()).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -18,12 +20,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { questionText, answerTranscript, interviewType } = schema.parse(body);
+    const { questionText, answerTranscript, interviewType, deepMode, relatedKeyPoints } = schema.parse(body);
 
     const evaluation = await evaluationService.evaluateStateless({
       questionText,
       answerTranscript,
       interviewType: interviewType as InterviewType,
+      deepMode,
+      relatedKeyPoints,
     });
 
     return NextResponse.json(evaluation);

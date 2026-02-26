@@ -64,9 +64,10 @@ export interface MatchItem {
 export interface InterviewQuestion {
   index: number;
   text: string;
-  source: 'job_posting' | 'resume_based' | 'general';
+  source: 'job_posting' | 'resume_based' | 'general' | 'deep_technical';
   category: string;
   difficulty: Difficulty;
+  relatedKeyPoints?: string[];
 }
 
 export interface AnswerEvaluation {
@@ -196,6 +197,7 @@ export interface ResumeItem {
 export interface SetupInterviewRequest {
   resumeId: string;
   jobPostingId?: string;
+  deepMode?: boolean;
 }
 
 export interface EvaluateAnswerRequest {

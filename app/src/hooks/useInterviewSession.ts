@@ -16,6 +16,7 @@ interface InterviewSessionState {
   answers: AnswerWithEval[];
   startTime: number | null;
   interviewType: InterviewType | null;
+  deepMode: boolean;
   isFollowUp: boolean;
   followUpEvaluation: AnswerEvaluation | null;
 }
@@ -36,6 +37,7 @@ export function useInterviewSession() {
     answers: [],
     startTime: null,
     interviewType: null,
+    deepMode: false,
     isFollowUp: false,
     followUpEvaluation: null,
   });
@@ -45,7 +47,7 @@ export function useInterviewSession() {
   const tts = useTextToSpeech();
 
   const startSession = useCallback(
-    async (sessionId: string, questions: InterviewQuestion[], interviewType?: InterviewType) => {
+    async (sessionId: string, questions: InterviewQuestion[], interviewType?: InterviewType, deepMode?: boolean) => {
       setState({
         phase: 'asking',
         sessionId,
@@ -54,6 +56,7 @@ export function useInterviewSession() {
         answers: [],
         startTime: Date.now(),
         interviewType: interviewType || null,
+        deepMode: deepMode || false,
         isFollowUp: false,
         followUpEvaluation: null,
       });
@@ -79,6 +82,8 @@ export function useInterviewSession() {
 
     setState((prev) => ({ ...prev, phase: 'evaluating' }));
 
+    const currentQ = state.questions[state.currentQuestionIndex];
+
     try {
       const res = await fetch('/api/interview/evaluate', {
         method: 'POST',
@@ -88,6 +93,8 @@ export function useInterviewSession() {
           questionIndex: state.currentQuestionIndex,
           answerTranscript: transcript,
           responseTimeSec,
+          ...(state.deepMode ? { deepMode: true } : {}),
+          ...(state.deepMode && currentQ?.relatedKeyPoints ? { relatedKeyPoints: currentQ.relatedKeyPoints } : {}),
         }),
       });
 
@@ -123,7 +130,7 @@ export function useInterviewSession() {
         ],
       }));
     }
-  }, [state.sessionId, state.currentQuestionIndex, speech]);
+  }, [state.sessionId, state.currentQuestionIndex, state.deepMode, state.questions, speech]);
 
   const nextQuestion = useCallback(async () => {
     const nextIndex = state.currentQuestionIndex + 1;
@@ -207,6 +214,8 @@ export function useInterviewSession() {
 
     setState((prev) => ({ ...prev, phase: 'evaluating' }));
 
+    const currentQ = state.questions[state.currentQuestionIndex];
+
     try {
       const res = await fetch('/api/interview/practice-evaluate', {
         method: 'POST',
@@ -215,6 +224,8 @@ export function useInterviewSession() {
           questionText: followUpQuestion,
           answerTranscript: transcript,
           interviewType: state.interviewType || 'MIXED',
+          ...(state.deepMode ? { deepMode: true } : {}),
+          ...(state.deepMode && currentQ?.relatedKeyPoints ? { relatedKeyPoints: currentQ.relatedKeyPoints } : {}),
         }),
       });
 
@@ -235,7 +246,7 @@ export function useInterviewSession() {
         followUpEvaluation: null,
       }));
     }
-  }, [state.answers, state.currentQuestionIndex, state.interviewType, speech]);
+  }, [state.answers, state.currentQuestionIndex, state.interviewType, state.deepMode, state.questions, speech]);
 
   return {
     ...state,

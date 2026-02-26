@@ -8,6 +8,8 @@ const evaluateSchema = z.object({
   questionIndex: z.number(),
   answerTranscript: z.string(),
   responseTimeSec: z.number().optional(),
+  deepMode: z.boolean().optional(),
+  relatedKeyPoints: z.array(z.string()).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -18,9 +20,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const params = evaluateSchema.parse(body);
+    const { sessionId, questionIndex, answerTranscript, responseTimeSec, deepMode, relatedKeyPoints } = evaluateSchema.parse(body);
 
-    const evaluation = await evaluationService.evaluateAnswer(params);
+    const evaluation = await evaluationService.evaluateAnswer({
+      sessionId,
+      questionIndex,
+      answerTranscript,
+      responseTimeSec,
+      deepMode,
+      relatedKeyPoints,
+    });
     return NextResponse.json(evaluation);
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -65,14 +65,16 @@ export default function InterviewSessionPage() {
   useEffect(() => {
     if (initialized && questions.length > 0 && interview.phase === 'idle') {
       let interviewType: InterviewType | undefined;
+      let deepMode = false;
       try {
         const stored = sessionStorage.getItem(`interview_${sessionId}`);
         if (stored) {
           const data = JSON.parse(stored);
           if (data.plan?.type) interviewType = data.plan.type;
+          if (data.deepMode) deepMode = true;
         }
       } catch {}
-      interview.startSession(sessionId, questions, interviewType);
+      interview.startSession(sessionId, questions, interviewType, deepMode);
     }
   }, [initialized, questions, interview.phase, sessionId]);
 
@@ -133,11 +135,14 @@ export default function InterviewSessionPage() {
               Q{interview.currentQuestionIndex + 1}.
             </CardTitle>
             {interview.currentQuestion && (
-              <Badge variant="outline">
+              <Badge variant={interview.currentQuestion.source === 'deep_technical' ? 'default' : 'outline'}
+                className={interview.currentQuestion.source === 'deep_technical' ? 'bg-violet-600' : ''}>
                 {interview.currentQuestion.source === 'job_posting'
                   ? '공고 맞춤'
                   : interview.currentQuestion.source === 'resume_based'
                   ? '이력서 기반'
+                  : interview.currentQuestion.source === 'deep_technical'
+                  ? '심화'
                   : '일반'}
               </Badge>
             )}
