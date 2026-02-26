@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState, type DragEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ interface ResumeSelectorProps {
 export function ResumeSelector({ selectedId, onSelect }: ResumeSelectorProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [isDragging, setIsDragging] = useState(false);
 
   const { data: resumes, isLoading } = useQuery<ResumeItem[]>({
     queryKey: ['resumes'],
@@ -51,21 +52,41 @@ export function ResumeSelector({ selectedId, onSelect }: ResumeSelectorProps) {
     },
   });
 
+  const handleFile = useCallback((file: File) => {
+    if (!file.name.endsWith('.pdf')) {
+      toast({ title: 'PDF 파일만 업로드 가능합니다', variant: 'destructive' });
+      return;
+    }
+    uploadMutation.mutate(file);
+  }, [uploadMutation, toast]);
+
   const handleFileSelect = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.pdf';
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      if (!file.name.endsWith('.pdf')) {
-        toast({ title: 'PDF 파일만 업로드 가능합니다', variant: 'destructive' });
-        return;
-      }
-      uploadMutation.mutate(file);
+      if (file) handleFile(file);
     };
     input.click();
-  }, [uploadMutation, toast]);
+  }, [handleFile]);
+
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
 
   if (isLoading) {
     return (
@@ -127,32 +148,34 @@ export function ResumeSelector({ selectedId, onSelect }: ResumeSelectorProps) {
               </div>
             ))}
           </div>
-        ) : (
-          <div className="py-4 text-center text-muted-foreground">
-            <FileText className="mx-auto mb-2 h-8 w-8" />
-            <p className="text-sm">등록된 이력서가 없습니다</p>
-            <p className="text-xs">아래에서 새 이력서를 업로드해주세요</p>
-          </div>
-        )}
+        ) : null}
 
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={handleFileSelect}
-          disabled={uploadMutation.isPending}
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={!uploadMutation.isPending ? handleFileSelect : undefined}
+          className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 transition-colors ${
+            isDragging
+              ? 'border-primary bg-primary/5'
+              : 'border-muted-foreground/25 hover:border-primary/50'
+          } ${uploadMutation.isPending ? 'pointer-events-none opacity-60' : ''}`}
         >
           {uploadMutation.isPending ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              분석 중...
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <p className="text-sm font-medium">이력서 분석 중...</p>
             </>
           ) : (
             <>
-              <Plus className="mr-2 h-4 w-4" />
-              새 이력서 업로드
+              <Upload className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm font-medium">
+                PDF 파일을 드래그하거나 클릭하여 업로드
+              </p>
+              <p className="text-xs text-muted-foreground">PDF만 지원</p>
             </>
           )}
-        </Button>
+        </div>
       </CardContent>
     </Card>
   );
