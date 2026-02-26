@@ -1,6 +1,5 @@
 import { openai, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
-import { uploadFile } from '@/lib/minio';
 import { RESUME_PARSING_PROMPT } from '@/prompts/resume';
 import type { ParsedResume } from '@/types';
 
@@ -11,16 +10,12 @@ export class ResumeService {
     filename: string,
     name: string
   ) {
-    // Upload to MinIO
-    const key = `resumes/${userId}/${Date.now()}_${filename}`;
-    const url = await uploadFile(key, file, 'application/pdf');
-
     // Extract text from PDF
     const pdfParse = (await import('pdf-parse')).default;
     const pdfData = await pdfParse(file);
     const text = pdfData.text;
 
-    // Parse with GPT
+    // Parse with Claude
     const parsedResume = await this.parseResume(text);
 
     // Create Resume record
@@ -28,7 +23,6 @@ export class ResumeService {
       data: {
         userId,
         name,
-        fileUrl: url,
         parsedData: parsedResume as any,
       },
     });
