@@ -1,31 +1,19 @@
 import { openai, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
 import { TECHNICAL_EVALUATION_PROMPT, BEHAVIORAL_EVALUATION_PROMPT } from '@/prompts/evaluation';
-import type { AnswerEvaluation } from '@/types';
+import type { AnswerEvaluation, InterviewType } from '@/types';
 
 export class EvaluationService {
-  async evaluateAnswer(params: {
-    sessionId: string;
-    questionIndex: number;
+  /** Claude 호출만 수행, DB 저장 안 함 */
+  async evaluateStateless(params: {
+    questionText: string;
     answerTranscript: string;
-    responseTimeSec?: number;
+    interviewType: InterviewType;
   }): Promise<AnswerEvaluation> {
-    const { sessionId, questionIndex, answerTranscript, responseTimeSec } = params;
+    const { questionText, answerTranscript, interviewType } = params;
 
-    // Get session and existing answer data
-    const session = await prisma.interviewSession.findUnique({
-      where: { id: sessionId },
-      include: { answers: true },
-    });
-    if (!session) throw new Error('Session not found');
-
-    // Get the question from existing answers or session data
-    const existingAnswer = session.answers.find(a => a.questionIndex === questionIndex);
-    const questionText = existingAnswer?.questionText || '';
-
-    // Choose prompt based on interview type
-    const isBeahvioral = session.type === 'BEHAVIORAL';
-    const promptTemplate = isBeahvioral
+    const isBehavioral = interviewType === 'BEHAVIORAL';
+    const promptTemplate = isBehavioral
       ? BEHAVIORAL_EVALUATION_PROMPT
       : TECHNICAL_EVALUATION_PROMPT;
 
@@ -43,9 +31,32 @@ export class EvaluationService {
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error('Failed to evaluate answer');
 
-    const evaluation: AnswerEvaluation = JSON.parse(content);
+    return JSON.parse(content) as AnswerEvaluation;
+  }
 
-    // Save to database
+  async evaluateAnswer(params: {
+    sessionId: string;
+    questionIndex: number;
+    answerTranscript: string;
+    responseTimeSec?: number;
+  }): Promise<AnswerEvaluation> {
+    const { sessionId, questionIndex, answerTranscript, responseTimeSec } = params;
+
+    const session = await prisma.interviewSession.findUnique({
+      where: { id: sessionId },
+      include: { answers: true },
+    });
+    if (!session) throw new Error('Session not found');
+
+    const existingAnswer = session.answers.find(a => a.questionIndex === questionIndex);
+    const questionText = existingAnswer?.questionText || '';
+
+    const evaluation = await this.evaluateStateless({
+      questionText,
+      answerTranscript,
+      interviewType: session.type as InterviewType,
+    });
+
     await prisma.interviewAnswer.update({
       where: {
         sessionId_questionIndex: { sessionId, questionIndex },

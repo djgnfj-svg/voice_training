@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScoreRadarChart } from '@/components/report/radar-chart';
-import { Loader2, ArrowLeft, Target, TrendingUp, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Loader2, ArrowLeft, Target, TrendingUp, AlertCircle, CheckCircle, Clock, RotateCcw } from 'lucide-react';
 import { getGrade } from '@/lib/utils';
 import type { InterviewReport } from '@/types';
 
@@ -63,9 +63,17 @@ export default function ReportPage() {
           </Link>
           <h1 className="text-3xl font-bold">면접 리포트</h1>
         </div>
-        <Link href="/interview/setup">
-          <Button>새 면접 시작</Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href={`/interview/practice/${sessionId}`}>
+            <Button variant="outline">
+              <RotateCcw className="mr-2 h-4 w-4" />
+              다시 연습하기
+            </Button>
+          </Link>
+          <Link href="/interview/setup">
+            <Button>새 면접 시작</Button>
+          </Link>
+        </div>
       </div>
 
       {/* Overall Score */}

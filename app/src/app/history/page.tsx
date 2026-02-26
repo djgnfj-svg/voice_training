@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, History, Mic } from 'lucide-react';
+import { Loader2, History, Mic, RotateCcw } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 interface SessionHistory {
@@ -66,12 +66,12 @@ export default function HistoryPage() {
       ) : sessions && sessions.length > 0 ? (
         <div className="space-y-3">
           {sessions.map((session) => (
-            <Link key={session.id} href={
-              session.status === 'COMPLETED'
-                ? `/interview/report/${session.id}`
-                : `/interview/session/${session.id}`
-            }>
-              <Card className="transition-colors hover:bg-accent/50">
+            <Card key={session.id} className="transition-colors hover:bg-accent/50">
+              <Link href={
+                session.status === 'COMPLETED'
+                  ? `/interview/report/${session.id}`
+                  : `/interview/session/${session.id}`
+              }>
                 <CardContent className="flex items-center justify-between py-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -102,8 +102,18 @@ export default function HistoryPage() {
                     )}
                   </div>
                 </CardContent>
-              </Card>
-            </Link>
+              </Link>
+              {session.status === 'COMPLETED' && (
+                <div className="border-t px-6 py-2">
+                  <Link href={`/interview/practice/${session.id}`}>
+                    <Button variant="ghost" size="sm" className="text-xs">
+                      <RotateCcw className="mr-1 h-3 w-3" />
+                      연습
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </Card>
           ))}
         </div>
       ) : (

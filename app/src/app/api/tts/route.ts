@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
     const tts = new MsEdgeTTS();
     await tts.setMetadata(
-      'ko-KR-SunHiNeural',
+      'ko-KR-InJoonNeural',
       OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3
     );
 

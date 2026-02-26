@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
         hostname: 'minio',
         port: '9000',
       },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+      },
     ],
   },
 };

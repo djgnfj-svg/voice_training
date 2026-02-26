@@ -50,7 +50,7 @@ export default function LandingPage() {
             <Link href="/login">
               <Button variant="ghost">로그인</Button>
             </Link>
-            <Link href="/register">
+            <Link href="/login">
               <Button>시작하기</Button>
             </Link>
           </div>
