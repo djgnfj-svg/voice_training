@@ -13,7 +13,6 @@ model User {
   email          String    @unique
   emailVerified  DateTime?
   name           String?
-  hashedPassword String?
   image          String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -71,15 +70,6 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-  @@map("verification_tokens")
 }
 
 model JobPosting {

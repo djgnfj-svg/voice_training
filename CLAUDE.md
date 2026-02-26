@@ -20,29 +20,33 @@
 
 ## 기술 스택
 - Next.js 15 (App Router)
-- Prisma + PostgreSQL
+- Prisma + PostgreSQL (Supabase)
 - MinIO (파일 저장)
 - Anthropic Claude API (`@anthropic-ai/sdk`, 래퍼: `app/src/lib/openai.ts`)
   - ANALYSIS: claude-haiku-4-5
   - EVALUATION / QUESTION_GEN: claude-sonnet-4-6
 - Edge TTS (`msedge-tts`, 무료, API 키 불필요)
-  - 음성: `ko-KR-SunHiNeural` (여성) / `ko-KR-InJoonNeural` (남성)
+  - 음성: `ko-KR-InJoonNeural` (남성)
   - API: `POST /api/tts` → MP3 반환
   - `next.config.ts`의 `serverExternalPackages`에 등록 필수
 - TanStack Query (클라이언트 상태)
 - shadcn/ui (UI 컴포넌트)
-- NextAuth (인증, 개발 모드에서는 가짜 세션)
+- NextAuth v5 + Google OAuth (인증)
+  - 개발 모드: 가짜 세션 (`dev-user-00000000-0000-0000-0000`)
+  - 프로덕션: Google 로그인 → PrismaAdapter가 User/Account 자동 생성
+  - 미들웨어에서 세션 쿠키 체크 (`__Secure-authjs.session-token`)
 
 ## 주요 플로우
 이력서 선택(필수) → 채용공고 입력(선택) → AI 자동 설계 → 면접 시작
 
 ## DB 모델 (핵심)
-- `User` — 계정 (이력서 필드 없음, resumes 관계로 분리됨)
+- `User` — 계정 (Google OAuth, hashedPassword 없음)
+- `Account` — OAuth 계정 (PrismaAdapter 관리)
 - `Resume` — 복수 이력서 (userId, name, fileUrl, parsedData)
 - `JobPosting` — 채용공고
 - `InterviewSession` — 면접 세션 (resumeId 필수, jobPostingId 선택)
 - `InterviewAnswer` — 답변/평가
 
 ## 환경 변수
-- `app/.env.local` — DB, Redis, MinIO, Anthropic API 키, NextAuth 등
-- `.env` — docker-compose용 (루트)
+- `app/.env.local` — DB, Anthropic API 키, NextAuth, Google OAuth 등
+- Vercel 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `ANTHROPIC_API_KEY`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`
