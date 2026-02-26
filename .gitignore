@@ -41,6 +41,7 @@ app/prisma/migrations/
 
 # Claude Code
 .claude/
+.mcp.json
 
 # Misc
 *.tsbuildinfo
