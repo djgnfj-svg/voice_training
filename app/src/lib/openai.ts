@@ -12,6 +12,8 @@ const anthropic =
 
 if (process.env.NODE_ENV !== 'production') globalForAnthropic.anthropic = anthropic;
 
+export { anthropic };
+
 // Model constants
 export const MODELS = {
   ANALYSIS: 'claude-haiku-4-5-20251001' as const,

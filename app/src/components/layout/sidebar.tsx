@@ -13,12 +13,14 @@ import {
   User,
   LogOut,
   Briefcase,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { href: '/interview/setup', label: '면접 시작', icon: Mic },
+  { href: '/interview/cunning', label: '컨닝 모드', icon: Eye },
   { href: '/profile', label: '이력서 관리', icon: FileText },
   { href: '/history', label: '면접 기록', icon: History },
   { href: '/analytics', label: '성장 분석', icon: TrendingUp },
