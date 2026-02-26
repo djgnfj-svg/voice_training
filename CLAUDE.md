@@ -5,10 +5,10 @@
 - `app/` — Next.js 앱 (프론트+백엔드 전부)
 - `db/` — DB 초기화 스크립트
 - `nginx/` — 리버스 프록시 설정
-- `docker-compose.yml` — PostgreSQL, Redis (인프라만, 앱 서비스 없음)
+- `docker-compose.yml` — PostgreSQL, Redis (인프라만, 앱 서비스 없음, Redis는 로컬 전용)
 
 ## 개발 규칙
-- 인프라(PostgreSQL, Redis)는 `docker compose up -d`로 띄움.
+- 인프라(PostgreSQL, Redis)는 `docker compose up -d`로 띄움. Redis는 선택적 — 없으면 캐시 무시하고 동작.
 - Next.js dev 서버는 `cd app && PORT=3001 npm run dev`로 포트 3001에서 실행. 하나만.
 - prisma 명령 실행 시 `cd app && set -a && source .env.local && set +a` 후 실행.
 - `node.exe` 프로세스를 함부로 죽이지 말 것 (dev 서버가 꺼짐).
@@ -52,6 +52,7 @@
 ## 배포
 - Vercel, 리전: `icn1` (인천/서울) — `vercel.json`
 - `output: 'standalone'` 사용하지 않음 (Vercel에서 불필요)
+- Redis 없음 — `lib/redis.ts`가 연결 실패 시 graceful 무시 (캐시만 스킵)
 
 ## 환경 변수
 - `app/.env.local` — DB, Anthropic API 키, NextAuth, Google OAuth 등
