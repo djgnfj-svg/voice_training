@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { openai, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
 import { RESUME_PARSING_PROMPT } from '@/prompts/resume';
@@ -23,7 +24,7 @@ export class ResumeService {
       data: {
         userId,
         name,
-        parsedData: parsedResume as any,
+        parsedData: parsedResume as unknown as Prisma.InputJsonValue,
       },
     });
 

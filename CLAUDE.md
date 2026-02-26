@@ -64,9 +64,6 @@
 - **AI 교정**: `lib/transcript-server.ts` — 서버 측 transcript 교정 (`correctedTranscript`)
 - **음성인식**: `maxAlternatives=3` + confidence 기반 최적 대안 선택
 
-## TODO
-- [ ] GitHub 프로필/레포 분석 (이력서 보완 자료로 활용)
-
 ## 환경 변수
 - `app/.env.local` — DB, Anthropic API 키, NextAuth, Google OAuth 등
 - Vercel 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `ANTHROPIC_API_KEY`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`

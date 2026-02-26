@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { openai, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
 import { correctTranscript } from '@/lib/transcript-server';
@@ -89,7 +90,7 @@ export class EvaluationService {
       },
       data: {
         answerTranscript: evaluation.correctedTranscript || answerTranscript,
-        scores: evaluation.scores as any,
+        scores: evaluation.scores as unknown as Prisma.InputJsonValue,
         overallScore: evaluation.overallScore,
         briefFeedback: evaluation.briefFeedback,
         detailedFeedback: evaluation.detailedFeedback,

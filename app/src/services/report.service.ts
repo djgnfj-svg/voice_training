@@ -1,6 +1,7 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getGrade } from '@/lib/utils';
-import type { InterviewReport, GapAnalysis, AnswerReport, SpeechAnalysis, EvaluationScores } from '@/types';
+import type { InterviewReport, GapAnalysis, AnswerReport, SpeechAnalysis, EvaluationScores, ParsedJobPosting } from '@/types';
 
 export class ReportService {
   async generateReport(sessionId: string): Promise<InterviewReport> {
@@ -57,11 +58,11 @@ export class ReportService {
     let gapAnalysis: GapAnalysis | undefined;
     let matchingScore: number | undefined;
     if (session.jobPosting?.parsedData) {
-      const parsedData = session.jobPosting.parsedData as any;
+      const parsedData = session.jobPosting.parsedData as unknown as ParsedJobPosting;
       const techStack = parsedData.techStack || [];
       const answeredTopics = answeredQuestions.map(a => a.questionText.toLowerCase());
 
-      const coveredSkills = techStack.filter((skill: string) =>
+      const coveredSkills = techStack.filter(skill =>
         answeredTopics.some(t => t.includes(skill.toLowerCase()))
       );
 
@@ -70,7 +71,7 @@ export class ReportService {
         : undefined;
 
       gapAnalysis = {
-        missingSkills: techStack.filter((s: string) => !coveredSkills.includes(s)),
+        missingSkills: techStack.filter(s => !coveredSkills.includes(s)),
         weakAreas: sortedAnswers
           .filter(a => (a.overallScore || 0) < 60)
           .map(a => a.questionText.slice(0, 50)),
@@ -115,8 +116,8 @@ export class ReportService {
       data: {
         overallScore,
         matchingScore,
-        gapAnalysis: gapAnalysis as any,
-        reportData: report as any,
+        gapAnalysis: gapAnalysis as unknown as Prisma.InputJsonValue,
+        reportData: report as unknown as Prisma.InputJsonValue,
       },
     });
 

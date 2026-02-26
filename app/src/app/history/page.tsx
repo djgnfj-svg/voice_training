@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Loader2, History, Mic, RotateCcw } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import type { ParsedJobPosting } from '@/types';
 
 interface SessionHistory {
   id: string;
@@ -18,7 +19,7 @@ interface SessionHistory {
   matchingScore: number | null;
   createdAt: string;
   durationSeconds: number | null;
-  jobPosting: { parsedData: any } | null;
+  jobPosting: { parsedData: ParsedJobPosting } | null;
   _count: { answers: number };
 }
 
@@ -85,7 +86,7 @@ export default function HistoryPage() {
                     </p>
                     {session.jobPosting?.parsedData && (
                       <p className="text-xs text-muted-foreground">
-                        {(session.jobPosting.parsedData as any).company} - {(session.jobPosting.parsedData as any).position}
+                        {session.jobPosting.parsedData.company} - {session.jobPosting.parsedData.position}
                       </p>
                     )}
                   </div>

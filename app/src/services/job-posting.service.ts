@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { openai, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
 import { getCached, setCache } from '@/lib/redis';
@@ -25,8 +26,8 @@ export class JobPostingService {
     const updated = await prisma.jobPosting.update({
       where: { id: jobPosting.id },
       data: {
-        parsedData: parsedData as any,
-        companyAnalysis: companyAnalysis as any,
+        parsedData: parsedData as unknown as Prisma.InputJsonValue,
+        companyAnalysis: companyAnalysis as unknown as Prisma.InputJsonValue,
       },
     });
 
