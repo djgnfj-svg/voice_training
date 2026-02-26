@@ -39,6 +39,7 @@
 
 ## 주요 플로우
 - **면접 연습**: 이력서 선택(필수) → 채용공고 입력(선택) → AI 자동 설계 → 면접 시작
+- **꼬리질문**: feedback에서 followUpQuestion 표시 → "꼬리질문 답변하기" → TTS → 음성인식 → `/api/interview/practice-evaluate` (stateless) → 피드백 → 다음 질문
 - **컨닝 모드**: 이력서 선택 → (채용공고 텍스트) → 마이크 실시간 감지 → 2초 침묵 시 자동 답변 생성 (DB 저장 없음, stateless)
 
 ## DB 모델 (핵심)
@@ -54,9 +55,12 @@
 - `output: 'standalone'` 사용하지 않음 (Vercel에서 불필요)
 - Redis 없음 — `lib/redis.ts`가 연결 실패 시 graceful 무시 (캐시만 스킵)
 
+## 음성 처리
+- **transcript 정규화**: `lib/transcript.ts` — 필러워드/더듬기 제거 (클라이언트, 전 훅에서 사용)
+- **AI 교정**: `lib/transcript-server.ts` — 서버 측 transcript 교정 (`correctedTranscript`)
+- **음성인식**: `maxAlternatives=3` + confidence 기반 최적 대안 선택
+
 ## TODO
-- [ ] 한국어 입력 정확도 강화 (음성 인식 개선)
-- [ ] 꼬리질문 기능 (답변 기반 후속 질문 자동 생성)
 - [ ] GitHub 프로필/레포 분석 (이력서 보완 자료로 활용)
 - [ ] 심화 면접을 위한 깊은 분석 (기술 스택별 심층 질문 생성)
 
