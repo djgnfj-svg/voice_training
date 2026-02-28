@@ -147,7 +147,7 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">이력서 관리</h1>
+        <h1 className="text-2xl font-bold md:text-3xl">이력서 관리</h1>
         <p className="text-muted-foreground">이력서를 업로드하고 관리하여 맞춤 면접 질문을 받으세요</p>
       </div>
 
@@ -159,7 +159,7 @@ export default function ProfilePage() {
         </CardHeader>
         <CardContent>
           <div
-            className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-12 transition-colors ${
+            className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 md:p-12 transition-colors ${
               isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
             }`}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -223,7 +223,7 @@ export default function ProfilePage() {
                               if (e.key === 'Enter') submitRename(resume.id);
                               if (e.key === 'Escape') setRenamingId(null);
                             }}
-                            className="h-8 w-48"
+                            className="h-8 w-32 sm:w-48"
                             autoFocus
                           />
                           <Button

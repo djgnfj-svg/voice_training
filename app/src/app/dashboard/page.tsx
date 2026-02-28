@@ -3,13 +3,13 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Mic, History, TrendingUp, FileText } from 'lucide-react';
+import { Mic, History, TrendingUp, FileText, Coins } from 'lucide-react';
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) return null;
 
-  const [sessionCount, recentSessions, resumeCount] = await Promise.all([
+  const [sessionCount, recentSessions, resumeCount, user] = await Promise.all([
     prisma.interviewSession.count({
       where: { userId: session.user.id, status: 'COMPLETED' },
     }),
@@ -21,6 +21,10 @@ export default async function DashboardPage() {
     }),
     prisma.resume.count({
       where: { userId: session.user.id },
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { creditBalance: true, freeTrialUsed: true },
     }),
   ]);
 
@@ -37,12 +41,12 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">대시보드</h1>
+        <h1 className="text-2xl font-bold md:text-3xl">대시보드</h1>
         <p className="text-muted-foreground">안녕하세요, {session.user.name}님!</p>
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">총 면접 횟수</CardTitle>
@@ -72,12 +76,17 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">빠른 시작</CardTitle>
-            <Mic className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">크레딧</CardTitle>
+            <Coins className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <Link href="/interview/setup">
-              <Button size="sm" className="w-full">면접 시작</Button>
+            <div className="text-2xl font-bold">
+              {user && !user.freeTrialUsed
+                ? '무료 1회'
+                : `${user?.creditBalance ?? 0}개`}
+            </div>
+            <Link href="/credits" className="text-xs text-primary hover:underline">
+              충전하기
             </Link>
           </CardContent>
         </Card>

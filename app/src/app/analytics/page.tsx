@@ -25,7 +25,7 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">성장 분석</h1>
+        <h1 className="text-2xl font-bold md:text-3xl">성장 분석</h1>
         <p className="text-muted-foreground">면접 실력의 성장 추이를 확인하세요</p>
       </div>
 

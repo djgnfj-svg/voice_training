@@ -25,6 +25,7 @@ export default function CunningModePage() {
   const resumeId = params.resumeId as string;
 
   const [jobPostingText, setJobPostingText] = useState<string | undefined>();
+  const [cunningSessionId, setCunningSessionId] = useState<string | undefined>();
   const [silenceDelay, setSilenceDelay] = useState(2000);
   const [showSettings, setShowSettings] = useState(false);
   const historyEndRef = useRef<HTMLDivElement>(null);
@@ -32,12 +33,15 @@ export default function CunningModePage() {
   useEffect(() => {
     const stored = sessionStorage.getItem('cunning_job_posting');
     if (stored) setJobPostingText(stored);
+    const storedSessionId = sessionStorage.getItem('cunning_session_id');
+    if (storedSessionId) setCunningSessionId(storedSessionId);
   }, []);
 
   const cunning = useCunningMode({
     resumeId,
     jobPostingText,
     silenceDelay,
+    cunningSessionId,
   });
 
   // Auto-start on mount

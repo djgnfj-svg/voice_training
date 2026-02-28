@@ -1,7 +1,10 @@
+import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { anthropic, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
+import { creditService } from '@/services/credit.service';
 import { questionService } from '@/services/question.service';
 import {
   MODEL_ANSWER_RESUME_PROMPT,
@@ -12,6 +15,14 @@ export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
+  }
+
+  const rateLimit = await checkRateLimit(session.user.id, 'ai-heavy');
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.resetAt - Math.floor(Date.now() / 1000)) } },
+    );
   }
 
   const body = await request.json();
@@ -30,6 +41,15 @@ export async function POST(request: NextRequest) {
 
   if (!resume) {
     return NextResponse.json({ error: '이력서를 찾을 수 없습니다' }, { status: 404 });
+  }
+
+  // Credit check
+  const creditCheck = await creditService.canStartSession(session.user.id);
+  if (!creditCheck.allowed) {
+    return NextResponse.json(
+      { error: '크레딧이 부족합니다. 크레딧을 충전해주세요.', code: 'INSUFFICIENT_CREDITS' },
+      { status: 402 },
+    );
   }
 
   const parsedResume =
@@ -80,6 +100,26 @@ export async function POST(request: NextRequest) {
 
     const parsed = JSON.parse(content);
     const questions = parsed.questions || [];
+
+    // Deduct credit after successful generation
+    const refId = `model-answer-${randomUUID()}`;
+    if (creditCheck.usingFreeTrial) {
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: session.user.id }, data: { freeTrialUsed: true } }),
+        prisma.creditTransaction.create({
+          data: {
+            userId: session.user.id,
+            amount: 0,
+            balance: 0,
+            type: 'FREE_TRIAL',
+            description: '모범답안 학습 무료 체험',
+            referenceId: refId,
+          },
+        }),
+      ]);
+    } else {
+      await creditService.deductForFeature(session.user.id, refId, '모범답안 학습 사용');
+    }
 
     return NextResponse.json({ plan, questions });
   } catch (error) {

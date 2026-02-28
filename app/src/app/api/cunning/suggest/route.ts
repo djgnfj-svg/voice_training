@@ -1,7 +1,9 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { anthropic, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
+import { creditService } from '@/services/credit.service';
 import { buildCunningSuggestPrompt } from '@/prompts/cunning';
 
 export async function POST(request: NextRequest) {
@@ -13,12 +15,24 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  const rateLimit = await checkRateLimit(session.user.id, 'ai-light');
+  if (!rateLimit.success) {
+    return new Response(JSON.stringify({ error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' }), {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': String(rateLimit.resetAt - Math.floor(Date.now() / 1000)),
+      },
+    });
+  }
+
   const body = await request.json();
-  const { resumeId, question, jobPostingText, conversationHistory } = body as {
+  const { resumeId, question, jobPostingText, conversationHistory, cunningSessionId } = body as {
     resumeId: string;
     question: string;
     jobPostingText?: string;
     conversationHistory?: { question: string; answer: string }[];
+    cunningSessionId?: string;
   };
 
   if (!resumeId || !question) {
@@ -38,6 +52,39 @@ export async function POST(request: NextRequest) {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // Credit check: only charge on first call of a cunning session
+  if (cunningSessionId) {
+    const existing = await prisma.creditTransaction.findFirst({
+      where: { userId: session.user.id, referenceId: cunningSessionId },
+    });
+    if (!existing) {
+      const creditCheck = await creditService.canStartSession(session.user.id);
+      if (!creditCheck.allowed) {
+        return new Response(
+          JSON.stringify({ error: '크레딧이 부족합니다. 크레딧을 충전해주세요.', code: 'INSUFFICIENT_CREDITS' }),
+          { status: 402, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (creditCheck.usingFreeTrial) {
+        await prisma.$transaction([
+          prisma.user.update({ where: { id: session.user.id }, data: { freeTrialUsed: true } }),
+          prisma.creditTransaction.create({
+            data: {
+              userId: session.user.id,
+              amount: 0,
+              balance: 0,
+              type: 'FREE_TRIAL',
+              description: '컨닝 모드 무료 체험',
+              referenceId: cunningSessionId,
+            },
+          }),
+        ]);
+      } else {
+        await creditService.deductForFeature(session.user.id, cunningSessionId, '컨닝 모드 사용');
+      }
+    }
   }
 
   const parsedResume =

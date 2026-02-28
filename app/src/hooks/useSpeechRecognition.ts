@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { isSpeechRecognitionSupported } from '@/lib/utils';
 
 interface SpeechRecognitionHook {
   isListening: boolean;
@@ -62,9 +63,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [interimTranscript, setInterimTranscript] = useState('');
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
-  const isSupported = typeof window !== 'undefined' && (
-    'SpeechRecognition' in window || 'webkitSpeechRecognition' in window
-  );
+  const isSupported = isSpeechRecognitionSupported();
 
   useEffect(() => {
     if (!isSupported) return;

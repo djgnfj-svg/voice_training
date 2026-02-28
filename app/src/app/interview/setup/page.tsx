@@ -10,6 +10,8 @@ import { useToast } from '@/hooks/useToast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical } from 'lucide-react';
+import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
+import { isSpeechRecognitionSupported } from '@/lib/utils';
 import type { ParsedJobPosting, CompanyAnalysis } from '@/types';
 
 type Step = 'resume' | 'job-posting' | 'start';
@@ -22,6 +24,7 @@ export default function InterviewSetupPage() {
 
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [deepMode, setDeepMode] = useState(false);
+  const [showCreditsDialog, setShowCreditsDialog] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
     parsedData: ParsedJobPosting;
@@ -55,6 +58,15 @@ export default function InterviewSetupPage() {
       return;
     }
 
+    if (!isSpeechRecognitionSupported()) {
+      toast({
+        title: '음성 인식을 지원하지 않는 브라우저입니다',
+        description: 'Chrome 또는 Edge를 사용해주세요.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch('/api/interview/setup', {
@@ -69,6 +81,10 @@ export default function InterviewSetupPage() {
 
       if (!res.ok) {
         const data = await res.json();
+        if (res.status === 402) {
+          setShowCreditsDialog(true);
+          return;
+        }
         throw new Error(data.error || 'Setup failed');
       }
 
@@ -88,7 +104,7 @@ export default function InterviewSetupPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">면접 시작</h1>
+        <h1 className="text-2xl font-bold md:text-3xl">면접 시작</h1>
         <p className="text-muted-foreground">
           이력서를 선택하고, 선택적으로 채용 공고를 입력하면 AI가 맞춤 면접을 설계합니다
         </p>
@@ -247,6 +263,8 @@ export default function InterviewSetupPage() {
           </Button>
         </>
       )}
+
+      <InsufficientCreditsDialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog} />
     </div>
   );
 }

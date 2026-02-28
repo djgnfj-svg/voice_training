@@ -29,3 +29,8 @@ export function formatDate(date: Date | string): string {
     day: 'numeric',
   });
 }
+
+export function isSpeechRecognitionSupported(): boolean {
+  return typeof window !== 'undefined' &&
+    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+}

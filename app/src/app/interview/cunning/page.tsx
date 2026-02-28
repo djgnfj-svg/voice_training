@@ -8,16 +8,28 @@ import { Textarea } from '@/components/ui/textarea';
 import { ResumeSelector } from '@/components/resume/resume-selector';
 import { useToast } from '@/hooks/useToast';
 import { Eye, ArrowRight, Mic } from 'lucide-react';
+import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
+import { isSpeechRecognitionSupported } from '@/lib/utils';
 
 export default function CunningSetupPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [jobPostingText, setJobPostingText] = useState('');
+  const [showCreditsDialog, setShowCreditsDialog] = useState(false);
 
   const handleStart = () => {
     if (!selectedResumeId) {
       toast({ title: '이력서를 선택해주세요', variant: 'destructive' });
+      return;
+    }
+
+    if (!isSpeechRecognitionSupported()) {
+      toast({
+        title: '음성 인식을 지원하지 않는 브라우저입니다',
+        description: 'Chrome 또는 Edge를 사용해주세요.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -27,13 +39,17 @@ export default function CunningSetupPage() {
       sessionStorage.removeItem('cunning_job_posting');
     }
 
+    // Generate cunning session ID for credit tracking
+    const cunningSessionId = `cunning-${crypto.randomUUID()}`;
+    sessionStorage.setItem('cunning_session_id', cunningSessionId);
+
     router.push(`/interview/cunning/${selectedResumeId}`);
   };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">컨닝 모드</h1>
+        <h1 className="text-2xl font-bold md:text-3xl">컨닝 모드</h1>
         <p className="text-muted-foreground">
           실제 면접에서 면접관의 질문을 실시간으로 감지하고, 이력서 기반 최적 답변을 제안합니다
         </p>
@@ -86,6 +102,8 @@ export default function CunningSetupPage() {
         컨닝 모드 시작
         <ArrowRight className="ml-2 h-4 w-4" />
       </Button>
+
+      <InsufficientCreditsDialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog} />
     </div>
   );
 }

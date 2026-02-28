@@ -21,6 +21,7 @@ import {
   CheckCircle,
   ArrowLeft,
   ChevronsRight,
+  Coins,
 } from 'lucide-react';
 
 export default function ModelAnswerStudyPage({
@@ -57,6 +58,30 @@ export default function ModelAnswerStudyPage({
           <p className="text-sm text-muted-foreground">
             이력서를 분석하여 맞춤형 면접 질문과 모범답안을 준비 중입니다
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === 'insufficient_credits') {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
+          <Coins className="h-12 w-12 text-amber-500" />
+          <p className="text-lg font-medium">크레딧이 부족합니다</p>
+          <p className="text-sm text-muted-foreground">
+            모범답안 학습을 이용하려면 크레딧이 필요합니다.
+          </p>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => router.push('/interview/model-answer')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              돌아가기
+            </Button>
+            <Button onClick={() => router.push('/credits')}>
+              <Coins className="mr-2 h-4 w-4" />
+              크레딧 충전
+            </Button>
+          </div>
         </div>
       </div>
     );

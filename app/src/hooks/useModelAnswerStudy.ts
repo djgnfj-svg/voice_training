@@ -20,7 +20,7 @@ export interface InterviewPlan {
   reasoning: string;
 }
 
-export type StudyPhase = 'loading' | 'studying' | 'error';
+export type StudyPhase = 'loading' | 'studying' | 'error' | 'insufficient_credits';
 
 export function useModelAnswerStudy(resumeId: string) {
   const [phase, setPhase] = useState<StudyPhase>('loading');
@@ -51,6 +51,10 @@ export function useModelAnswerStudy(resumeId: string) {
 
         if (!res.ok) {
           const data = await res.json();
+          if (res.status === 402) {
+            setPhase('insufficient_credits');
+            return;
+          }
           throw new Error(data.error || '생성에 실패했습니다');
         }
 

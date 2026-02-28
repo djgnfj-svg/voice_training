@@ -14,14 +14,17 @@ model User {
   emailVerified  DateTime?
   name           String?
   image          String?
+  creditBalance  Int       @default(0)
+  freeTrialUsed  Boolean   @default(false)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  accounts          Account[]
-  sessions          Session[]
-  jobPostings       JobPosting[]
-  interviewSessions InterviewSession[]
-  resumes           Resume[]
+  accounts           Account[]
+  sessions           Session[]
+  jobPostings        JobPosting[]
+  interviewSessions  InterviewSession[]
+  resumes            Resume[]
+  creditTransactions CreditTransaction[]
 
   @@map("users")
 }
@@ -105,6 +108,8 @@ model InterviewSession {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
+  creditDeducted Boolean         @default(false)
+
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobPosting JobPosting?       @relation(fields: [jobPostingId], references: [id])
   resume     Resume            @relation(fields: [resumeId], references: [id])
@@ -164,4 +169,28 @@ enum SessionStatus {
   IN_PROGRESS
   COMPLETED
   ABANDONED
+}
+
+model CreditTransaction {
+  id          String       @id @default(uuid())
+  userId      String
+  amount      Int
+  balance     Int
+  type        CreditTxType
+  description String?
+  referenceId String?
+  createdAt   DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("credit_transactions")
+}
+
+enum CreditTxType {
+  FREE_TRIAL
+  ADMIN_GRANT
+  PURCHASE
+  SESSION_DEBIT
+  REFUND
 }

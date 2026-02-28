@@ -3,7 +3,11 @@ import { auth } from '@/lib/auth';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 
-export default async function AnalyticsLayout({ children }: { children: React.ReactNode }) {
+export default async function CreditsLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const session = await auth();
   if (!session) redirect('/login');
 

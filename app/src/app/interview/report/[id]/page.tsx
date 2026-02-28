@@ -56,12 +56,12 @@ export default function ReportPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link href="/history" className="mb-2 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" /> 기록으로 돌아가기
           </Link>
-          <h1 className="text-3xl font-bold">면접 리포트</h1>
+          <h1 className="text-2xl font-bold md:text-3xl">면접 리포트</h1>
         </div>
         <div className="flex gap-2">
           <Link href={`/interview/practice/${sessionId}`}>
@@ -79,22 +79,22 @@ export default function ReportPage() {
       {/* Overall Score */}
       <Card>
         <CardContent className="py-8">
-          <div className="flex items-center justify-center gap-8">
+          <div className="flex flex-col items-center justify-center gap-6 sm:flex-row sm:gap-8">
             <div className="text-center">
-              <div className="text-6xl font-bold text-primary">{report.overallScore}</div>
-              <div className="mt-1 text-2xl font-semibold">{report.grade}</div>
+              <div className="text-5xl font-bold text-primary sm:text-6xl">{report.overallScore}</div>
+              <div className="mt-1 text-xl font-semibold sm:text-2xl">{report.grade}</div>
               <p className="text-sm text-muted-foreground">종합 점수</p>
             </div>
             {report.matchingScore !== undefined && (
               <div className="text-center">
-                <div className="text-4xl font-bold text-blue-500">{report.matchingScore}%</div>
+                <div className="text-3xl font-bold text-blue-500 sm:text-4xl">{report.matchingScore}%</div>
                 <p className="text-sm text-muted-foreground">공고 매칭도</p>
               </div>
             )}
             {report.speechAnalysis && (
               <div className="text-center">
-                <div className="flex items-center gap-1 text-4xl font-bold text-green-500">
-                  <Clock className="h-8 w-8" />
+                <div className="flex items-center gap-1 text-3xl font-bold text-green-500 sm:text-4xl">
+                  <Clock className="h-6 w-6 sm:h-8 sm:w-8" />
                   {report.speechAnalysis.averageResponseTime}초
                 </div>
                 <p className="text-sm text-muted-foreground">평균 응답 시간</p>
@@ -185,11 +185,12 @@ export default function ReportPage() {
           {report.answers.map((answer) => (
             <Card key={answer.questionIndex}>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-start gap-2">
                   <CardTitle className="text-base">
                     Q{answer.questionIndex + 1}. {answer.questionText}
                   </CardTitle>
                   <Badge
+                    className="shrink-0"
                     variant={answer.overallScore >= 70 ? 'default' : answer.overallScore >= 50 ? 'secondary' : 'destructive'}
                   >
                     {answer.overallScore}점
@@ -214,7 +215,7 @@ export default function ReportPage() {
                 {/* Scores */}
                 <div>
                   <p className="mb-2 text-sm font-medium text-muted-foreground">점수 상세</p>
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                     {Object.entries(answer.scores).map(([key, value]) => {
                       const labels: Record<string, string> = {
                         accuracy: '정확성',

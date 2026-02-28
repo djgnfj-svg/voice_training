@@ -16,12 +16,14 @@ interface UseCunningModeParams {
   resumeId: string;
   jobPostingText?: string;
   silenceDelay?: number;
+  cunningSessionId?: string;
 }
 
 export function useCunningMode({
   resumeId,
   jobPostingText,
   silenceDelay = 2000,
+  cunningSessionId,
 }: UseCunningModeParams) {
   const speech = useSpeechRecognition();
   const [phase, setPhase] = useState<CunningPhase>('idle');
@@ -63,6 +65,7 @@ export function useCunningMode({
             question,
             jobPostingText: jobPostingText || undefined,
             conversationHistory: historyForApi.length > 0 ? historyForApi : undefined,
+            cunningSessionId: cunningSessionId || undefined,
           }),
           signal: abortRef.current.signal,
         });
@@ -136,7 +139,7 @@ export function useCunningMode({
         setPhase('listening');
       }
     },
-    [resumeId, jobPostingText, qaHistory]
+    [resumeId, jobPostingText, qaHistory, cunningSessionId]
   );
 
   const submitQuestion = useCallback(

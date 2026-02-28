@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { evaluationService } from '@/services/evaluation.service';
 import { z } from 'zod';
 import type { InterviewType } from '@/types';
@@ -17,6 +18,14 @@ export async function POST(request: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
+    }
+
+    const rateLimit = await checkRateLimit(session.user.id, 'ai-light');
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.resetAt - Math.floor(Date.now() / 1000)) } },
+      );
     }
 
     const body = await request.json();
