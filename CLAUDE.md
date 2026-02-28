@@ -46,13 +46,26 @@
 - **꼬리질문**: feedback에서 followUpQuestion 표시 → "꼬리질문 답변하기" → TTS → 음성인식 → `/api/interview/practice-evaluate` (stateless) → 피드백 → 다음 질문
 - **컨닝 모드**: 이력서 선택 → (채용공고 텍스트) → 마이크 실시간 감지 → 2초 침묵 시 자동 답변 생성 (DB 저장 없음, stateless)
 
+## 크레딧 시스템 (Phase 1)
+- **과금 모델**: 크레딧 충전제. 세션 1회 = 1크레딧 (면접/컨닝/모범답안 동일)
+- **무료 체험**: 신규 유저 1회 무료 (질문 3개 제한). `User.freeTrialUsed` boolean으로 관리
+- **Dev 모드**: `NODE_ENV === 'development'`면 크레딧 체크 스킵
+- **원자적 차감**: `prisma.$transaction` + `updateMany(where: { creditBalance: { gte: 1 } })` → 동시 요청 방지
+- **차감 시점**: AI 생성 성공 후 차감 (실패 시 미차감)
+- **서비스**: `app/src/services/credit.service.ts` — getBalance, canStartSession, deductForSession, deductForFeature, refundForSession, grantCredits, getTransactions
+- **API**: `GET /api/credits` (잔액), `GET /api/credits/transactions` (내역)
+- **게이팅 라우트**: `/api/interview/setup`, `/api/cunning/suggest` (cunningSessionId 기반 첫 호출만), `/api/model-answer/generate`
+- **402 응답**: `{ error: '...', code: 'INSUFFICIENT_CREDITS' }` → UI에서 크레딧 부족 다이얼로그/페이지 표시
+- **UI**: `components/credit/credit-badge.tsx` (헤더), `components/credit/insufficient-credits-dialog.tsx`, `/credits` 페이지 (충전 버튼 비활성화 — Phase 2 Toss 연동 대기)
+
 ## DB 모델 (핵심)
-- `User` — 계정 (Google OAuth, hashedPassword 없음)
+- `User` — 계정 (Google OAuth, hashedPassword 없음, creditBalance, freeTrialUsed)
 - `Account` — OAuth 계정 (PrismaAdapter 관리)
 - `Resume` — 복수 이력서 (userId, name, parsedData, fileUrl은 optional)
 - `JobPosting` — 채용공고
-- `InterviewSession` — 면접 세션 (resumeId 필수, jobPostingId 선택)
+- `InterviewSession` — 면접 세션 (resumeId 필수, jobPostingId 선택, creditDeducted)
 - `InterviewAnswer` — 답변/평가
+- `CreditTransaction` — 크레딧 거래 내역 (amount, balance, type: CreditTxType, referenceId)
 
 ## 배포
 - Vercel, 리전: `icn1` (인천/서울) — `vercel.json`
