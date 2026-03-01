@@ -1,16 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Coins, ShoppingCart, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Coins, ShoppingCart, ArrowUpRight, ArrowDownLeft, Loader2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { loadTossPayments, ANONYMOUS } from '@tosspayments/tosspayments-sdk';
+import { PAYMENT_PRODUCTS } from '@/lib/payment-products';
 import type { CreditInfo, CreditTransactionItem } from '@/types';
-
-const PLANS = [
-  { credits: 5, price: '3,000원' },
-  { credits: 15, price: '8,000원' },
-  { credits: 30, price: '14,000원' },
-];
 
 const TX_TYPE_LABELS: Record<string, string> = {
   FREE_TRIAL: '무료 체험',
@@ -21,6 +20,8 @@ const TX_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function CreditsPage() {
+  const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
+
   const { data: creditInfo } = useQuery<CreditInfo>({
     queryKey: ['credits'],
     queryFn: async () => {
@@ -39,6 +40,49 @@ export default function CreditsPage() {
     },
   });
 
+  const handlePurchase = async (productId: string) => {
+    const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
+    if (!clientKey) {
+      alert('결제 설정이 완료되지 않았습니다.');
+      return;
+    }
+
+    setLoadingProductId(productId);
+
+    try {
+      // 1. 주문 생성
+      const orderRes = await fetch('/api/payments/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId }),
+      });
+
+      if (!orderRes.ok) {
+        const err = await orderRes.json();
+        throw new Error(err.error || '주문 생성 실패');
+      }
+
+      const { orderId, amount, orderName } = await orderRes.json();
+
+      // 2. Toss SDK 초기화 + 결제 요청
+      const tossPayments = await loadTossPayments(clientKey);
+      const payment = tossPayments.payment({ customerKey: ANONYMOUS });
+
+      await payment.requestPayment({
+        method: 'CARD',
+        amount: { currency: 'KRW', value: amount },
+        orderId,
+        orderName,
+        successUrl: `${window.location.origin}/credits/success`,
+        failUrl: `${window.location.origin}/credits/fail`,
+      });
+    } catch {
+      // 사용자가 결제 취소한 경우 등 — 무시
+    } finally {
+      setLoadingProductId(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
@@ -56,7 +100,7 @@ export default function CreditsPage() {
         </CardHeader>
         <CardContent>
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold">{creditInfo?.balance ?? 0}</span>
+            <span className="text-5xl font-bold text-primary">{creditInfo?.balance ?? 0}</span>
             <span className="text-lg text-muted-foreground">크레딧</span>
           </div>
           {creditInfo && !creditInfo.freeTrialUsed && (
@@ -78,12 +122,32 @@ export default function CreditsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">
-            {PLANS.map((plan) => (
-              <div key={plan.credits} className="rounded-lg border p-4">
-                <p className="text-2xl font-bold">{plan.credits} 크레딧</p>
-                <p className="mt-1 text-lg text-muted-foreground">{plan.price}</p>
-                <Button className="mt-3 w-full" disabled>
-                  곧 출시
+            {PAYMENT_PRODUCTS.map((product) => (
+              <div
+                key={product.id}
+                className={cn(
+                  'rounded-lg border p-4 transition-all duration-200 hover:shadow-md',
+                  product.id === 'credit_15' && 'border-primary ring-1 ring-primary/20'
+                )}
+              >
+                {product.id === 'credit_15' && (
+                  <Badge className="mb-2 bg-primary">인기</Badge>
+                )}
+                <p className="text-2xl font-bold">{product.label}</p>
+                <p className="mt-1 text-lg text-muted-foreground">{product.priceLabel}</p>
+                <Button
+                  className="mt-3 w-full"
+                  disabled={loadingProductId !== null}
+                  onClick={() => handlePurchase(product.id)}
+                >
+                  {loadingProductId === product.id ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      처리 중...
+                    </>
+                  ) : (
+                    '구매하기'
+                  )}
                 </Button>
               </div>
             ))}

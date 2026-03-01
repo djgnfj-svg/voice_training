@@ -81,7 +81,7 @@ export default function ReportPage() {
         <CardContent className="py-8">
           <div className="flex flex-col items-center justify-center gap-6 sm:flex-row sm:gap-8">
             <div className="text-center">
-              <div className="text-5xl font-bold text-primary sm:text-6xl">{report.overallScore}</div>
+              <div className="bg-gradient-to-br from-primary to-blue-400 bg-clip-text text-5xl font-bold text-transparent sm:text-6xl">{report.overallScore}</div>
               <div className="mt-1 text-xl font-semibold sm:text-2xl">{report.grade}</div>
               <p className="text-sm text-muted-foreground">종합 점수</p>
             </div>

@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/useToast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 import { isSpeechRecognitionSupported } from '@/lib/utils';
 import type { ParsedJobPosting, CompanyAnalysis } from '@/types';
@@ -94,8 +95,8 @@ export default function InterviewSetupPage() {
       sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ plan, questions, deepMode }));
 
       router.push(`/interview/session/${sessionId}`);
-    } catch (error: any) {
-      toast({ title: '면접 설정 실패', description: error.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      toast({ title: '면접 설정 실패', description: error instanceof Error ? error.message : '알 수 없는 오류', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -111,18 +112,37 @@ export default function InterviewSetupPage() {
       </div>
 
       {/* Step indicators */}
-      <div className="flex items-center gap-2 text-sm">
-        <span className={step === 'resume' ? 'font-bold text-primary' : 'text-muted-foreground'}>
-          1. 이력서 선택
-        </span>
-        <ArrowRight className="h-3 w-3 text-muted-foreground" />
-        <span className={step === 'job-posting' ? 'font-bold text-primary' : 'text-muted-foreground'}>
-          2. 채용공고 (선택)
-        </span>
-        <ArrowRight className="h-3 w-3 text-muted-foreground" />
-        <span className={step === 'start' ? 'font-bold text-primary' : 'text-muted-foreground'}>
-          3. 면접 시작
-        </span>
+      <div className="flex items-center gap-3 text-sm">
+        {[
+          { key: 'resume' as const, label: '이력서 선택' },
+          { key: 'job-posting' as const, label: '채용공고' },
+          { key: 'start' as const, label: '면접 시작' },
+        ].map((s, i, arr) => {
+          const steps: Step[] = ['resume', 'job-posting', 'start'];
+          const currentIdx = steps.indexOf(step);
+          return (
+            <div key={s.key} className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors',
+                  step === s.key
+                    ? 'bg-primary text-primary-foreground'
+                    : currentIdx > i
+                      ? 'bg-primary/20 text-primary'
+                      : 'bg-muted text-muted-foreground'
+                )}>
+                  {i + 1}
+                </div>
+                <span className={step === s.key ? 'font-semibold text-primary' : 'text-muted-foreground'}>
+                  {s.label}
+                </span>
+              </div>
+              {i < arr.length - 1 && (
+                <div className={cn('h-px w-8', currentIdx > i ? 'bg-primary/40' : 'bg-border')} />
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Step 1: Resume Selection */}

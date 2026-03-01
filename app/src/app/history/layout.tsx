@@ -12,7 +12,7 @@ export default async function HistoryLayout({ children }: { children: React.Reac
       <Sidebar />
       <div className="md:pl-64">
         <Header />
-        <main className="p-4 md:p-6">{children}</main>
+        <main className="p-4 md:p-8">{children}</main>
       </div>
     </div>
   );

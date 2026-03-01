@@ -63,7 +63,7 @@ export default function LandingPage() {
           <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-5xl">
             AI와 함께하는
             <br />
-            <span className="text-primary">IT 면접 완벽 대비</span>
+            <span className="bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">IT 면접 완벽 대비</span>
           </h1>
           <p className="mx-auto mb-8 max-w-2xl text-lg text-muted-foreground">
             채용 공고를 붙여넣으면 맞춤 질문이 생성됩니다.
@@ -71,7 +71,7 @@ export default function LandingPage() {
           </p>
           <div className="flex items-center justify-center gap-4">
             <Link href="/dashboard">
-              <Button size="lg">바로 시작하기</Button>
+              <Button size="lg" className="shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all duration-200">바로 시작하기</Button>
             </Link>
           </div>
         </section>
@@ -82,9 +82,11 @@ export default function LandingPage() {
             <h2 className="mb-12 text-center text-3xl font-bold">주요 기능</h2>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {features.map((feature) => (
-                <Card key={feature.title}>
+                <Card key={feature.title} className="group">
                   <CardContent className="pt-6">
-                    <feature.icon className="mb-4 h-10 w-10 text-primary" />
+                    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 transition-colors duration-200 group-hover:bg-primary/15">
+                      <feature.icon className="h-6 w-6 text-primary" />
+                    </div>
                     <h3 className="mb-2 text-lg font-semibold">{feature.title}</h3>
                     <p className="text-sm text-muted-foreground">{feature.description}</p>
                   </CardContent>

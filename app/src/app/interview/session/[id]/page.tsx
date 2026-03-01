@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { useInterviewSession } from '@/hooks/useInterviewSession';
 import { Mic, MicOff, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { InterviewQuestion, InterviewType } from '@/types';
 
 export default function InterviewSessionPage() {
@@ -41,8 +42,8 @@ export default function InterviewSessionPage() {
         const data = await res.json();
         setQuestions(data.questions);
         setInitialized(true);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : '세션을 불러올 수 없습니다');
       }
     }
 
@@ -182,7 +183,7 @@ export default function InterviewSessionPage() {
               )}
 
               <div className="flex flex-col items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 ring-4 ring-red-100/50 animate-pulse">
                   <Mic className="h-8 w-8 text-red-500" />
                 </div>
                 <p className="text-sm font-medium text-red-500">녹음 중...</p>
@@ -231,12 +232,20 @@ export default function InterviewSessionPage() {
           )}
 
           {/* Feedback phase — main question */}
-          {interview.phase === 'feedback' && !interview.isFollowUp && currentAnswer?.evaluation && (
+          {interview.phase === 'feedback' && !interview.isFollowUp && currentAnswer?.evaluation && (() => {
+            const score = currentAnswer.evaluation!.overallScore;
+            return (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-lg font-bold text-primary">
-                    {currentAnswer.evaluation.overallScore}
+                <div className={cn(
+                  'flex h-12 w-12 items-center justify-center rounded-full',
+                  score >= 80 ? 'bg-green-100' : score >= 60 ? 'bg-blue-100' : score >= 40 ? 'bg-amber-100' : 'bg-red-100'
+                )}>
+                  <span className={cn(
+                    'text-lg font-bold',
+                    score >= 80 ? 'text-green-600' : score >= 60 ? 'text-blue-600' : score >= 40 ? 'text-amber-600' : 'text-red-600'
+                  )}>
+                    {score}
                   </span>
                 </div>
                 <div>
@@ -286,7 +295,8 @@ export default function InterviewSessionPage() {
                 )}
               </Button>
             </div>
-          )}
+            );
+          })()}
 
           {/* Feedback phase — follow-up question */}
           {interview.phase === 'feedback' && interview.isFollowUp && (
