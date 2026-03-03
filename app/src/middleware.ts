@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  // 개발 모드: 인증 우회
-  if (process.env.NODE_ENV === 'development') {
-    return NextResponse.next();
-  }
-
-  // 프로덕션: 세션 쿠키 체크
+  // 세션 쿠키 체크
   const sessionToken =
     request.cookies.get('__Secure-authjs.session-token') ??
     request.cookies.get('authjs.session-token');
@@ -42,7 +37,7 @@ export const config = {
     '/api/history/:path*',
     '/api/analytics/:path*',
     '/api/credits/:path*',
-    '/api/cunning/:path*',
+    '/api/payments/:path*',
     '/api/model-answer/:path*',
   ],
 };

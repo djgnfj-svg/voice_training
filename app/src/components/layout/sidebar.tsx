@@ -12,7 +12,6 @@ import {
   TrendingUp,
   LogOut,
   Briefcase,
-  Eye,
   BookOpen,
   Coins,
 } from 'lucide-react';
@@ -23,7 +22,6 @@ import { useMobileSidebar } from '@/hooks/useMobileSidebar';
 const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { href: '/interview/setup', label: '면접 시작', icon: Mic },
-  { href: '/interview/cunning', label: '컨닝 모드', icon: Eye },
   { href: '/interview/model-answer', label: '모범답안 학습', icon: BookOpen },
   { href: '/profile', label: '이력서 관리', icon: FileText },
   { href: '/credits', label: '크레딧', icon: Coins },

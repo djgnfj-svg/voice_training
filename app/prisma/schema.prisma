@@ -25,6 +25,8 @@ model User {
   interviewSessions  InterviewSession[]
   resumes            Resume[]
   creditTransactions CreditTransaction[]
+  paymentOrders      PaymentOrder[]
+  activityLogs       ActivityLog[]
 
   @@map("users")
 }
@@ -40,6 +42,7 @@ model Resume {
 
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   interviewSessions InterviewSession[]
+  activityLogs      ActivityLog[]
 
   @@map("resumes")
 }
@@ -193,4 +196,67 @@ enum CreditTxType {
   PURCHASE
   SESSION_DEBIT
   REFUND
+}
+
+model PaymentOrder {
+  id         String        @id @default(uuid())
+  userId     String
+  orderId    String        @unique
+  orderName  String
+  amount     Int
+  credits    Int
+  status     PaymentStatus @default(PENDING)
+  paymentKey String?
+  method     String?
+  approvedAt DateTime?
+  failReason String?
+  raw        Json?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("payment_orders")
+}
+
+enum PaymentStatus {
+  PENDING
+  DONE
+  FAILED
+  CANCELED
+}
+
+model ActivityLog {
+  id        String       @id @default(uuid())
+  userId    String
+  type      ActivityType
+  resumeId  String?
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume Resume?        @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  items  ActivityItem[]
+
+  @@index([userId, createdAt])
+  @@map("activity_logs")
+}
+
+model ActivityItem {
+  id            String @id @default(uuid())
+  activityLogId String
+  index         Int
+  question      String @db.Text
+  answer        String @db.Text
+  extra         Json?
+
+  activityLog ActivityLog @relation(fields: [activityLogId], references: [id], onDelete: Cascade)
+
+  @@index([activityLogId])
+  @@map("activity_items")
+}
+
+enum ActivityType {
+  MODEL_ANSWER
 }

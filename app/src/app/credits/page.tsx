@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ const TX_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function CreditsPage() {
+  const router = useRouter();
   const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
 
   const { data: creditInfo } = useQuery<CreditInfo>({
@@ -58,6 +60,10 @@ export default function CreditsPage() {
       });
 
       if (!orderRes.ok) {
+        if (orderRes.status === 401) {
+          router.push('/login');
+          return;
+        }
         const err = await orderRes.json();
         throw new Error(err.error || '주문 생성 실패');
       }
@@ -76,8 +82,8 @@ export default function CreditsPage() {
         successUrl: `${window.location.origin}/credits/success`,
         failUrl: `${window.location.origin}/credits/fail`,
       });
-    } catch {
-      // 사용자가 결제 취소한 경우 등 — 무시
+    } catch (err) {
+      console.error('[Payment Error]', err);
     } finally {
       setLoadingProductId(null);
     }
@@ -126,12 +132,12 @@ export default function CreditsPage() {
               <div
                 key={product.id}
                 className={cn(
-                  'rounded-lg border p-4 transition-all duration-200 hover:shadow-md',
+                  'relative rounded-lg border p-4 transition-all duration-200 hover:shadow-md',
                   product.id === 'credit_15' && 'border-primary ring-1 ring-primary/20'
                 )}
               >
                 {product.id === 'credit_15' && (
-                  <Badge className="mb-2 bg-primary">인기</Badge>
+                  <Badge className="absolute -top-2.5 left-4 bg-primary">추천</Badge>
                 )}
                 <p className="text-2xl font-bold">{product.label}</p>
                 <p className="mt-1 text-lg text-muted-foreground">{product.priceLabel}</p>
@@ -152,6 +158,7 @@ export default function CreditsPage() {
               </div>
             ))}
           </div>
+          <p className="mt-3 text-center text-sm text-muted-foreground">1크레딧 = 면접 · 모범답안 중 1회 사용</p>
         </CardContent>
       </Card>
 

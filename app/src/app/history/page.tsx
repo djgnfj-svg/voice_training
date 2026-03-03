@@ -2,14 +2,15 @@
 
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, History, Mic, RotateCcw } from 'lucide-react';
+import { Loader2, History, Mic, RotateCcw, BookOpen } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import type { ParsedJobPosting } from '@/types';
 
-interface SessionHistory {
+interface SessionItem {
+  _kind: 'session';
   id: string;
   type: string;
   categories: string[];
@@ -23,8 +24,20 @@ interface SessionHistory {
   _count: { answers: number };
 }
 
+interface ActivityItem {
+  _kind: 'activity';
+  id: string;
+  type: 'MODEL_ANSWER';
+  resumeId: string | null;
+  createdAt: string;
+  resume: { name: string } | null;
+  _count: { items: number };
+}
+
+type HistoryItem = SessionItem | ActivityItem;
+
 export default function HistoryPage() {
-  const { data: sessions, isLoading } = useQuery<SessionHistory[]>({
+  const { data: items, isLoading } = useQuery<HistoryItem[]>({
     queryKey: ['history'],
     queryFn: async () => {
       const res = await fetch('/api/history');
@@ -64,58 +77,15 @@ export default function HistoryPage() {
         <div className="flex justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : sessions && sessions.length > 0 ? (
+      ) : items && items.length > 0 ? (
         <div className="space-y-3">
-          {sessions.map((session) => (
-            <Card key={session.id} className="transition-colors hover:bg-accent/50">
-              <Link href={
-                session.status === 'COMPLETED'
-                  ? `/interview/report/${session.id}`
-                  : `/interview/session/${session.id}`
-              }>
-                <CardContent className="flex items-center justify-between py-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{typeLabels[session.type] || session.type}</span>
-                      <Badge variant={session.status === 'COMPLETED' ? 'default' : 'secondary'}>
-                        {statusLabels[session.status] || session.status}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {session.categories.join(', ')} | {session._count.answers}문제 | {formatDate(session.createdAt)}
-                    </p>
-                    {session.jobPosting?.parsedData && (
-                      <p className="text-xs text-muted-foreground">
-                        {session.jobPosting.parsedData.company} - {session.jobPosting.parsedData.position}
-                      </p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    {session.overallScore !== null ? (
-                      <div>
-                        <p className="text-2xl font-bold">{Math.round(session.overallScore)}점</p>
-                        {session.matchingScore !== null && (
-                          <p className="text-xs text-muted-foreground">매칭도 {session.matchingScore}%</p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">-</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Link>
-              {session.status === 'COMPLETED' && (
-                <div className="border-t px-6 py-2">
-                  <Link href={`/interview/practice/${session.id}`}>
-                    <Button variant="ghost" size="sm" className="text-xs">
-                      <RotateCcw className="mr-1 h-3 w-3" />
-                      연습
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </Card>
-          ))}
+          {items.map((item) =>
+            item._kind === 'session' ? (
+              <SessionCard key={`s-${item.id}`} session={item} typeLabels={typeLabels} statusLabels={statusLabels} />
+            ) : (
+              <ActivityCard key={`a-${item.id}`} activity={item} />
+            )
+          )}
         </div>
       ) : (
         <Card>
@@ -129,5 +99,91 @@ export default function HistoryPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+function SessionCard({
+  session,
+  typeLabels,
+  statusLabels,
+}: {
+  session: SessionItem;
+  typeLabels: Record<string, string>;
+  statusLabels: Record<string, string>;
+}) {
+  return (
+    <Card className="transition-colors hover:bg-accent/50">
+      <Link href={
+        session.status === 'COMPLETED'
+          ? `/interview/report/${session.id}`
+          : `/interview/session/${session.id}`
+      }>
+        <CardContent className="flex items-center justify-between py-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{typeLabels[session.type] || session.type}</span>
+              <Badge variant={session.status === 'COMPLETED' ? 'default' : 'secondary'}>
+                {statusLabels[session.status] || session.status}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {session.categories.join(', ')} | {session._count.answers}문제 | {formatDate(session.createdAt)}
+            </p>
+            {session.jobPosting?.parsedData && (
+              <p className="text-xs text-muted-foreground">
+                {session.jobPosting.parsedData.company} - {session.jobPosting.parsedData.position}
+              </p>
+            )}
+          </div>
+          <div className="text-right">
+            {session.overallScore !== null ? (
+              <div>
+                <p className="text-2xl font-bold">{Math.round(session.overallScore)}점</p>
+                {session.matchingScore !== null && (
+                  <p className="text-xs text-muted-foreground">매칭도 {session.matchingScore}%</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">-</p>
+            )}
+          </div>
+        </CardContent>
+      </Link>
+      {session.status === 'COMPLETED' && (
+        <div className="border-t px-6 py-2">
+          <Link href={`/interview/practice/${session.id}`}>
+            <Button variant="ghost" size="sm" className="text-xs">
+              <RotateCcw className="mr-1 h-3 w-3" />
+              연습
+            </Button>
+          </Link>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ActivityCard({ activity }: { activity: ActivityItem }) {
+  return (
+    <Card className="transition-colors hover:bg-accent/50">
+      <Link href={`/history/activity/${activity.id}`}>
+        <CardContent className="flex items-center justify-between py-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-emerald-500" />
+              <span className="font-medium">모범답안 학습</span>
+              <Badge variant="outline">모범답안</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {activity.resume?.name && <>{activity.resume.name} | </>}
+              {activity._count.items}개 질문 | {formatDate(activity.createdAt)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-muted-foreground">복습하기</p>
+          </div>
+        </CardContent>
+      </Link>
+    </Card>
   );
 }
