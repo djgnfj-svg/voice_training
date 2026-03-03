@@ -3,6 +3,8 @@ import { openai, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
 import { getCached, setCache } from '@/lib/redis';
 import { JOB_POSTING_ANALYSIS_PROMPT, COMPANY_ANALYSIS_PROMPT } from '@/prompts/job-posting';
+import { DEEP_COMPANY_ANALYSIS_PROMPT } from '@/prompts/company-research';
+import { searchCompanyInfo } from '@/lib/tavily';
 import type { ParsedJobPosting, CompanyAnalysis } from '@/types';
 
 export class JobPostingService {
@@ -77,6 +79,42 @@ export class JobPostingService {
     const analysis = JSON.parse(content) as CompanyAnalysis;
     await setCache(cacheKey, analysis, 86400); // Cache for 24h
     return analysis;
+  }
+
+  async deepCompanyResearch(
+    company: string,
+    position: string,
+    techStack: string[],
+  ): Promise<Partial<CompanyAnalysis>> {
+    const searchResults = await searchCompanyInfo(company, position);
+    if (!searchResults) {
+      throw new Error('검색 결과를 가져올 수 없습니다');
+    }
+
+    const formattedResults = searchResults
+      .map((sr) => {
+        const items = sr.results.map((r) => `- [${r.title}](${r.url})\n  ${r.content}`).join('\n');
+        return `### 검색: "${sr.query}"\n${sr.answer ? `요약: ${sr.answer}\n` : ''}${items}`;
+      })
+      .join('\n\n');
+
+    const prompt = DEEP_COMPANY_ANALYSIS_PROMPT
+      .replace('{company}', company)
+      .replace('{position}', position)
+      .replace('{techStack}', techStack.join(', '))
+      .replace('{searchResults}', formattedResults);
+
+    const response = await openai.chat.completions.create({
+      model: MODELS.ANALYSIS,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error('심층 분석 결과를 생성할 수 없습니다');
+
+    return JSON.parse(content) as Partial<CompanyAnalysis>;
   }
 
   async getJobPosting(id: string) {

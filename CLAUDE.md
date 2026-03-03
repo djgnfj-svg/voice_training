@@ -29,6 +29,9 @@
   - 음성: `ko-KR-InJoonNeural` (남성)
   - API: `POST /api/tts` → MP3 반환
   - `next.config.ts`의 `serverExternalPackages`에 등록 필수
+- Tavily (`@tavily/core`, 선택적 — 심층 기업 분석용 웹 검색)
+  - 래퍼: `app/src/lib/tavily.ts` (싱글톤, `isTavilyAvailable` export)
+  - `TAVILY_API_KEY` 없으면 기능 미노출, 기존 동작 영향 없음
 - TanStack Query (클라이언트 상태)
 - shadcn/ui (UI 컴포넌트)
 - NextAuth v5 + Google OAuth (인증)
@@ -42,6 +45,10 @@
   - 질문 뱅크: `app/src/data/questions/*.json` (8개 JSON, 서비스에서 직접 import)
   - 프롬프트: `DEEP_INTERVIEW_PLAN_PROMPT`, `DEEP_INTERVIEW_QUESTION_PROMPT`, `DEEP_TECHNICAL_EVALUATION_PROMPT`
   - `questionSource: 'deep_technical'`로 심화 세션 식별
+- **심층 기업 분석**: 채용공고 분석 후 "심층 분석" 버튼 → 1크레딧 차감 → Tavily 웹 검색 → LLM 구조화 → 면접 시 company_specific 질문 생성
+  - API: `POST /api/job-posting/[id]/research` (멱등 — 이미 분석 완료 시 재과금 없음)
+  - 프롬프트: `DEEP_COMPANY_ANALYSIS_PROMPT` (`app/src/prompts/company-research.ts`)
+  - 결과: CompanyAnalysis에 deepResearch=true + companyOverview, recentNews, products 등 추가
 - **꼬리질문**: feedback에서 followUpQuestion 표시 → "꼬리질문 답변하기" → TTS → 음성인식 → `/api/interview/practice-evaluate` (stateless) → 피드백 → 다음 질문
 
 ## 크레딧 & 결제 시스템
@@ -84,3 +91,4 @@
 ## 환경 변수
 - `app/.env` — DB, Anthropic API 키, NextAuth, Google OAuth, Toss 등
 - Vercel 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `ANTHROPIC_API_KEY`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `NEXT_PUBLIC_TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY`
+- Vercel 선택: `TAVILY_API_KEY` (심층 기업 분석, 없으면 버튼 미노출)

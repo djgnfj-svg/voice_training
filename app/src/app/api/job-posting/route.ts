@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { jobPostingService } from '@/services/job-posting.service';
+import { isTavilyAvailable } from '@/lib/tavily';
 import { z } from 'zod';
 
 const analyzeSchema = z.object({
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     const { rawText } = analyzeSchema.parse(body);
 
     const result = await jobPostingService.analyzeJobPosting(session.user.id, rawText);
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, deepResearchAvailable: isTavilyAvailable });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });

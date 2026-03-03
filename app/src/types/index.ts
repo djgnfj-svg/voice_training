@@ -19,6 +19,14 @@ export interface CompanyAnalysis {
   interviewStyle: string;
   culture: string[];
   pastQuestionTrends: string[];
+  // 심층 분석 필드 (optional)
+  deepResearch?: boolean;
+  companyOverview?: string;
+  recentNews?: string[];
+  products?: string[];
+  interviewReviews?: string[];
+  keyTopicsForInterview?: string[];
+  suggestedQuestions?: string[];
 }
 
 // Resume
@@ -64,7 +72,7 @@ export interface MatchItem {
 export interface InterviewQuestion {
   index: number;
   text: string;
-  source: 'job_posting' | 'resume_based' | 'general' | 'deep_technical';
+  source: 'job_posting' | 'resume_based' | 'general' | 'deep_technical' | 'company_specific';
   category: string;
   difficulty: Difficulty;
   relatedKeyPoints?: string[];
@@ -209,6 +217,20 @@ export interface EvaluateAnswerRequest {
 
 export interface AnalyzeJobPostingRequest {
   rawText: string;
+}
+
+// Payments
+export type PaymentStatus = 'PENDING' | 'DONE' | 'FAILED' | 'CANCELED';
+
+export interface CreateOrderResponse {
+  orderId: string;
+  amount: number;
+  orderName: string;
+}
+
+export interface ConfirmPaymentResponse {
+  success: boolean;
+  credits: number;
 }
 
 // Credits

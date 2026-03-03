@@ -30,6 +30,7 @@ export default function InterviewSetupPage() {
     id: string;
     parsedData: ParsedJobPosting;
     companyAnalysis: CompanyAnalysis;
+    deepResearchAvailable: boolean;
   } | null>(null);
 
   const goToJobPosting = () => {
@@ -48,6 +49,7 @@ export default function InterviewSetupPage() {
     id: string;
     parsedData: ParsedJobPosting;
     companyAnalysis: CompanyAnalysis;
+    deepResearchAvailable: boolean;
   }) => {
     setJobPostingData(data);
     setStep('start');
@@ -182,8 +184,13 @@ export default function InterviewSetupPage() {
             </>
           ) : (
             <JobPostingResult
+              jobPostingId={jobPostingData.id}
               parsedData={jobPostingData.parsedData}
               companyAnalysis={jobPostingData.companyAnalysis}
+              deepResearchAvailable={jobPostingData.deepResearchAvailable}
+              onCompanyAnalysisUpdate={(analysis) =>
+                setJobPostingData(prev => prev ? { ...prev, companyAnalysis: analysis } : prev)
+              }
             />
           )}
         </>
@@ -194,8 +201,13 @@ export default function InterviewSetupPage() {
         <>
           {jobPostingData && (
             <JobPostingResult
+              jobPostingId={jobPostingData.id}
               parsedData={jobPostingData.parsedData}
               companyAnalysis={jobPostingData.companyAnalysis}
+              deepResearchAvailable={jobPostingData.deepResearchAvailable}
+              onCompanyAnalysisUpdate={(analysis) =>
+                setJobPostingData(prev => prev ? { ...prev, companyAnalysis: analysis } : prev)
+              }
             />
           )}
 
