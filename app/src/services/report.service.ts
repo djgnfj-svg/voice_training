@@ -25,12 +25,18 @@ export class ReportService {
       ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
       : 0;
 
-    // Category scores
-    const categoryScores: Record<string, number> = {};
+    // Category scores (average per category)
+    const categorySums: Record<string, number> = {};
+    const categoryCounts: Record<string, number> = {};
     for (const answer of answeredQuestions) {
       const source = answer.questionSource;
-      if (!categoryScores[source]) categoryScores[source] = 0;
-      categoryScores[source] += answer.overallScore || 0;
+      if (!categorySums[source]) { categorySums[source] = 0; categoryCounts[source] = 0; }
+      categorySums[source] += answer.overallScore || 0;
+      categoryCounts[source] += 1;
+    }
+    const categoryScores: Record<string, number> = {};
+    for (const source of Object.keys(categorySums)) {
+      categoryScores[source] = Math.round(categorySums[source] / categoryCounts[source]);
     }
 
     // Strengths and improvements

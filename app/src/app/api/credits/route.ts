@@ -8,6 +8,11 @@ export async function GET() {
     return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
   }
 
-  const info = await creditService.getCreditInfo(session.user.id);
-  return NextResponse.json(info);
+  try {
+    const info = await creditService.getCreditInfo(session.user.id);
+    return NextResponse.json(info);
+  } catch (error) {
+    console.error('Credit info fetch error:', error);
+    return NextResponse.json({ error: '크레딧 정보를 불러오는 중 오류가 발생했습니다' }, { status: 500 });
+  }
 }

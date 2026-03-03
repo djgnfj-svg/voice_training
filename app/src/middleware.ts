@@ -31,6 +31,7 @@ export const config = {
     '/history/:path*',
     '/analytics/:path*',
     '/credits/:path*',
+    '/api/dashboard/:path*',
     '/api/interview/:path*',
     '/api/job-posting/:path*',
     '/api/resume/:path*',
@@ -39,5 +40,6 @@ export const config = {
     '/api/credits/:path*',
     '/api/payments/:path*',
     '/api/model-answer/:path*',
+    '/api/activity/:path*',
   ],
 };

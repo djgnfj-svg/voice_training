@@ -121,7 +121,37 @@ export async function POST(request: NextRequest) {
       await creditService.deductForFeature(session.user.id, refId, '모범답안 학습 사용');
     }
 
-    return NextResponse.json({ plan, questions });
+    // Save activity log for history/review
+    let activityLogId: string | null = null;
+    try {
+      const log = await prisma.activityLog.create({
+        data: {
+          userId: session.user.id,
+          type: 'MODEL_ANSWER',
+          resumeId,
+          metadata: { plan: JSON.parse(JSON.stringify(plan)), jobPostingText: jobPostingText || null },
+          items: {
+            create: questions.map((q: { text: string; modelAnswer?: string; keyPoints?: string[]; answerTips?: string[]; category?: string; difficulty?: string }, i: number) => ({
+              index: i,
+              question: q.text,
+              answer: '',
+              extra: {
+                modelAnswer: q.modelAnswer,
+                keyPoints: q.keyPoints,
+                answerTips: q.answerTips,
+                category: q.category,
+                difficulty: q.difficulty,
+              },
+            })),
+          },
+        },
+      });
+      activityLogId = log.id;
+    } catch (logError) {
+      console.error('Activity log save failed (credit already deducted):', logError);
+    }
+
+    return NextResponse.json({ plan, questions, activityLogId });
   } catch (error) {
     console.error('Model answer generation error:', error);
     return NextResponse.json(
