@@ -19,8 +19,7 @@ export async function GET(
     }
 
     return NextResponse.json(resume);
-  } catch (error) {
-    console.error('Resume fetch error:', error);
+  } catch {
     return NextResponse.json({ error: '이력서 조회에 실패했습니다' }, { status: 500 });
   }
 }
@@ -45,11 +44,10 @@ export async function PATCH(
 
     const resume = await resumeService.renameResume(id, session.user.id, name);
     return NextResponse.json(resume);
-  } catch (error: any) {
-    if (error.message === 'Resume not found') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Resume not found') {
       return NextResponse.json({ error: '이력서를 찾을 수 없습니다' }, { status: 404 });
     }
-    console.error('Resume rename error:', error);
     return NextResponse.json({ error: '이름 변경에 실패했습니다' }, { status: 500 });
   }
 }
@@ -67,11 +65,10 @@ export async function DELETE(
     const { id } = await params;
     await resumeService.deleteResume(id, session.user.id);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    if (error.message === 'Resume not found') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Resume not found') {
       return NextResponse.json({ error: '이력서를 찾을 수 없습니다' }, { status: 404 });
     }
-    console.error('Resume delete error:', error);
     return NextResponse.json({ error: '이력서 삭제에 실패했습니다' }, { status: 500 });
   }
 }

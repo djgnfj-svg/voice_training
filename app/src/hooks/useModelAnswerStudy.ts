@@ -62,10 +62,9 @@ export function useModelAnswerStudy(resumeId: string) {
         setPlan(data.plan);
         setQuestions(data.questions);
         setPhase('studying');
-      } catch (error: any) {
-        if (error.name === 'AbortError') return;
-        console.error('Model answer fetch error:', error);
-        setErrorMessage(error.message || '모범답안 생성 중 오류가 발생했습니다');
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === 'AbortError') return;
+        setErrorMessage(error instanceof Error ? error.message : '모범답안 생성 중 오류가 발생했습니다');
         setPhase('error');
       }
     };

@@ -1,40 +1,51 @@
-import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Mic, History, TrendingUp, FileText, Coins } from 'lucide-react';
+import { Mic, History, TrendingUp, FileText, Coins, Loader2 } from 'lucide-react';
 
-export default async function DashboardPage() {
-  const session = await auth();
-  if (!session?.user?.id) return null;
+interface DashboardData {
+  sessionCount: number;
+  recentSessions: {
+    id: string;
+    type: string;
+    overallScore: number | null;
+    createdAt: string;
+    categories: string[];
+  }[];
+  resumeCount: number;
+  creditBalance: number;
+  freeTrialUsed: boolean;
+  userName: string | null;
+}
 
-  const [sessionCount, recentSessions, resumeCount, user] = await Promise.all([
-    prisma.interviewSession.count({
-      where: { userId: session.user.id, status: 'COMPLETED' },
-    }),
-    prisma.interviewSession.findMany({
-      where: { userId: session.user.id, status: 'COMPLETED' },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: { id: true, type: true, overallScore: true, createdAt: true, categories: true },
-    }),
-    prisma.resume.count({
-      where: { userId: session.user.id },
-    }),
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { creditBalance: true, freeTrialUsed: true },
-    }),
-  ]);
+export default function DashboardPage() {
+  const { data, isLoading } = useQuery<DashboardData>({
+    queryKey: ['dashboard'],
+    queryFn: async () => {
+      const res = await fetch('/api/dashboard');
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
+  });
+
+  if (isLoading || !data) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   const avgScore =
-    recentSessions.length > 0
+    data.recentSessions.length > 0
       ? Math.round(
-          recentSessions
+          data.recentSessions
             .filter((s) => s.overallScore !== null)
             .reduce((sum, s) => sum + (s.overallScore || 0), 0) /
-            recentSessions.filter((s) => s.overallScore !== null).length
+            data.recentSessions.filter((s) => s.overallScore !== null).length
         )
       : 0;
 
@@ -42,7 +53,7 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold md:text-3xl">대시보드</h1>
-        <p className="text-muted-foreground">안녕하세요, {session.user.name}님!</p>
+        <p className="text-muted-foreground">안녕하세요, {data.userName}님!</p>
       </div>
 
       {/* Stats */}
@@ -55,7 +66,7 @@ export default async function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{sessionCount}회</div>
+            <div className="text-2xl font-bold">{data.sessionCount}회</div>
           </CardContent>
         </Card>
         <Card>
@@ -77,7 +88,7 @@ export default async function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{resumeCount}개</div>
+            <div className="text-2xl font-bold">{data.resumeCount}개</div>
           </CardContent>
         </Card>
         <Card>
@@ -89,9 +100,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {user && !user.freeTrialUsed
-                ? '무료 1회'
-                : `${user?.creditBalance ?? 0}개`}
+              {!data.freeTrialUsed ? '무료 1회' : `${data.creditBalance}개`}
             </div>
             <Link href="/credits" className="text-xs text-primary hover:underline">
               충전하기
@@ -107,7 +116,7 @@ export default async function DashboardPage() {
           <CardDescription>최근 완료한 면접 세션입니다</CardDescription>
         </CardHeader>
         <CardContent>
-          {recentSessions.length === 0 ? (
+          {data.recentSessions.length === 0 ? (
             <div className="py-12 text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
                 <Mic className="h-8 w-8 text-primary" />
@@ -120,7 +129,7 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {recentSessions.map((s) => (
+              {data.recentSessions.map((s) => (
                 <Link
                   key={s.id}
                   href={`/interview/report/${s.id}`}

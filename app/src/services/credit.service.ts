@@ -1,7 +1,5 @@
 import { prisma } from '@/lib/prisma';
 
-const isDev = process.env.NODE_ENV === 'development';
-
 export class CreditService {
   async getBalance(userId: string): Promise<number> {
     const user = await prisma.user.findUnique({
@@ -23,8 +21,6 @@ export class CreditService {
   }
 
   async canStartSession(userId: string): Promise<{ allowed: boolean; usingFreeTrial: boolean }> {
-    if (isDev) return { allowed: true, usingFreeTrial: false };
-
     const info = await this.getCreditInfo(userId);
 
     if (!info.freeTrialUsed) {
@@ -37,7 +33,6 @@ export class CreditService {
   }
 
   async deductForSession(userId: string, sessionId: string, usingFreeTrial: boolean) {
-    if (isDev) return;
 
     if (usingFreeTrial) {
       await prisma.$transaction([
@@ -98,7 +93,6 @@ export class CreditService {
   }
 
   async deductForFeature(userId: string, referenceId: string, description: string) {
-    if (isDev) return;
 
     await prisma.$transaction(async (tx) => {
       const updated = await tx.user.updateMany({
@@ -129,7 +123,6 @@ export class CreditService {
   }
 
   async refundForSession(userId: string, sessionId: string) {
-    if (isDev) return;
 
     const session = await prisma.interviewSession.findUnique({
       where: { id: sessionId },

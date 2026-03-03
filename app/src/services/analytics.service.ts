@@ -65,6 +65,18 @@ export class AnalyticsService {
       },
     });
   }
+
+  async getActivityHistory(userId: string, limit = 20) {
+    return prisma.activityLog.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        resume: { select: { name: true } },
+        _count: { select: { items: true } },
+      },
+    });
+  }
 }
 
 export const analyticsService = new AnalyticsService();

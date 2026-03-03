@@ -12,8 +12,26 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get('limit') || '20');
 
-    const history = await analyticsService.getSessionHistory(session.user.id, limit);
-    return NextResponse.json(history);
+    const [sessions, activities] = await Promise.all([
+      analyticsService.getSessionHistory(session.user.id, limit),
+      analyticsService.getActivityHistory(session.user.id, limit),
+    ]);
+
+    const sessionItems = sessions.map((s) => ({
+      ...s,
+      _kind: 'session' as const,
+    }));
+
+    const activityItems = activities.map((a) => ({
+      ...a,
+      _kind: 'activity' as const,
+    }));
+
+    const merged = [...sessionItems, ...activityItems]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit);
+
+    return NextResponse.json(merged);
   } catch (error) {
     console.error('History fetch error:', error);
     return NextResponse.json({ error: '히스토리 조회에 실패했습니다' }, { status: 500 });
