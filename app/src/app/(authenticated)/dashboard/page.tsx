@@ -4,7 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Mic, History, TrendingUp, FileText, Coins, Loader2 } from 'lucide-react';
+import { Mic, History, TrendingUp, FileText, Coins, Loader2, BarChart3 } from 'lucide-react';
+import { GrowthChart } from '@/components/analytics/growth-chart';
+import { CategoryChart } from '@/components/analytics/category-chart';
+import type { GrowthData, CategoryPerformance } from '@/types';
 
 interface DashboardData {
   sessionCount: number;
@@ -19,6 +22,8 @@ interface DashboardData {
   creditBalance: number;
   freeTrialUsed: boolean;
   userName: string | null;
+  growthData: GrowthData[];
+  categoryPerformance: CategoryPerformance[];
 }
 
 export default function DashboardPage() {
@@ -149,6 +154,46 @@ export default function DashboardPage() {
                 </Link>
               ))}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Growth Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            점수 추이
+          </CardTitle>
+          <CardDescription>면접 세션별 종합 점수 변화</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {data.growthData.length > 0 ? (
+            <GrowthChart data={data.growthData} />
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              면접을 2회 이상 완료하면 성장 추이를 확인할 수 있습니다
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Category Performance */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            카테고리별 성과
+          </CardTitle>
+          <CardDescription>영역별 평균 점수</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {data.categoryPerformance.length > 0 ? (
+            <CategoryChart data={data.categoryPerformance} />
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              면접 데이터가 쌓이면 카테고리별 분석을 확인할 수 있습니다
+            </p>
           )}
         </CardContent>
       </Card>

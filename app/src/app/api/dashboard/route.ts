@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { analyticsService } from '@/services/analytics.service';
 
 export async function GET() {
   const session = await auth();
@@ -9,7 +10,7 @@ export async function GET() {
   }
 
   try {
-    const [sessionCount, recentSessions, resumeCount, user] = await Promise.all([
+    const [sessionCount, recentSessions, resumeCount, user, growthData, categoryPerformance] = await Promise.all([
       prisma.interviewSession.count({
         where: { userId: session.user.id, status: 'COMPLETED' },
       }),
@@ -26,6 +27,8 @@ export async function GET() {
         where: { id: session.user.id },
         select: { creditBalance: true, freeTrialUsed: true },
       }),
+      analyticsService.getGrowthData(session.user.id),
+      analyticsService.getCategoryPerformance(session.user.id),
     ]);
 
     return NextResponse.json({
@@ -35,6 +38,8 @@ export async function GET() {
       creditBalance: user?.creditBalance ?? 0,
       freeTrialUsed: user?.freeTrialUsed ?? false,
       userName: session.user.name,
+      growthData,
+      categoryPerformance,
     });
   } catch (error) {
     console.error('Dashboard data fetch error:', error);

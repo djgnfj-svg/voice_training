@@ -10,7 +10,6 @@ import {
   Mic,
   FileText,
   History,
-  TrendingUp,
   LogOut,
   Briefcase,
   BookOpen,
@@ -28,7 +27,6 @@ const navItems = [
   { href: '/profile', label: '이력서 관리', icon: FileText },
   { href: '/credits', label: '크레딧', icon: Coins },
   { href: '/history', label: '면접 기록', icon: History },
-  { href: '/analytics', label: '성장 분석', icon: TrendingUp },
 ];
 
 const adminNavItems = [
