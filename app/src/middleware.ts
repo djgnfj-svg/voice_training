@@ -41,5 +41,6 @@ export const config = {
     '/api/payments/:path*',
     '/api/model-answer/:path*',
     '/api/activity/:path*',
+    '/admin/:path*',
   ],
 };
