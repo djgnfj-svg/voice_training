@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { evaluationService } from '@/services/evaluation.service';
+import { creditService, CREDIT_COSTS } from '@/services/credit.service';
 import { z } from 'zod';
 import type { InterviewType } from '@/types';
 
@@ -30,6 +31,16 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { questionText, answerTranscript, interviewType, deepMode, relatedKeyPoints } = schema.parse(body);
+
+    // 꼬리질문 크레딧 차감
+    try {
+      await creditService.deductForFeature(session.user.id, 'follow-up', '꼬리질문 평가', CREDIT_COSTS.FOLLOW_UP);
+    } catch {
+      return NextResponse.json(
+        { error: '크레딧이 부족합니다.', code: 'INSUFFICIENT_CREDITS' },
+        { status: 402 },
+      );
+    }
 
     const evaluation = await evaluationService.evaluateStateless({
       questionText,

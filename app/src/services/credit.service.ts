@@ -1,5 +1,12 @@
 import { prisma } from '@/lib/prisma';
 
+export const CREDIT_COSTS = {
+  SESSION: 10,
+  MODEL_ANSWER: 10,
+  DEEP_RESEARCH: 10,
+  FOLLOW_UP: 1,
+} as const;
+
 export class CreditService {
   async getBalance(userId: string): Promise<number> {
     const user = await prisma.user.findUnique({
@@ -26,7 +33,7 @@ export class CreditService {
     if (!info.freeTrialUsed) {
       return { allowed: true, usingFreeTrial: true };
     }
-    if (info.balance >= 1) {
+    if (info.balance >= CREDIT_COSTS.SESSION) {
       return { allowed: true, usingFreeTrial: false };
     }
     return { allowed: false, usingFreeTrial: false };
@@ -58,11 +65,11 @@ export class CreditService {
       return;
     }
 
-    // Atomic deduction: only succeeds if balance >= 1
+    // Atomic deduction: only succeeds if balance >= cost
     await prisma.$transaction(async (tx) => {
       const updated = await tx.user.updateMany({
-        where: { id: userId, creditBalance: { gte: 1 } },
-        data: { creditBalance: { decrement: 1 } },
+        where: { id: userId, creditBalance: { gte: CREDIT_COSTS.SESSION } },
+        data: { creditBalance: { decrement: CREDIT_COSTS.SESSION } },
       });
 
       if (updated.count === 0) {
@@ -82,7 +89,7 @@ export class CreditService {
       await tx.creditTransaction.create({
         data: {
           userId,
-          amount: -1,
+          amount: -CREDIT_COSTS.SESSION,
           balance: user!.creditBalance,
           type: 'SESSION_DEBIT',
           description: '면접 세션 사용',
@@ -92,12 +99,12 @@ export class CreditService {
     });
   }
 
-  async deductForFeature(userId: string, referenceId: string, description: string) {
+  async deductForFeature(userId: string, referenceId: string, description: string, cost: number) {
 
     await prisma.$transaction(async (tx) => {
       const updated = await tx.user.updateMany({
-        where: { id: userId, creditBalance: { gte: 1 } },
-        data: { creditBalance: { decrement: 1 } },
+        where: { id: userId, creditBalance: { gte: cost } },
+        data: { creditBalance: { decrement: cost } },
       });
 
       if (updated.count === 0) {
@@ -112,7 +119,7 @@ export class CreditService {
       await tx.creditTransaction.create({
         data: {
           userId,
-          amount: -1,
+          amount: -cost,
           balance: user!.creditBalance,
           type: 'SESSION_DEBIT',
           description,
@@ -134,7 +141,7 @@ export class CreditService {
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
-        data: { creditBalance: { increment: 1 } },
+        data: { creditBalance: { increment: CREDIT_COSTS.SESSION } },
       });
 
       const user = await tx.user.findUnique({
@@ -150,7 +157,7 @@ export class CreditService {
       await tx.creditTransaction.create({
         data: {
           userId,
-          amount: 1,
+          amount: CREDIT_COSTS.SESSION,
           balance: user!.creditBalance,
           type: 'REFUND',
           description: '세션 생성 실패 환불',

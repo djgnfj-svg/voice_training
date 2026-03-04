@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { isTavilyAvailable } from '@/lib/tavily';
 import { jobPostingService } from '@/services/job-posting.service';
-import { creditService } from '@/services/credit.service';
+import { creditService, CREDIT_COSTS } from '@/services/credit.service';
 import type { CompanyAnalysis, ParsedJobPosting } from '@/types';
 
 export async function POST(
@@ -45,7 +45,7 @@ export async function POST(
     const isDev = process.env.NODE_ENV === 'development';
     if (!isDev) {
       const balance = await creditService.getBalance(session.user.id);
-      if (balance < 1) {
+      if (balance < CREDIT_COSTS.DEEP_RESEARCH) {
         return NextResponse.json(
           { error: '크레딧이 부족합니다', code: 'INSUFFICIENT_CREDITS' },
           { status: 402 },
@@ -65,7 +65,7 @@ export async function POST(
     );
 
     if (!isDev) {
-      await creditService.deductForFeature(session.user.id, id, '심층 기업 분석');
+      await creditService.deductForFeature(session.user.id, id, '심층 기업 분석', CREDIT_COSTS.DEEP_RESEARCH);
     }
 
     const mergedAnalysis: CompanyAnalysis = {

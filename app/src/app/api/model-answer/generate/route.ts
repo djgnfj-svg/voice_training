@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { anthropic, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
-import { creditService } from '@/services/credit.service';
+import { creditService, CREDIT_COSTS } from '@/services/credit.service';
 import { questionService } from '@/services/question.service';
 import {
   MODEL_ANSWER_RESUME_PROMPT,
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
         }),
       ]);
     } else {
-      await creditService.deductForFeature(session.user.id, refId, '모범답안 학습 사용');
+      await creditService.deductForFeature(session.user.id, refId, '모범답안 학습 사용', CREDIT_COSTS.MODEL_ANSWER);
     }
 
     // Save activity log for history/review

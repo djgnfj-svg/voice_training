@@ -17,8 +17,8 @@ export { anthropic };
 // Model constants
 export const MODELS = {
   ANALYSIS: 'claude-haiku-4-5-20251001' as const,
-  EVALUATION: 'claude-sonnet-4-6' as const,
-  QUESTION_GEN: 'claude-sonnet-4-6' as const,
+  EVALUATION: 'claude-haiku-4-5-20251001' as const,
+  QUESTION_GEN: 'claude-haiku-4-5-20251001' as const,
 };
 
 /**
