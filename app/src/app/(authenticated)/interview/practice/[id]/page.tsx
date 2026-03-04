@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { usePracticeSession } from '@/hooks/usePracticeSession';
+import { normalizeTranscript } from '@/lib/transcript';
 import {
   Loader2, ArrowLeft, Mic, Send, Volume2,
   SkipForward, RotateCcw, ChevronRight, CheckCircle, Sparkles,
@@ -213,10 +214,7 @@ export default function PracticePage() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    // Show model answer directly in comparing without practice
-                    practice.goToQuestion(practice.currentIndex);
-                  }}
+                  onClick={practice.showModelAnswer}
                 >
                   모범 답안 보기
                 </Button>
@@ -246,7 +244,7 @@ export default function PracticePage() {
                   <div className="min-h-[100px] rounded-lg bg-muted/50 p-4">
                     <p className="text-sm text-muted-foreground">실시간 전사:</p>
                     <p className="mt-2">
-                      {practice.speech.transcript}
+                      {normalizeTranscript(practice.speech.transcript)}
                       <span className="text-muted-foreground">{practice.speech.interimTranscript}</span>
                     </p>
                   </div>

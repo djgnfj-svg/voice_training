@@ -16,7 +16,7 @@ export class EvaluationService {
   }): Promise<AnswerEvaluation> {
     const { questionText, answerTranscript, interviewType, deepMode, relatedKeyPoints } = params;
 
-    const { correctedText, wasChanged } = await correctTranscript(answerTranscript);
+    const { correctedText, wasChanged } = await correctTranscript(answerTranscript, questionText);
 
     let promptTemplate: string;
     if (deepMode) {

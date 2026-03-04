@@ -3,8 +3,25 @@
 import { useState, useCallback, useRef } from 'react';
 import { useSpeechRecognition } from './useSpeechRecognition';
 import { useTextToSpeech } from './useTextToSpeech';
+import { useAudioRecorder } from './useAudioRecorder';
 import { normalizeTranscript } from '@/lib/transcript';
 import type { InterviewQuestion, AnswerEvaluation, InterviewType } from '@/types';
+
+const MAX_AUDIO_SIZE = 4.5 * 1024 * 1024; // 4.5MB
+
+async function transcribeWithWhisper(audioBlob: Blob): Promise<string | null> {
+  if (audioBlob.size > MAX_AUDIO_SIZE) return null;
+  try {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.transcript || null;
+  } catch {
+    return null;
+  }
+}
 
 type SessionPhase = 'idle' | 'asking' | 'listening' | 'evaluating' | 'feedback' | 'completed';
 
@@ -45,6 +62,7 @@ export function useInterviewSession() {
   const answerStartTimeRef = useRef<number>(0);
   const speech = useSpeechRecognition();
   const tts = useTextToSpeech();
+  const recorder = useAudioRecorder();
 
   const startSession = useCallback(
     async (sessionId: string, questions: InterviewQuestion[], interviewType?: InterviewType, deepMode?: boolean) => {
@@ -68,19 +86,30 @@ export function useInterviewSession() {
         setState((prev) => ({ ...prev, phase: 'listening' }));
         speech.resetTranscript();
         speech.startListening();
+        recorder.startRecording();
       }
     },
-    [tts, speech]
+    [tts, speech, recorder]
   );
 
   const submitAnswer = useCallback(async () => {
     if (!state.sessionId) return;
 
     speech.stopListening();
+    const audioBlob = recorder.stopRecording();
     const responseTimeSec = Math.round((Date.now() - answerStartTimeRef.current) / 1000);
-    const transcript = normalizeTranscript(speech.transcript);
+    const webSpeechTranscript = normalizeTranscript(speech.transcript);
 
     setState((prev) => ({ ...prev, phase: 'evaluating' }));
+
+    // Whisper 하이브리드: 녹음 데이터가 있으면 Whisper 시도, 실패 시 Web Speech API 폴백
+    let transcript = webSpeechTranscript;
+    if (audioBlob && audioBlob.size > 0) {
+      const whisperResult = await transcribeWithWhisper(audioBlob);
+      if (whisperResult) {
+        transcript = whisperResult;
+      }
+    }
 
     const currentQ = state.questions[state.currentQuestionIndex];
 
@@ -130,7 +159,7 @@ export function useInterviewSession() {
         ],
       }));
     }
-  }, [state.sessionId, state.currentQuestionIndex, state.deepMode, state.questions, speech]);
+  }, [state.sessionId, state.currentQuestionIndex, state.deepMode, state.questions, speech, recorder]);
 
   const nextQuestion = useCallback(async () => {
     const nextIndex = state.currentQuestionIndex + 1;
@@ -161,10 +190,12 @@ export function useInterviewSession() {
     setState((prev) => ({ ...prev, phase: 'listening' }));
     speech.resetTranscript();
     speech.startListening();
-  }, [state.currentQuestionIndex, state.questions, state.sessionId, tts, speech]);
+    recorder.startRecording();
+  }, [state.currentQuestionIndex, state.questions, state.sessionId, tts, speech, recorder]);
 
   const skipQuestion = useCallback(async () => {
     speech.stopListening();
+    recorder.resetRecording();
 
     const newAnswer: AnswerWithEval = {
       questionIndex: state.currentQuestionIndex,
@@ -179,7 +210,7 @@ export function useInterviewSession() {
     }));
 
     await nextQuestion();
-  }, [state.currentQuestionIndex, speech, nextQuestion]);
+  }, [state.currentQuestionIndex, speech, recorder, nextQuestion]);
 
   const startFollowUp = useCallback(async () => {
     const currentAnswer = state.answers.find(
@@ -200,7 +231,8 @@ export function useInterviewSession() {
     setState((prev) => ({ ...prev, phase: 'listening' }));
     speech.resetTranscript();
     speech.startListening();
-  }, [state.answers, state.currentQuestionIndex, tts, speech]);
+    recorder.startRecording();
+  }, [state.answers, state.currentQuestionIndex, tts, speech, recorder]);
 
   const submitFollowUpAnswer = useCallback(async () => {
     const currentAnswer = state.answers.find(
@@ -210,9 +242,19 @@ export function useInterviewSession() {
     if (!followUpQuestion) return;
 
     speech.stopListening();
-    const transcript = normalizeTranscript(speech.transcript);
+    const audioBlob = recorder.stopRecording();
+    const webSpeechTranscript = normalizeTranscript(speech.transcript);
 
     setState((prev) => ({ ...prev, phase: 'evaluating' }));
+
+    // Whisper 하이브리드
+    let transcript = webSpeechTranscript;
+    if (audioBlob && audioBlob.size > 0) {
+      const whisperResult = await transcribeWithWhisper(audioBlob);
+      if (whisperResult) {
+        transcript = whisperResult;
+      }
+    }
 
     const currentQ = state.questions[state.currentQuestionIndex];
 
@@ -246,7 +288,7 @@ export function useInterviewSession() {
         followUpEvaluation: null,
       }));
     }
-  }, [state.answers, state.currentQuestionIndex, state.interviewType, state.deepMode, state.questions, speech]);
+  }, [state.answers, state.currentQuestionIndex, state.interviewType, state.deepMode, state.questions, speech, recorder]);
 
   return {
     ...state,

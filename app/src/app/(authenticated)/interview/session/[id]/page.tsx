@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { useInterviewSession } from '@/hooks/useInterviewSession';
+import { normalizeTranscript } from '@/lib/transcript';
 import { Mic, MicOff, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { InterviewQuestion, InterviewType } from '@/types';
@@ -193,7 +194,7 @@ export default function InterviewSessionPage() {
               <div className="min-h-[100px] rounded-lg bg-muted/50 p-4">
                 <p className="text-sm text-muted-foreground">실시간 전사:</p>
                 <p className="mt-2">
-                  {interview.speech.transcript}
+                  {normalizeTranscript(interview.speech.transcript)}
                   <span className="text-muted-foreground">{interview.speech.interimTranscript}</span>
                 </p>
               </div>

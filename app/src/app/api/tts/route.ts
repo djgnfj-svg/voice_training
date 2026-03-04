@@ -8,19 +8,34 @@ const ttsSchema = z.object({
   text: z.string().min(1).max(4096),
 });
 
+/** 괄호(소·중·대) 및 그 안의 내용을 제거 */
+function stripParentheses(text: string): string {
+  return text
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\{[^}]*\}/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { text } = ttsSchema.parse(body);
 
+    const spokenText = stripParentheses(text);
+    if (!spokenText) {
+      return NextResponse.json({ error: 'No speakable text' }, { status: 400 });
+    }
+
     const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
     const tts = new MsEdgeTTS();
     await tts.setMetadata(
-      'ko-KR-InJoonNeural',
+      'ko-KR-HyunsuNeural',
       OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3
     );
 
-    const { audioStream } = tts.toStream(text);
+    const { audioStream } = tts.toStream(spokenText);
 
     const chunks: Buffer[] = [];
     await new Promise<void>((resolve, reject) => {

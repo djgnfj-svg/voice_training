@@ -26,7 +26,7 @@
   - ANALYSIS: claude-haiku-4-5
   - EVALUATION / QUESTION_GEN: claude-sonnet-4-6
 - Edge TTS (`msedge-tts`, 무료, API 키 불필요)
-  - 음성: `ko-KR-InJoonNeural` (남성)
+  - 음성: `ko-KR-HyunsuNeural` (남성, 자연스러운 톤)
   - API: `POST /api/tts` → MP3 반환
   - `next.config.ts`의 `serverExternalPackages`에 등록 필수
 - Tavily (`@tavily/core`, 선택적 — 심층 기업 분석용 웹 검색)
@@ -84,11 +84,16 @@
 - Redis 없음 — `lib/redis.ts`가 연결 실패 시 graceful 무시 (캐시만 스킵)
 
 ## 음성 처리
-- **transcript 정규화**: `lib/transcript.ts` — 필러워드/더듬기 제거 (클라이언트, 전 훅에서 사용)
-- **AI 교정**: `lib/transcript-server.ts` — 서버 측 transcript 교정 (`correctedTranscript`)
-- **음성인식**: `maxAlternatives=3` + confidence 기반 최적 대안 선택
+- **transcript 정규화**: `lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 (클라이언트, 전 훅에서 사용)
+- **AI 교정**: `lib/transcript-server.ts` — 서버 측 transcript 교정 (`correctedTranscript`), 질문 맥락 전달로 기술용어 교정 정확도 향상
+- **음성인식 (하이브리드)**:
+  - 실시간 표시: Web Speech API (`maxAlternatives=3` + confidence 기반 최적 대안 선택)
+  - 최종 전사: Whisper API (선택적, `OPENAI_API_KEY` 필요) — 답변 제출 시 녹음 데이터를 Whisper로 전사, 실패 시 Web Speech API 폴백
+  - 래퍼: `app/src/lib/whisper.ts` (싱글톤, `isWhisperAvailable` export)
+  - 녹음 훅: `app/src/hooks/useAudioRecorder.ts` (MediaRecorder API)
+  - API: `POST /api/transcribe` — multipart/form-data (audio 파일), 인증 필수
 
 ## 환경 변수
 - `app/.env` — DB, Anthropic API 키, NextAuth, Google OAuth, Toss 등
 - Vercel 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `ANTHROPIC_API_KEY`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `NEXT_PUBLIC_TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY`
-- Vercel 선택: `TAVILY_API_KEY` (심층 기업 분석, 없으면 버튼 미노출)
+- Vercel 선택: `TAVILY_API_KEY` (심층 기업 분석, 없으면 버튼 미노출), `OPENAI_API_KEY` (Whisper 음성인식, 없으면 Web Speech API만 사용)

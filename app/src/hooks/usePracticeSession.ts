@@ -4,8 +4,25 @@ import { useState, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSpeechRecognition } from './useSpeechRecognition';
 import { useTextToSpeech } from './useTextToSpeech';
+import { useAudioRecorder } from './useAudioRecorder';
 import { normalizeTranscript } from '@/lib/transcript';
 import type { AnswerEvaluation, InterviewType } from '@/types';
+
+const MAX_AUDIO_SIZE = 4.5 * 1024 * 1024;
+
+async function transcribeWithWhisper(audioBlob: Blob): Promise<string | null> {
+  if (audioBlob.size > MAX_AUDIO_SIZE) return null;
+  try {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.transcript || null;
+  } catch {
+    return null;
+  }
+}
 
 type PracticePhase = 'loading' | 'reviewing' | 'practicing' | 'comparing' | 'summary';
 
@@ -42,6 +59,7 @@ export function usePracticeSession(sessionId: string) {
 
   const speech = useSpeechRecognition();
   const tts = useTextToSpeech();
+  const recorder = useAudioRecorder();
 
   const { data, isLoading, error } = useQuery<PracticeData>({
     queryKey: ['practice', sessionId],
@@ -73,11 +91,22 @@ export function usePracticeSession(sessionId: string) {
     await tts.speak(currentAnswer.questionText);
     answerStartTimeRef.current = Date.now();
     speech.startListening();
-  }, [currentAnswer, tts, speech]);
+    recorder.startRecording();
+  }, [currentAnswer, tts, speech, recorder]);
 
-  const submitPractice = useCallback(() => {
+  const submitPractice = useCallback(async () => {
     speech.stopListening();
-    const transcript = normalizeTranscript(speech.transcript);
+    const audioBlob = recorder.stopRecording();
+    const webSpeechTranscript = normalizeTranscript(speech.transcript);
+
+    // Whisper 하이브리드
+    let transcript = webSpeechTranscript;
+    if (audioBlob && audioBlob.size > 0) {
+      const whisperResult = await transcribeWithWhisper(audioBlob);
+      if (whisperResult) {
+        transcript = whisperResult;
+      }
+    }
 
     setResults(prev => [
       ...prev.filter(r => r.questionIndex !== currentIndex),
@@ -89,7 +118,7 @@ export function usePracticeSession(sessionId: string) {
       },
     ]);
     setPhase('comparing');
-  }, [speech, currentIndex]);
+  }, [speech, recorder, currentIndex]);
 
   const requestEvaluation = useCallback(async () => {
     if (!data || !currentAnswer) return;
@@ -149,6 +178,10 @@ export function usePracticeSession(sessionId: string) {
     setPhase(hasResult ? 'comparing' : 'reviewing');
   }, [totalQuestions, results]);
 
+  const showModelAnswer = useCallback(() => {
+    setPhase('comparing');
+  }, []);
+
   const goToSummary = useCallback(() => {
     setPhase('summary');
   }, []);
@@ -170,6 +203,7 @@ export function usePracticeSession(sessionId: string) {
     requestEvaluation,
     nextQuestion,
     goToQuestion,
+    showModelAnswer,
     goToSummary,
     progress: totalQuestions ? ((currentIndex + 1) / totalQuestions) * 100 : 0,
   };

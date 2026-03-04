@@ -1,0 +1,96 @@
+'use client';
+
+import { useState, useCallback, useRef } from 'react';
+
+export interface AudioRecorderHook {
+  isRecording: boolean;
+  isSupported: boolean;
+  startRecording: () => void;
+  stopRecording: () => Blob | null;
+  resetRecording: () => void;
+}
+
+export function useAudioRecorder(): AudioRecorderHook {
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const blobRef = useRef<Blob | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const isSupported = typeof window !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
+
+  const startRecording = useCallback(async () => {
+    if (!isSupported) return;
+
+    try {
+      // Reuse existing stream if available, otherwise request new one
+      if (!streamRef.current || streamRef.current.getTracks().some(t => t.readyState === 'ended')) {
+        streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+
+      chunksRef.current = [];
+      blobRef.current = null;
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+
+      const recorder = new MediaRecorder(streamRef.current, { mimeType });
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        if (chunksRef.current.length > 0) {
+          blobRef.current = new Blob(chunksRef.current, { type: mimeType });
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start(1000); // collect in 1s chunks
+      setIsRecording(true);
+    } catch (error) {
+      console.warn('Audio recording failed to start:', error);
+    }
+  }, [isSupported]);
+
+  const stopRecording = useCallback((): Blob | null => {
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+      setIsRecording(false);
+      return null;
+    }
+
+    // Synchronously stop and build blob from current chunks
+    mediaRecorderRef.current.stop();
+    setIsRecording(false);
+
+    // Build blob from collected chunks (ondataavailable fires during recording)
+    if (chunksRef.current.length > 0) {
+      const mimeType = mediaRecorderRef.current.mimeType;
+      blobRef.current = new Blob(chunksRef.current, { type: mimeType });
+    }
+
+    return blobRef.current;
+  }, []);
+
+  const resetRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    chunksRef.current = [];
+    blobRef.current = null;
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+  }, []);
+
+  return {
+    isRecording,
+    isSupported,
+    startRecording,
+    stopRecording,
+    resetRecording,
+  };
+}

@@ -5,12 +5,16 @@ export interface TranscriptCorrection {
   wasChanged: boolean;
 }
 
-export async function correctTranscript(rawTranscript: string): Promise<TranscriptCorrection> {
+export async function correctTranscript(rawTranscript: string, questionContext?: string): Promise<TranscriptCorrection> {
   if (rawTranscript.length < 10) {
     return { correctedText: rawTranscript, wasChanged: false };
   }
 
   try {
+    const contextHint = questionContext
+      ? `\n\n면접 질문: ${questionContext}\n(위 질문의 맥락을 참고하여 관련 기술 용어를 정확하게 교정하세요)`
+      : '';
+
     const response = await openai.chat.completions.create({
       model: MODELS.ANALYSIS,
       messages: [
@@ -20,7 +24,7 @@ export async function correctTranscript(rawTranscript: string): Promise<Transcri
 1. 띄어쓰기를 올바르게 수정
 2. 기술 용어를 정확한 표기로 수정 (예: "리엑트"→"리액트", "에이피아이"→"API", "제이에스"→"JS", "타입스크립트"→"TypeScript")
 3. 문장 부호를 적절히 추가
-4. 의미를 변경하지 말 것
+4. 의미를 변경하지 말 것${contextHint}
 
 원본과 동일하면 그대로 반환하세요.
 교정된 텍스트만 반환하세요. 설명 없이.
