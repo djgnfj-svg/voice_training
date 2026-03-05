@@ -1,4 +1,9 @@
-const FILLER_WORDS = /\b(음|어|그|아|뭐|이제|그러니까|그래서|약간|좀|저기|뭐랄까|그니까|어쨌든|일단|뭐냐면|막|진짜|되게|아마)\b/g;
+export const FILLER_WORDS = /\b(음|어|그|아|뭐|이제|그러니까|그래서|약간|좀|저기|뭐랄까|그니까|어쨌든|일단|뭐냐면|막|진짜|되게|아마)\b/g;
+
+export function countFillerWords(text: string): number {
+  const matches = text.match(FILLER_WORDS);
+  return matches ? matches.length : 0;
+}
 
 const STUTTER_PATTERN = /\b(\S+)\s+\1\b/g;
 

@@ -145,6 +145,9 @@ export interface SpeechAnalysis {
   averageResponseTime: number;
   fillerWordCount: number;
   speechRate: string;
+  averageWpm?: number;
+  totalSilenceSec?: number;
+  averageSilenceRatio?: number;
 }
 
 // Analytics

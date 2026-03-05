@@ -313,7 +313,30 @@ export default function ReportPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm">발화 속도</span>
-                  <Badge variant="outline">{report.speechAnalysis.speechRate}</Badge>
+                  <div className="flex items-center gap-2">
+                    {report.speechAnalysis.averageWpm && (
+                      <span className="text-sm font-medium">{report.speechAnalysis.averageWpm}음절/분</span>
+                    )}
+                    <Badge variant="outline" className={
+                      report.speechAnalysis.speechRate === '적정' ? 'border-green-300 text-green-700' :
+                      report.speechAnalysis.speechRate === '느림' ? 'border-amber-300 text-amber-700' :
+                      'border-red-300 text-red-700'
+                    }>{report.speechAnalysis.speechRate}</Badge>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">필러워드</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{report.speechAnalysis.fillerWordCount}회</span>
+                    <Badge variant="outline" className={
+                      report.speechAnalysis.fillerWordCount <= 5 ? 'border-green-300 text-green-700' :
+                      report.speechAnalysis.fillerWordCount <= 15 ? 'border-amber-300 text-amber-700' :
+                      'border-red-300 text-red-700'
+                    }>
+                      {report.speechAnalysis.fillerWordCount <= 5 ? '양호' :
+                       report.speechAnalysis.fillerWordCount <= 15 ? '주의' : '많음'}
+                    </Badge>
+                  </div>
                 </div>
               </CardContent>
             </Card>

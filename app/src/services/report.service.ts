@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getGrade } from '@/lib/utils';
+import { countFillerWords } from '@/lib/transcript';
 import type { InterviewReport, GapAnalysis, AnswerReport, SpeechAnalysis, EvaluationScores, ParsedJobPosting } from '@/types';
 
 export class ReportService {
@@ -54,10 +55,30 @@ export class ReportService {
       ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
       : 0;
 
+    // Filler word count from actual transcripts
+    const totalFillerWords = answeredQuestions.reduce((sum, a) => {
+      return sum + countFillerWords(a.answerTranscript || '');
+    }, 0);
+
+    // WPM-based speech rate: Korean characters / response time
+    const wpmValues = answeredQuestions
+      .filter(a => a.responseTimeSec && a.responseTimeSec > 0 && a.answerTranscript)
+      .map(a => {
+        const charCount = (a.answerTranscript || '').replace(/[\s.,!?;:'"()\-]/g, '').length;
+        const minutes = (a.responseTimeSec as number) / 60;
+        return minutes > 0 ? charCount / minutes : 0;
+      });
+    const averageWpm = wpmValues.length > 0
+      ? Math.round(wpmValues.reduce((a, b) => a + b, 0) / wpmValues.length)
+      : 0;
+
+    const speechRateLabel = averageWpm < 200 ? '느림' : averageWpm > 350 ? '빠름' : '적정';
+
     const speechAnalysis: SpeechAnalysis = {
       averageResponseTime: avgResponseTime,
-      fillerWordCount: 0,
-      speechRate: avgResponseTime < 30 ? '빠름' : avgResponseTime < 60 ? '적정' : '느림',
+      fillerWordCount: totalFillerWords,
+      speechRate: speechRateLabel,
+      averageWpm: averageWpm || undefined,
     };
 
     // Gap analysis (if job posting exists)

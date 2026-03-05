@@ -339,6 +339,42 @@ export default function InterviewSessionPage() {
                 </p>
               </div>
 
+              {/* Real-time speech metrics */}
+              {(() => {
+                const m = interview.speechAnalytics;
+                const wpmStatus = m.wpm < 200 ? { label: '느림', color: 'text-amber-600 bg-amber-100' }
+                  : m.wpm > 350 ? { label: '빠름', color: 'text-red-600 bg-red-100' }
+                  : { label: '적정', color: 'text-green-600 bg-green-100' };
+                const fillerStatus = m.fillerCount <= 2 ? { label: '양호', color: 'text-green-600 bg-green-100' }
+                  : m.fillerCount <= 5 ? { label: '주의', color: 'text-amber-600 bg-amber-100' }
+                  : { label: '많음', color: 'text-red-600 bg-red-100' };
+                return (
+                  <div className="grid grid-cols-3 gap-2 rounded-lg border p-3">
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">말 속도</p>
+                      <p className="text-lg font-bold">{m.wpm}</p>
+                      <Badge variant="outline" className={cn('text-[10px]', wpmStatus.color)}>
+                        {wpmStatus.label}
+                      </Badge>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">침묵</p>
+                      <p className="text-lg font-bold">{m.silenceSec}초</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {Math.round(m.silenceRatio * 100)}%
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">필러워드</p>
+                      <p className="text-lg font-bold">{m.fillerCount}</p>
+                      <Badge variant="outline" className={cn('text-[10px]', fillerStatus.color)}>
+                        {fillerStatus.label}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="flex items-center justify-center gap-3">
                 {interview.isFollowUp ? (
                   <Button variant="outline" onClick={interview.nextQuestion}>
@@ -393,6 +429,11 @@ export default function InterviewSessionPage() {
                   <p className="font-medium">점수: {currentAnswer.evaluation.overallScore}/100</p>
                   <p className="text-sm text-muted-foreground">
                     응답 시간: {currentAnswer.responseTimeSec}초
+                    {currentAnswer.speechMetrics && (
+                      <span className="ml-2">
+                        | 말 속도 {currentAnswer.speechMetrics.wpm}음절/분 | 필러워드 {currentAnswer.speechMetrics.fillerCount}회 | 침묵 {currentAnswer.speechMetrics.silenceSec}초
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
