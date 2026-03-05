@@ -111,6 +111,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 }
 
 export function Sidebar() {
+  const pathname = usePathname();
+  if (pathname.startsWith('/interview/session/')) return null;
+
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r bg-card md:block">
       <SidebarContent />
@@ -119,7 +122,10 @@ export function Sidebar() {
 }
 
 export function MobileSidebar() {
+  const pathname = usePathname();
   const { isOpen, close } = useMobileSidebar();
+
+  if (pathname.startsWith('/interview/session/')) return null;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && close()}>

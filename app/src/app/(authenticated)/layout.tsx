@@ -1,6 +1,5 @@
 import { Sidebar } from '@/components/layout/sidebar';
-import { Header } from '@/components/layout/header';
-import { Footer } from '@/components/layout/footer';
+import { AuthenticatedContent } from '@/components/layout/authenticated-content';
 
 export default function AuthenticatedLayout({
   children,
@@ -10,11 +9,7 @@ export default function AuthenticatedLayout({
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <div className="md:pl-64">
-        <Header />
-        <main className="p-4 md:p-8">{children}</main>
-        <Footer />
-      </div>
+      <AuthenticatedContent>{children}</AuthenticatedContent>
     </div>
   );
 }

@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { useInterviewSession } from '@/hooks/useInterviewSession';
 import { normalizeTranscript } from '@/lib/transcript';
-import { Mic, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle, AlertTriangle } from 'lucide-react';
+import { Mic, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { InterviewQuestion, InterviewType, AnswerEvaluation } from '@/types';
 
@@ -234,7 +234,15 @@ export default function InterviewSessionPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
+      {/* Exit button */}
+      <div>
+        <Button variant="ghost" size="sm" onClick={() => setShowExitDialog(true)}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          면접 나가기
+        </Button>
+      </div>
+
       {/* Resume notice */}
       {isResumed && interview.phase !== 'completed' && (
         <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950">
