@@ -23,8 +23,7 @@
 - Anthropic Claude API (`@anthropic-ai/sdk`, 래퍼: `app/src/lib/openai.ts`)
   - `openai` — OpenAI 호환 래퍼 (기존 서비스용)
   - `anthropic` — SDK 직접 export (스트리밍용)
-  - ANALYSIS: claude-haiku-4-5
-  - EVALUATION / QUESTION_GEN: claude-sonnet-4-6
+  - ANALYSIS / EVALUATION / QUESTION_GEN: claude-haiku-4-5
 - Edge TTS (`msedge-tts`, 무료, API 키 불필요)
   - 음성: `ko-KR-HyunsuNeural` (남성, 자연스러운 톤)
   - API: `POST /api/tts` → MP3 반환
@@ -50,9 +49,19 @@
   - 프롬프트: `DEEP_COMPANY_ANALYSIS_PROMPT` (`app/src/prompts/company-research.ts`)
   - 결과: CompanyAnalysis에 deepResearch=true + companyOverview, recentNews, products 등 추가
 - **꼬리질문**: feedback에서 followUpQuestion 표시 → "꼬리질문 답변하기" → TTS → 음성인식 → `/api/interview/practice-evaluate` (stateless) → 피드백 → 다음 질문
+- **대시보드**: 성장 분석(점수 추이 차트 + 카테고리별 성과 차트)이 대시보드에 통합됨. 별도 analytics 페이지 없음.
+
+## 레이아웃
+- **사이드바**: `components/layout/sidebar.tsx` — 대시보드, 면접 시작, 모범답안, 이력서 관리, 크레딧, 면접 기록
+- **푸터**: `components/layout/footer.tsx` — 문의 이메일 + 저작권 (인증된 레이아웃 하단)
+
+## 평가 프롬프트 (`prompts/evaluation.ts`)
+- **기술면접**: clarity 30% + accuracy 25% + practicality 25% + depth 15% + completeness 5%
+- **심화면접**: clarity 25% + accuracy 20% + practicality 25% + depth 25% + completeness 5%
+- **인성면접**: situation 15% + task 15% + action 30% + result 25% + communication 15%
 
 ## 크레딧 & 결제 시스템
-- **과금 모델**: 크레딧 충전제. 세션 1회 = 1크레딧 (면접/모범답안 동일)
+- **과금 모델**: 크레딧 충전제. 세션 1회 = 10코인, 꼬리질문 1코인 (면접/모범답안 동일)
 - **무료 체험**: 신규 유저 1회 무료 (질문 3개 제한). `User.freeTrialUsed` boolean으로 관리
 - **Dev 모드**: `NODE_ENV === 'development'`면 크레딧 체크 스킵
 - **원자적 차감**: `prisma.$transaction` + `updateMany(where: { creditBalance: { gte: 1 } })` → 동시 요청 방지
@@ -63,7 +72,7 @@
 - **402 응답**: `{ error: '...', code: 'INSUFFICIENT_CREDITS' }` → UI에서 크레딧 부족 다이얼로그/페이지 표시
 - **UI**: `components/credit/credit-badge.tsx` (헤더), `components/credit/insufficient-credits-dialog.tsx`, `/credits` 페이지
 - **Toss Payments 연동**:
-  - 상품: `app/src/lib/payment-products.ts` — 5/15/30 크레딧 (3,000/8,000/14,000원)
+  - 상품: `app/src/lib/payment-products.ts` — 50/150/300 코인 (3,000/8,000/14,000원)
   - 플로우: 상품 선택 → `POST /api/payments/orders` (주문 생성) → Toss SDK 결제창 → `POST /api/payments/confirm` (서버 확인 + 크레딧 부여)
   - 멱등성: `orderId`를 Toss `Idempotency-Key`로 전달, DONE 상태 주문은 재처리 없이 성공
   - 서비스: `app/src/services/payment.service.ts` — createOrder, confirmPayment, failOrder
