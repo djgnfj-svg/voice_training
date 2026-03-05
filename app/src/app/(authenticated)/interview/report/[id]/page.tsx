@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScoreRadarChart } from '@/components/report/radar-chart';
-import { Loader2, ArrowLeft, Target, TrendingUp, AlertCircle, CheckCircle, Clock, RotateCcw } from 'lucide-react';
+import { Loader2, ArrowLeft, Target, TrendingUp, AlertCircle, CheckCircle, Clock, RotateCcw, Play } from 'lucide-react';
 import { getGrade } from '@/lib/utils';
 import type { InterviewReport } from '@/types';
 
@@ -206,7 +206,21 @@ export default function ReportPage() {
               <CardContent className="space-y-4">
                 {/* Answer transcript */}
                 <div>
-                  <p className="mb-1 text-sm font-medium text-muted-foreground">내 답변</p>
+                  <div className="mb-1 flex items-center justify-between">
+                    <p className="text-sm font-medium text-muted-foreground">내 답변</p>
+                    {answer.audioUrl && (
+                      <button
+                        className="flex items-center gap-1 text-xs text-primary hover:underline"
+                        onClick={() => {
+                          const audio = new Audio(answer.audioUrl);
+                          audio.play();
+                        }}
+                      >
+                        <Play className="h-3 w-3" />
+                        녹음 재생
+                      </button>
+                    )}
+                  </div>
                   <div className="rounded-lg bg-muted/50 p-3 text-sm">
                     {answer.answerTranscript || '(답변 없음)'}
                   </div>

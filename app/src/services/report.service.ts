@@ -101,6 +101,7 @@ export class ReportService {
       modelAnswer: a.modelAnswer || '',
       responseTimeSec: a.responseTimeSec || undefined,
       followUpQuestion: a.followUpQuestion || undefined,
+      audioUrl: a.audioUrl || undefined,
     }));
 
     const report: InterviewReport = {

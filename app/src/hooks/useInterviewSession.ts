@@ -8,6 +8,15 @@ import { normalizeTranscript } from '@/lib/transcript';
 import type { InterviewQuestion, AnswerEvaluation, InterviewType } from '@/types';
 
 const MAX_AUDIO_SIZE = 4.5 * 1024 * 1024; // 4.5MB
+const MAX_FOLLOWUP_ROUNDS = 2;
+
+function uploadAudioFireAndForget(sessionId: string, questionIndex: number, audioBlob: Blob) {
+  const formData = new FormData();
+  formData.append('audio', audioBlob, 'recording.webm');
+  formData.append('sessionId', sessionId);
+  formData.append('questionIndex', String(questionIndex));
+  fetch('/api/interview/audio', { method: 'POST', body: formData }).catch(() => {});
+}
 
 async function transcribeWithWhisper(audioBlob: Blob): Promise<string | null> {
   if (audioBlob.size > MAX_AUDIO_SIZE) return null;
@@ -34,8 +43,10 @@ interface InterviewSessionState {
   startTime: number | null;
   interviewType: InterviewType | null;
   deepMode: boolean;
+  systemDesign: boolean;
   isFollowUp: boolean;
-  followUpEvaluation: AnswerEvaluation | null;
+  followUpRound: number;
+  followUpEvaluations: AnswerEvaluation[];
 }
 
 interface AnswerWithEval {
@@ -55,8 +66,10 @@ export function useInterviewSession() {
     startTime: null,
     interviewType: null,
     deepMode: false,
+    systemDesign: false,
     isFollowUp: false,
-    followUpEvaluation: null,
+    followUpRound: 0,
+    followUpEvaluations: [],
   });
 
   const answerStartTimeRef = useRef<number>(0);
@@ -65,7 +78,7 @@ export function useInterviewSession() {
   const recorder = useAudioRecorder();
 
   const startSession = useCallback(
-    async (sessionId: string, questions: InterviewQuestion[], interviewType?: InterviewType, deepMode?: boolean) => {
+    async (sessionId: string, questions: InterviewQuestion[], interviewType?: InterviewType, deepMode?: boolean, systemDesign?: boolean) => {
       setState({
         phase: 'asking',
         sessionId,
@@ -75,8 +88,10 @@ export function useInterviewSession() {
         startTime: Date.now(),
         interviewType: interviewType || null,
         deepMode: deepMode || false,
+        systemDesign: systemDesign || false,
         isFollowUp: false,
-        followUpEvaluation: null,
+        followUpRound: 0,
+        followUpEvaluations: [],
       });
 
       // Speak the first question
@@ -88,6 +103,61 @@ export function useInterviewSession() {
         speech.startListening();
         recorder.startRecording();
       }
+    },
+    [tts, speech, recorder]
+  );
+
+  const resumeSession = useCallback(
+    async (
+      sessionId: string,
+      questions: InterviewQuestion[],
+      previousAnswers: AnswerWithEval[],
+      resumeFromIndex: number,
+      interviewType?: InterviewType,
+      deepMode?: boolean,
+      systemDesign?: boolean
+    ) => {
+      // All questions already answered → complete immediately
+      if (resumeFromIndex >= questions.length) {
+        setState({
+          phase: 'completed',
+          sessionId,
+          questions,
+          currentQuestionIndex: questions.length - 1,
+          answers: previousAnswers,
+          startTime: Date.now(),
+          interviewType: interviewType || null,
+          deepMode: deepMode || false,
+          systemDesign: systemDesign || false,
+          isFollowUp: false,
+          followUpRound: 0,
+          followUpEvaluations: [],
+        });
+        await fetch(`/api/interview/${sessionId}/complete`, { method: 'POST' });
+        return;
+      }
+
+      setState({
+        phase: 'asking',
+        sessionId,
+        questions,
+        currentQuestionIndex: resumeFromIndex,
+        answers: previousAnswers,
+        startTime: Date.now(),
+        interviewType: interviewType || null,
+        deepMode: deepMode || false,
+        systemDesign: systemDesign || false,
+        isFollowUp: false,
+        followUpRound: 0,
+        followUpEvaluations: [],
+      });
+
+      await tts.speak(questions[resumeFromIndex].text);
+      answerStartTimeRef.current = Date.now();
+      setState((prev) => ({ ...prev, phase: 'listening' }));
+      speech.resetTranscript();
+      speech.startListening();
+      recorder.startRecording();
     },
     [tts, speech, recorder]
   );
@@ -111,6 +181,11 @@ export function useInterviewSession() {
       }
     }
 
+    // Fire-and-forget audio upload
+    if (audioBlob && audioBlob.size > 0 && state.sessionId) {
+      uploadAudioFireAndForget(state.sessionId, state.currentQuestionIndex, audioBlob);
+    }
+
     const currentQ = state.questions[state.currentQuestionIndex];
 
     try {
@@ -123,7 +198,8 @@ export function useInterviewSession() {
           answerTranscript: transcript,
           responseTimeSec,
           ...(state.deepMode ? { deepMode: true } : {}),
-          ...(state.deepMode && currentQ?.relatedKeyPoints ? { relatedKeyPoints: currentQ.relatedKeyPoints } : {}),
+          ...(state.systemDesign ? { systemDesign: true } : {}),
+          ...((state.deepMode || state.systemDesign) && currentQ?.relatedKeyPoints ? { relatedKeyPoints: currentQ.relatedKeyPoints } : {}),
         }),
       });
 
@@ -181,7 +257,8 @@ export function useInterviewSession() {
       currentQuestionIndex: nextIndex,
       phase: 'asking',
       isFollowUp: false,
-      followUpEvaluation: null,
+      followUpRound: 0,
+      followUpEvaluations: [],
     }));
 
     // Speak next question
@@ -213,16 +290,28 @@ export function useInterviewSession() {
   }, [state.currentQuestionIndex, speech, recorder, nextQuestion]);
 
   const startFollowUp = useCallback(async () => {
-    const currentAnswer = state.answers.find(
-      (a) => a.questionIndex === state.currentQuestionIndex
-    );
-    const followUpQuestion = currentAnswer?.evaluation?.followUpQuestion;
+    const currentRound = state.followUpRound;
+
+    // Determine which followUpQuestion to use
+    let followUpQuestion: string | undefined;
+    if (currentRound === 0) {
+      // First follow-up: use the main answer's evaluation
+      const currentAnswer = state.answers.find(
+        (a) => a.questionIndex === state.currentQuestionIndex
+      );
+      followUpQuestion = currentAnswer?.evaluation?.followUpQuestion ?? undefined;
+    } else {
+      // Subsequent follow-ups: use the latest follow-up evaluation's followUpQuestion
+      const lastFollowUpEval = state.followUpEvaluations[state.followUpEvaluations.length - 1];
+      followUpQuestion = lastFollowUpEval?.followUpQuestion ?? undefined;
+    }
+
     if (!followUpQuestion) return;
 
     setState((prev) => ({
       ...prev,
       isFollowUp: true,
-      followUpEvaluation: null,
+      followUpRound: currentRound + 1,
       phase: 'asking',
     }));
 
@@ -232,13 +321,20 @@ export function useInterviewSession() {
     speech.resetTranscript();
     speech.startListening();
     recorder.startRecording();
-  }, [state.answers, state.currentQuestionIndex, tts, speech, recorder]);
+  }, [state.answers, state.currentQuestionIndex, state.followUpRound, state.followUpEvaluations, tts, speech, recorder]);
 
   const submitFollowUpAnswer = useCallback(async () => {
-    const currentAnswer = state.answers.find(
-      (a) => a.questionIndex === state.currentQuestionIndex
-    );
-    const followUpQuestion = currentAnswer?.evaluation?.followUpQuestion;
+    // Determine the current follow-up question text
+    let followUpQuestion: string | undefined;
+    if (state.followUpRound === 1) {
+      const currentAnswer = state.answers.find(
+        (a) => a.questionIndex === state.currentQuestionIndex
+      );
+      followUpQuestion = currentAnswer?.evaluation?.followUpQuestion ?? undefined;
+    } else {
+      const lastFollowUpEval = state.followUpEvaluations[state.followUpEvaluations.length - 1];
+      followUpQuestion = lastFollowUpEval?.followUpQuestion ?? undefined;
+    }
     if (!followUpQuestion) return;
 
     speech.stopListening();
@@ -257,6 +353,34 @@ export function useInterviewSession() {
     }
 
     const currentQ = state.questions[state.currentQuestionIndex];
+    const currentAnswer = state.answers.find(
+      (a) => a.questionIndex === state.currentQuestionIndex
+    );
+
+    // Build previousContext for multi-round follow-up
+    const followUpHistory: { question: string; answer: string }[] = [];
+    if (state.followUpEvaluations.length > 0) {
+      // Add previous follow-up rounds
+      for (let i = 0; i < state.followUpEvaluations.length; i++) {
+        const prevEval = state.followUpEvaluations[i];
+        // The question for round i+1 was the followUpQuestion from the previous evaluation
+        const prevQuestion = i === 0
+          ? currentAnswer?.evaluation?.followUpQuestion
+          : state.followUpEvaluations[i - 1]?.followUpQuestion;
+        if (prevQuestion) {
+          followUpHistory.push({
+            question: prevQuestion,
+            answer: prevEval.correctedTranscript || '(답변)',
+          });
+        }
+      }
+    }
+
+    const previousContext = {
+      originalQuestion: currentQ?.text || '',
+      originalAnswer: currentAnswer?.transcript || '',
+      followUpHistory,
+    };
 
     try {
       const res = await fetch('/api/interview/practice-evaluate', {
@@ -268,6 +392,7 @@ export function useInterviewSession() {
           interviewType: state.interviewType || 'MIXED',
           ...(state.deepMode ? { deepMode: true } : {}),
           ...(state.deepMode && currentQ?.relatedKeyPoints ? { relatedKeyPoints: currentQ.relatedKeyPoints } : {}),
+          previousContext,
         }),
       });
 
@@ -278,28 +403,36 @@ export function useInterviewSession() {
       setState((prev) => ({
         ...prev,
         phase: 'feedback',
-        followUpEvaluation: evaluation,
+        followUpEvaluations: [...prev.followUpEvaluations, evaluation],
       }));
     } catch (error) {
       console.error('Follow-up evaluation error:', error);
       setState((prev) => ({
         ...prev,
         phase: 'feedback',
-        followUpEvaluation: null,
       }));
     }
-  }, [state.answers, state.currentQuestionIndex, state.interviewType, state.deepMode, state.questions, speech, recorder]);
+  }, [state.answers, state.currentQuestionIndex, state.interviewType, state.deepMode, state.questions, state.followUpRound, state.followUpEvaluations, speech, recorder]);
+
+  // Determine if more follow-ups are available
+  const latestFollowUpEval = state.followUpEvaluations.length > 0
+    ? state.followUpEvaluations[state.followUpEvaluations.length - 1]
+    : null;
+  const canDoMoreFollowUp = state.followUpRound < MAX_FOLLOWUP_ROUNDS &&
+    latestFollowUpEval?.followUpQuestion != null;
 
   return {
     ...state,
     speech,
     tts,
     startSession,
+    resumeSession,
     submitAnswer,
     nextQuestion,
     skipQuestion,
     startFollowUp,
     submitFollowUpAnswer,
+    canDoMoreFollowUp,
     currentQuestion: state.questions[state.currentQuestionIndex] || null,
     totalQuestions: state.questions.length,
     progress: state.questions.length

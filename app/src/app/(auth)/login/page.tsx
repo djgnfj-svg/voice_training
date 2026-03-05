@@ -3,7 +3,7 @@
 import { signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Briefcase } from 'lucide-react';
+import { Mic } from 'lucide-react';
 
 export default function LoginPage() {
   return (
@@ -11,10 +11,10 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <Briefcase className="h-6 w-6 text-primary" />
+            <Mic className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl">로그인</CardTitle>
-          <CardDescription>AI 면접 코치에 오신 것을 환영합니다</CardDescription>
+          <CardDescription>보이스프렙에 오신 것을 환영합니다</CardDescription>
         </CardHeader>
         <CardContent>
           <Button

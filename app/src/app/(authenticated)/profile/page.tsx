@@ -148,7 +148,7 @@ export default function ProfilePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold md:text-3xl">이력서 관리</h1>
-        <p className="text-muted-foreground">이력서를 업로드하고 관리하여 맞춤 면접 질문을 받으세요</p>
+        <p className="text-muted-foreground">이력서를 업로드하고 관리하여 음성 면접 맞춤 질문을 받으세요</p>
       </div>
 
       {/* Upload Area */}

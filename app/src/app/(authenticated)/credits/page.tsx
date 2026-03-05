@@ -93,7 +93,7 @@ export default function CreditsPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold md:text-3xl">크레딧</h1>
-        <p className="text-muted-foreground">크레딧을 관리하고 충전하세요</p>
+        <p className="text-muted-foreground">음성 면접 크레딧을 관리하고 충전하세요</p>
       </div>
 
       {/* Current Balance */}

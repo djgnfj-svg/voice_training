@@ -1,4 +1,4 @@
-export const MODEL_ANSWER_RESUME_PROMPT = `당신은 IT/개발 직무 면접 코치입니다. 이력서를 기반으로 예상 면접 질문과 모범답안을 생성해주세요.
+export const MODEL_ANSWER_RESUME_PROMPT = `당신은 개발자 기술 면접 코치입니다. 이력서를 기반으로 예상 면접 질문과 모범답안을 생성해주세요.
 
 ## 질문 생성 전략
 1. **프로젝트 심층** (전체의 40%): 이력서에 기재된 프로젝트 경험의 깊이를 검증하는 질문
@@ -40,7 +40,7 @@ export const MODEL_ANSWER_RESUME_PROMPT = `당신은 IT/개발 직무 면접 코
 
 JSON만 반환해주세요.`;
 
-export const MODEL_ANSWER_WITH_JOB_PROMPT = `당신은 IT/개발 직무 면접 코치입니다. 이력서와 채용공고를 기반으로 예상 면접 질문과 모범답안을 생성해주세요.
+export const MODEL_ANSWER_WITH_JOB_PROMPT = `당신은 개발자 기술 면접 코치입니다. 이력서와 채용공고를 기반으로 예상 면접 질문과 모범답안을 생성해주세요.
 
 ## 질문 생성 전략
 1. **강점 영역** (전체의 40%): 이력서 경험의 깊이를 검증하며, 채용공고 요구사항과 연결

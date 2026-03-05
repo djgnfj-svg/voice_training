@@ -23,6 +23,15 @@ export async function GET(
             questionIndex: true,
             questionText: true,
             questionSource: true,
+            answerTranscript: true,
+            overallScore: true,
+            briefFeedback: true,
+            detailedFeedback: true,
+            modelAnswer: true,
+            followUpQuestion: true,
+            scores: true,
+            responseTimeSec: true,
+            audioUrl: true,
           },
         },
       },
@@ -38,9 +47,26 @@ export async function GET(
       source: a.questionSource,
       category: interviewSession.categories[0] || 'general',
       difficulty: interviewSession.difficulty,
+      answer: a.answerTranscript ? {
+        answerTranscript: a.answerTranscript,
+        overallScore: a.overallScore,
+        briefFeedback: a.briefFeedback,
+        detailedFeedback: a.detailedFeedback,
+        modelAnswer: a.modelAnswer,
+        followUpQuestion: a.followUpQuestion,
+        scores: a.scores,
+        responseTimeSec: a.responseTimeSec,
+      } : null,
     }));
 
-    return NextResponse.json({ questions });
+    const deepMode = interviewSession.answers.some((a) => a.questionSource === 'deep_technical');
+
+    return NextResponse.json({
+      questions,
+      sessionStatus: interviewSession.status,
+      interviewType: interviewSession.type,
+      deepMode,
+    });
   } catch (error) {
     console.error('Questions fetch error:', error);
     return NextResponse.json({ error: '질문 조회에 실패했습니다' }, { status: 500 });

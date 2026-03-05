@@ -63,7 +63,7 @@ export default function HistoryPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">면접 기록</h1>
-          <p className="text-muted-foreground">과거 면접 세션과 결과를 확인하세요</p>
+          <p className="text-muted-foreground">과거 면접 세션과 평가 결과를 확인하세요</p>
         </div>
         <Link href="/interview/setup">
           <Button>

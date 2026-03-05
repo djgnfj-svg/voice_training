@@ -9,6 +9,10 @@ import {
   DEEP_INTERVIEW_PLAN_PROMPT,
   DEEP_INTERVIEW_QUESTION_PROMPT,
 } from '@/prompts/question-generation';
+import {
+  SYSTEM_DESIGN_PLAN_PROMPT,
+  SYSTEM_DESIGN_QUESTION_PROMPT,
+} from '@/prompts/system-design';
 import { matchingService } from './matching.service';
 import type {
   InterviewQuestion,
@@ -71,8 +75,9 @@ export class QuestionService {
     jobPostingId?: string;
     userId: string;
     deepMode?: boolean;
+    systemDesign?: boolean;
   }): Promise<InterviewPlan> {
-    const { resumeId, jobPostingId, userId, deepMode } = params;
+    const { resumeId, jobPostingId, userId, deepMode, systemDesign } = params;
 
     // Fetch resume
     const resume = await prisma.resume.findFirst({
@@ -80,6 +85,10 @@ export class QuestionService {
     });
     if (!resume) throw new Error('Resume not found');
     const parsedResume = resume.parsedData as unknown as ParsedResume | null;
+
+    if (systemDesign) {
+      return this.planSystemDesignInterview(parsedResume);
+    }
 
     if (deepMode) {
       return this.planDeepInterview(parsedResume);
@@ -129,6 +138,15 @@ export class QuestionService {
     return this.callPlanAPI(prompt);
   }
 
+  private async planSystemDesignInterview(parsedResume: ParsedResume | null): Promise<InterviewPlan> {
+    if (!parsedResume) throw new Error('Resume has no parsed data');
+
+    const prompt = SYSTEM_DESIGN_PLAN_PROMPT
+      .replace('{parsedResume}', JSON.stringify(parsedResume, null, 2));
+
+    return this.callPlanAPI(prompt);
+  }
+
   private async planDeepInterview(parsedResume: ParsedResume | null): Promise<InterviewPlan> {
     if (!parsedResume) throw new Error('Resume has no parsed data');
 
@@ -172,14 +190,23 @@ export class QuestionService {
     jobPostingId?: string;
     userId: string;
     deepMode?: boolean;
+    systemDesign?: boolean;
   }): Promise<InterviewQuestion[]> {
-    const { type, categories, difficulty, totalQuestions, resumeId, jobPostingId, userId, deepMode } = params;
+    const { type, categories, difficulty, totalQuestions, resumeId, jobPostingId, userId, deepMode, systemDesign } = params;
 
     // Fetch resume
     const resume = await prisma.resume.findFirst({
       where: { id: resumeId, userId },
     });
     const parsedResume = resume?.parsedData as unknown as ParsedResume | null;
+
+    if (systemDesign && parsedResume) {
+      return this.generateSystemDesignQuestions({
+        difficulty,
+        totalQuestions,
+        parsedResume,
+      });
+    }
 
     if (deepMode && parsedResume) {
       return this.generateDeepQuestions({
@@ -313,6 +340,41 @@ export class QuestionService {
     return matched.slice(0, 15);
   }
 
+  private async generateSystemDesignQuestions(params: {
+    difficulty: Difficulty;
+    totalQuestions: number;
+    parsedResume: ParsedResume;
+  }): Promise<InterviewQuestion[]> {
+    const { difficulty, totalQuestions, parsedResume } = params;
+
+    // Match system design topics from bank
+    const skills = [
+      ...parsedResume.skills,
+      ...parsedResume.projects.flatMap(p => p.techStack),
+    ];
+    const uniqueSkills = [...new Set(skills)];
+
+    // Get system design bank topics
+    const sdBank = ALL_QUESTION_BANKS.find(b => b.category === 'System Design');
+    const matchedTopics = sdBank
+      ? sdBank.questions.slice(0, 10)
+      : this.matchBankTopics(uniqueSkills, difficulty);
+
+    const matchedTopicsStr = matchedTopics.length > 0
+      ? matchedTopics.map(t =>
+          `- [${t.subcategory}/${t.difficulty}] ${t.questionText}\n  핵심포인트: ${t.keyPoints.join(', ')}${t.deepDiveTopics ? `\n  심화주제: ${t.deepDiveTopics.join(', ')}` : ''}`
+        ).join('\n')
+      : '(매칭된 주제 없음 — 이력서 기반으로 자유롭게 생성)';
+
+    const prompt = SYSTEM_DESIGN_QUESTION_PROMPT
+      .replace('{matchedTopics}', matchedTopicsStr)
+      .replace('{difficulty}', difficulty)
+      .replace('{totalQuestions}', totalQuestions.toString())
+      .replace('{parsedResume}', JSON.stringify(parsedResume, null, 2));
+
+    return this.callQuestionAPI(prompt, ['SYSTEM_DESIGN'], difficulty, false, 'system_design');
+  }
+
   private async generateDeepQuestions(params: {
     categories: string[];
     difficulty: Difficulty;
@@ -351,7 +413,8 @@ export class QuestionService {
     prompt: string,
     categories: string[],
     difficulty: Difficulty,
-    deepMode?: boolean
+    deepMode?: boolean,
+    defaultSource?: string,
   ): Promise<InterviewQuestion[]> {
     const response = await openai.chat.completions.create({
       model: MODELS.QUESTION_GEN,
@@ -369,7 +432,7 @@ export class QuestionService {
     return questions.map((q: any, index: number) => ({
       index,
       text: q.text,
-      source: q.source || (deepMode ? 'deep_technical' : 'general'),
+      source: q.source || defaultSource || (deepMode ? 'deep_technical' : 'general'),
       category: q.category || categories[0] || 'general',
       difficulty: q.difficulty || difficulty,
       ...(deepMode && q.relatedKeyPoints ? { relatedKeyPoints: q.relatedKeyPoints } : {}),

@@ -11,7 +11,6 @@ import {
   FileText,
   History,
   LogOut,
-  Briefcase,
   BookOpen,
   Coins,
   AudioLines,
@@ -43,8 +42,8 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       {/* Logo */}
       <div className="flex h-16 items-center border-b px-6">
         <Link href="/dashboard" className="flex items-center gap-2" onClick={onNavClick}>
-          <Briefcase className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold">면접 코치</span>
+          <Mic className="h-6 w-6 text-primary" />
+          <span className="text-lg font-bold">보이스프렙</span>
         </Link>
       </div>
 

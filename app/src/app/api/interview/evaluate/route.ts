@@ -10,6 +10,7 @@ const evaluateSchema = z.object({
   answerTranscript: z.string(),
   responseTimeSec: z.number().optional(),
   deepMode: z.boolean().optional(),
+  systemDesign: z.boolean().optional(),
   relatedKeyPoints: z.array(z.string()).optional(),
 });
 
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { sessionId, questionIndex, answerTranscript, responseTimeSec, deepMode, relatedKeyPoints } = evaluateSchema.parse(body);
+    const { sessionId, questionIndex, answerTranscript, responseTimeSec, deepMode, systemDesign, relatedKeyPoints } = evaluateSchema.parse(body);
 
     const evaluation = await evaluationService.evaluateAnswer({
       sessionId,
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
       answerTranscript,
       responseTimeSec,
       deepMode,
+      systemDesign,
       relatedKeyPoints,
     });
     return NextResponse.json(evaluation);

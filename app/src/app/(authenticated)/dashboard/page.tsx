@@ -1,12 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Mic, History, TrendingUp, FileText, Coins, Loader2, BarChart3 } from 'lucide-react';
+import { Mic, History, TrendingUp, FileText, Coins, Loader2, BarChart3, ArrowRight } from 'lucide-react';
 import { GrowthChart } from '@/components/analytics/growth-chart';
 import { CategoryChart } from '@/components/analytics/category-chart';
+import { WelcomeDialog } from '@/components/onboarding/welcome-dialog';
 import type { GrowthData, CategoryPerformance } from '@/types';
 
 interface DashboardData {
@@ -27,6 +29,8 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
+  const [showWelcome, setShowWelcome] = useState(false);
+
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ['dashboard'],
     queryFn: async () => {
@@ -35,6 +39,9 @@ export default function DashboardPage() {
       return res.json();
     },
   });
+
+  // Show welcome dialog for first-time users
+  const shouldShowWelcome = data && data.sessionCount === 0 && !data.freeTrialUsed && !showWelcome;
 
   if (isLoading || !data) {
     return (
@@ -56,6 +63,14 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Welcome dialog for first-time users */}
+      {shouldShowWelcome && (
+        <WelcomeDialog
+          open={!showWelcome}
+          onOpenChange={(open) => { if (!open) setShowWelcome(true); }}
+        />
+      )}
+
       <div>
         <h1 className="text-2xl font-bold md:text-3xl">대시보드</h1>
         <p className="text-muted-foreground">안녕하세요, {data.userName}님!</p>
@@ -123,13 +138,32 @@ export default function DashboardPage() {
         <CardContent>
           {data.recentSessions.length === 0 ? (
             <div className="py-12 text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                <Mic className="h-8 w-8 text-primary" />
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+                <Mic className="h-10 w-10 text-primary animate-pulse" />
               </div>
-              <p className="text-lg font-medium">아직 면접 기록이 없습니다</p>
-              <p className="mt-1 text-sm text-muted-foreground">첫 면접을 시작해보세요!</p>
+              <p className="text-lg font-medium">첫 음성 면접을 시작해보세요</p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                이력서를 업로드하면 AI가 맞춤 질문을 생성하고, 음성으로 답변하며 실전 감각을 키울 수 있습니다.
+              </p>
+              <div className="mx-auto mt-6 grid max-w-sm gap-3 text-left text-sm">
+                <div className="flex items-center gap-3 rounded-lg border p-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">1</div>
+                  <span>이력서 PDF 업로드</span>
+                </div>
+                <div className="flex items-center gap-3 rounded-lg border p-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">2</div>
+                  <span>AI가 맞춤 질문 설계</span>
+                </div>
+                <div className="flex items-center gap-3 rounded-lg border p-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">3</div>
+                  <span>음성 답변 + 실시간 피드백</span>
+                </div>
+              </div>
               <Link href="/interview/setup">
-                <Button className="mt-4">첫 면접 시작하기</Button>
+                <Button className="mt-6" size="lg">
+                  첫 면접 시작하기
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
               </Link>
             </div>
           ) : (

@@ -7,8 +7,8 @@ import { Toaster } from '@/components/ui/toaster';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: '면접 연습 - AI 음성 면접 코치',
-  description: 'IT/개발 직무 면접을 AI와 음성으로 연습하세요. 채용 공고 맞춤 질문, 실시간 피드백, 종합 리포트를 제공합니다.',
+  title: '보이스프렙 — 말하며 준비하는 개발자 면접',
+  description: '타이핑이 아니라 실제로 말하며 연습하는 AI 기술 면접 코치. 음성으로 답변하고, 꼬리질문으로 깊이를 파고들고, 실시간 피드백으로 성장합니다.',
 };
 
 export default function RootLayout({

@@ -35,7 +35,7 @@ export default function ModelAnswerSetupPage() {
       <div>
         <h1 className="text-2xl font-bold md:text-3xl">모범답안 학습</h1>
         <p className="text-muted-foreground">
-          이력서 기반으로 예상 질문과 모범답안을 생성하여, 면접 전에 미리 학습할 수 있습니다
+          이력서 기반으로 예상 질문과 모범답안을 생성하여, 음성 면접 전에 미리 학습할 수 있습니다
         </p>
       </div>
 

@@ -138,6 +138,7 @@ export interface AnswerReport {
   modelAnswer: string;
   responseTimeSec?: number;
   followUpQuestion?: string;
+  audioUrl?: string;
 }
 
 export interface SpeechAnalysis {

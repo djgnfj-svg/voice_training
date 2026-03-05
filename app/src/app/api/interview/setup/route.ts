@@ -10,6 +10,7 @@ const setupSchema = z.object({
   resumeId: z.string(),
   jobPostingId: z.string().optional(),
   deepMode: z.boolean().optional().default(false),
+  mode: z.enum(['standard', 'deep', 'system_design']).optional().default('standard'),
 });
 
 export async function POST(request: NextRequest) {
@@ -28,7 +29,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { resumeId, jobPostingId, deepMode } = setupSchema.parse(body);
+    const { resumeId, jobPostingId, deepMode, mode } = setupSchema.parse(body);
+
+    // Normalize mode → deepMode compatibility
+    const effectiveDeepMode = mode === 'deep' || deepMode;
+    const isSystemDesign = mode === 'system_design';
 
     // Credit check
     const creditCheck = await creditService.canStartSession(session.user.id);
@@ -52,7 +57,8 @@ export async function POST(request: NextRequest) {
       resumeId,
       jobPostingId,
       userId: session.user.id,
-      deepMode,
+      deepMode: effectiveDeepMode,
+      systemDesign: isSystemDesign,
     });
 
     // Free trial: limit to 3 questions
@@ -69,7 +75,8 @@ export async function POST(request: NextRequest) {
       resumeId,
       jobPostingId,
       userId: session.user.id,
-      deepMode,
+      deepMode: effectiveDeepMode,
+      systemDesign: isSystemDesign,
     });
 
     // Create session

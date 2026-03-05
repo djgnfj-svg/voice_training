@@ -1,16 +1,37 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
 import { useInterviewSession } from '@/hooks/useInterviewSession';
 import { normalizeTranscript } from '@/lib/transcript';
-import { Mic, MicOff, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle } from 'lucide-react';
+import { Mic, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { InterviewQuestion, InterviewType } from '@/types';
+import type { InterviewQuestion, InterviewType, AnswerEvaluation } from '@/types';
+
+interface QuestionWithAnswer {
+  index: number;
+  text: string;
+  source: string;
+  category: string;
+  difficulty: string;
+  answer?: {
+    answerTranscript: string;
+    overallScore: number | null;
+    briefFeedback: string | null;
+    detailedFeedback: string | null;
+    modelAnswer: string | null;
+    followUpQuestion: string | null;
+    scores: Record<string, number> | null;
+    responseTimeSec: number | null;
+  } | null;
+}
 
 export default function InterviewSessionPage() {
   const params = useParams();
@@ -19,8 +40,47 @@ export default function InterviewSessionPage() {
   const [questions, setQuestions] = useState<InterviewQuestion[]>([]);
   const [initialized, setInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isResumed, setIsResumed] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
+  const exitTargetRef = useRef<string | null>(null);
 
   const interview = useInterviewSession();
+
+  // Exit prevention: beforeunload
+  useEffect(() => {
+    const isActive = ['asking', 'listening', 'evaluating', 'feedback'].includes(interview.phase);
+    if (!isActive) return;
+
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [interview.phase]);
+
+  // Exit prevention: popstate (back button)
+  useEffect(() => {
+    const isActive = ['asking', 'listening', 'evaluating', 'feedback'].includes(interview.phase);
+    if (!isActive) return;
+
+    // Push a dummy state so back button triggers popstate instead of leaving
+    window.history.pushState({ interviewGuard: true }, '');
+
+    const handler = (e: PopStateEvent) => {
+      // Re-push to prevent actual navigation
+      window.history.pushState({ interviewGuard: true }, '');
+      setShowExitDialog(true);
+      exitTargetRef.current = null; // back button: go to setup
+    };
+
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [interview.phase]);
+
+  const handleExitConfirm = useCallback(() => {
+    setShowExitDialog(false);
+    router.push(exitTargetRef.current || '/interview/setup');
+  }, [router]);
 
   // Load session data on mount
   useEffect(() => {
@@ -30,7 +90,6 @@ export default function InterviewSessionPage() {
       try {
         const res = await fetch(`/api/interview/${sessionId}/questions`);
         if (!res.ok) {
-          // If questions endpoint doesn't exist, try loading from session setup response stored in sessionStorage
           const stored = sessionStorage.getItem(`interview_${sessionId}`);
           if (stored) {
             const data = JSON.parse(stored);
@@ -41,14 +100,74 @@ export default function InterviewSessionPage() {
           throw new Error('Failed to load session');
         }
         const data = await res.json();
-        setQuestions(data.questions);
+
+        // Check if this is a resume scenario (API loaded, has answer data)
+        const questionsData = data.questions as QuestionWithAnswer[];
+        const hasAnsweredQuestions = questionsData.some((q: QuestionWithAnswer) => q.answer !== null);
+
+        if (hasAnsweredQuestions && data.sessionStatus === 'IN_PROGRESS') {
+          // Resume mode: find first unanswered question
+          const resumeFromIndex = questionsData.findIndex((q: QuestionWithAnswer) => q.answer === null);
+          const finalResumeIndex = resumeFromIndex === -1 ? questionsData.length : resumeFromIndex;
+
+          // Build previous answers for the hook
+          const previousAnswers = questionsData
+            .filter((q: QuestionWithAnswer) => q.answer !== null)
+            .map((q: QuestionWithAnswer) => ({
+              questionIndex: q.index,
+              transcript: q.answer!.answerTranscript,
+              evaluation: q.answer!.overallScore !== null ? {
+                scores: (q.answer!.scores || {}) as unknown as AnswerEvaluation['scores'],
+                overallScore: q.answer!.overallScore,
+                briefFeedback: q.answer!.briefFeedback || '',
+                detailedFeedback: q.answer!.detailedFeedback || '',
+                modelAnswer: q.answer!.modelAnswer || '',
+                followUpQuestion: q.answer!.followUpQuestion || undefined,
+              } : null,
+              responseTimeSec: q.answer!.responseTimeSec || 0,
+            }));
+
+          // Convert to InterviewQuestion format
+          const mappedQuestions: InterviewQuestion[] = questionsData.map((q: QuestionWithAnswer) => ({
+            index: q.index,
+            text: q.text,
+            source: q.source as InterviewQuestion['source'],
+            category: q.category,
+            difficulty: q.difficulty as InterviewQuestion['difficulty'],
+          }));
+
+          setQuestions(mappedQuestions);
+          setIsResumed(true);
+          setInitialized(true);
+
+          // Directly call resumeSession
+          interview.resumeSession(
+            sessionId,
+            mappedQuestions,
+            previousAnswers,
+            finalResumeIndex,
+            data.interviewType as InterviewType,
+            data.deepMode
+          );
+          return;
+        }
+
+        // Normal load (fresh session via API, no sessionStorage)
+        const mappedQuestions: InterviewQuestion[] = questionsData.map((q: QuestionWithAnswer) => ({
+          index: q.index,
+          text: q.text,
+          source: q.source as InterviewQuestion['source'],
+          category: q.category,
+          difficulty: q.difficulty as InterviewQuestion['difficulty'],
+        }));
+        setQuestions(mappedQuestions);
         setInitialized(true);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : '세션을 불러올 수 없습니다');
       }
     }
 
-    // Check sessionStorage first (set during setup)
+    // Check sessionStorage first (set during setup — means fresh start)
     const stored = sessionStorage.getItem(`interview_${sessionId}`);
     if (stored) {
       try {
@@ -61,24 +180,26 @@ export default function InterviewSessionPage() {
     } else {
       loadSession();
     }
-  }, [sessionId, initialized]);
+  }, [sessionId, initialized]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Start session when questions are loaded
+  // Start session when questions are loaded (only for fresh sessions, not resumed)
   useEffect(() => {
-    if (initialized && questions.length > 0 && interview.phase === 'idle') {
+    if (initialized && questions.length > 0 && interview.phase === 'idle' && !isResumed) {
       let interviewType: InterviewType | undefined;
       let deepMode = false;
+      let systemDesign = false;
       try {
         const stored = sessionStorage.getItem(`interview_${sessionId}`);
         if (stored) {
           const data = JSON.parse(stored);
           if (data.plan?.type) interviewType = data.plan.type;
           if (data.deepMode) deepMode = true;
+          if (data.systemDesign) systemDesign = true;
         }
       } catch {}
-      interview.startSession(sessionId, questions, interviewType, deepMode);
+      interview.startSession(sessionId, questions, interviewType, deepMode, systemDesign);
     }
-  }, [initialized, questions, interview.phase, sessionId]);
+  }, [initialized, questions, interview.phase, sessionId, isResumed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Navigate to report when completed
   useEffect(() => {
@@ -116,6 +237,16 @@ export default function InterviewSessionPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {/* Resume notice */}
+      {isResumed && interview.phase !== 'completed' && (
+        <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            이전 진행 상황을 불러왔습니다. 이어서 진행합니다.
+          </p>
+        </div>
+      )}
+
       {/* Progress */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm">
@@ -167,7 +298,9 @@ export default function InterviewSessionPage() {
                 <Volume2 className="h-8 w-8 animate-pulse text-primary" />
               </div>
               <p className="text-sm text-muted-foreground">
-                {interview.isFollowUp ? '꼬리질문을 읽고 있습니다...' : '질문을 읽고 있습니다...'}
+                {interview.isFollowUp
+                  ? `꼬리질문 ${interview.followUpRound}/${2}을 읽고 있습니다...`
+                  : '질문을 읽고 있습니다...'}
               </p>
             </div>
           )}
@@ -176,12 +309,19 @@ export default function InterviewSessionPage() {
           {interview.phase === 'listening' && (
             <div className="space-y-4">
               {/* Follow-up question display */}
-              {interview.isFollowUp && currentAnswer?.evaluation?.followUpQuestion && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
-                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">꼬리질문</p>
-                  <p className="mt-1 text-sm">{currentAnswer.evaluation.followUpQuestion}</p>
-                </div>
-              )}
+              {interview.isFollowUp && (() => {
+                const followUpQ = interview.followUpRound === 1
+                  ? currentAnswer?.evaluation?.followUpQuestion
+                  : interview.followUpEvaluations[interview.followUpEvaluations.length - 1]?.followUpQuestion;
+                return followUpQ ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
+                    <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                      꼬리질문 {interview.followUpRound}/2
+                    </p>
+                    <p className="mt-1 text-sm">{followUpQ}</p>
+                  </div>
+                ) : null;
+              })()}
 
               <div className="flex flex-col items-center gap-4">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 ring-4 ring-red-100/50 animate-pulse">
@@ -302,36 +442,61 @@ export default function InterviewSessionPage() {
           {/* Feedback phase — follow-up question */}
           {interview.phase === 'feedback' && interview.isFollowUp && (
             <div className="space-y-4">
-              {/* Follow-up question text */}
-              {currentAnswer?.evaluation?.followUpQuestion && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
-                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">꼬리질문</p>
-                  <p className="mt-1 text-sm">{currentAnswer.evaluation.followUpQuestion}</p>
-                </div>
-              )}
-
-              {interview.followUpEvaluation ? (
-                <>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
-                      <span className="text-lg font-bold text-amber-600 dark:text-amber-400">
-                        {interview.followUpEvaluation.overallScore}
-                      </span>
+              {/* All follow-up evaluations */}
+              {interview.followUpEvaluations.map((fuEval, idx) => {
+                const fuQuestion = idx === 0
+                  ? currentAnswer?.evaluation?.followUpQuestion
+                  : interview.followUpEvaluations[idx - 1]?.followUpQuestion;
+                return (
+                  <div key={idx} className="space-y-3">
+                    {fuQuestion && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
+                        <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                          꼬리질문 {idx + 1}/2
+                        </p>
+                        <p className="mt-1 text-sm">{fuQuestion}</p>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
+                        <span className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                          {fuEval.overallScore}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium">꼬리질문 {idx + 1} 점수: {fuEval.overallScore}/100</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">꼬리질문 점수: {interview.followUpEvaluation.overallScore}/100</p>
+                    <div className="rounded-lg bg-muted/50 p-4">
+                      <p className="text-sm font-medium">피드백</p>
+                      <p className="mt-1 text-sm">{fuEval.briefFeedback}</p>
                     </div>
                   </div>
+                );
+              })}
 
-                  <div className="rounded-lg bg-muted/50 p-4">
-                    <p className="text-sm font-medium">피드백</p>
-                    <p className="mt-1 text-sm">{interview.followUpEvaluation.briefFeedback}</p>
-                  </div>
-                </>
-              ) : (
+              {interview.followUpEvaluations.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground">
                   꼬리질문 평가에 실패했습니다.
                 </p>
+              )}
+
+              {/* Additional follow-up button */}
+              {interview.canDoMoreFollowUp && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">추가 꼬리질문</p>
+                  <p className="mt-1 text-sm">
+                    {interview.followUpEvaluations[interview.followUpEvaluations.length - 1]?.followUpQuestion}
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-3 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900"
+                    onClick={interview.startFollowUp}
+                  >
+                    <MessageCircle className="mr-2 h-4 w-4" />
+                    꼬리질문 {interview.followUpRound + 1}/2 답변하기
+                  </Button>
+                </div>
               )}
 
               <Button className="w-full" onClick={interview.nextQuestion}>
@@ -373,6 +538,26 @@ export default function InterviewSessionPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Exit confirmation dialog */}
+      <Dialog open={showExitDialog} onOpenChange={setShowExitDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>면접을 나가시겠습니까?</DialogTitle>
+            <DialogDescription>
+              현재까지의 답변은 저장되어 있습니다. 나중에 이어서 진행할 수 있습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button variant="outline" onClick={() => setShowExitDialog(false)}>
+              계속하기
+            </Button>
+            <Button variant="destructive" onClick={handleExitConfirm}>
+              나가기
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -2,7 +2,8 @@ import { Prisma } from '@prisma/client';
 import { openai, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
 import { correctTranscript } from '@/lib/transcript-server';
-import { TECHNICAL_EVALUATION_PROMPT, BEHAVIORAL_EVALUATION_PROMPT, DEEP_TECHNICAL_EVALUATION_PROMPT } from '@/prompts/evaluation';
+import { TECHNICAL_EVALUATION_PROMPT, BEHAVIORAL_EVALUATION_PROMPT, DEEP_TECHNICAL_EVALUATION_PROMPT, FOLLOWUP_EVALUATION_PROMPT } from '@/prompts/evaluation';
+import { SYSTEM_DESIGN_EVALUATION_PROMPT } from '@/prompts/system-design';
 import type { AnswerEvaluation, InterviewType } from '@/types';
 
 export class EvaluationService {
@@ -12,14 +13,24 @@ export class EvaluationService {
     answerTranscript: string;
     interviewType: InterviewType;
     deepMode?: boolean;
+    systemDesign?: boolean;
     relatedKeyPoints?: string[];
+    previousContext?: {
+      originalQuestion: string;
+      originalAnswer: string;
+      followUpHistory: { question: string; answer: string }[];
+    };
   }): Promise<AnswerEvaluation> {
-    const { questionText, answerTranscript, interviewType, deepMode, relatedKeyPoints } = params;
+    const { questionText, answerTranscript, interviewType, deepMode, systemDesign, relatedKeyPoints, previousContext } = params;
 
     const { correctedText, wasChanged } = await correctTranscript(answerTranscript, questionText);
 
     let promptTemplate: string;
-    if (deepMode) {
+    if (previousContext) {
+      promptTemplate = FOLLOWUP_EVALUATION_PROMPT;
+    } else if (systemDesign) {
+      promptTemplate = SYSTEM_DESIGN_EVALUATION_PROMPT;
+    } else if (deepMode) {
       promptTemplate = DEEP_TECHNICAL_EVALUATION_PROMPT;
     } else if (interviewType === 'BEHAVIORAL') {
       promptTemplate = BEHAVIORAL_EVALUATION_PROMPT;
@@ -31,7 +42,19 @@ export class EvaluationService {
       .replace('{question}', questionText)
       .replace('{answer}', correctedText);
 
-    if (deepMode) {
+    if (previousContext) {
+      const contextLines = [
+        `원래 질문: ${previousContext.originalQuestion}`,
+        `원래 답변: ${previousContext.originalAnswer}`,
+      ];
+      for (const fh of previousContext.followUpHistory) {
+        contextLines.push(`꼬리질문: ${fh.question}`);
+        contextLines.push(`답변: ${fh.answer}`);
+      }
+      prompt = prompt.replace('{previousContext}', contextLines.join('\n'));
+    }
+
+    if ((deepMode || systemDesign) && !previousContext) {
       const keyPointsStr = relatedKeyPoints && relatedKeyPoints.length > 0
         ? relatedKeyPoints.map(kp => `- ${kp}`).join('\n')
         : '(참고 핵심 포인트 없음)';
@@ -63,9 +86,10 @@ export class EvaluationService {
     answerTranscript: string;
     responseTimeSec?: number;
     deepMode?: boolean;
+    systemDesign?: boolean;
     relatedKeyPoints?: string[];
   }): Promise<AnswerEvaluation> {
-    const { sessionId, questionIndex, answerTranscript, responseTimeSec, deepMode, relatedKeyPoints } = params;
+    const { sessionId, questionIndex, answerTranscript, responseTimeSec, deepMode, systemDesign, relatedKeyPoints } = params;
 
     const session = await prisma.interviewSession.findUnique({
       where: { id: sessionId },
@@ -76,11 +100,15 @@ export class EvaluationService {
     const existingAnswer = session.answers.find(a => a.questionIndex === questionIndex);
     const questionText = existingAnswer?.questionText || '';
 
+    // Auto-detect system design from question source if not explicitly passed
+    const isSystemDesign = systemDesign || existingAnswer?.questionSource === 'system_design';
+
     const evaluation = await this.evaluateStateless({
       questionText,
       answerTranscript,
       interviewType: session.type as InterviewType,
       deepMode,
+      systemDesign: isSystemDesign,
       relatedKeyPoints,
     });
 

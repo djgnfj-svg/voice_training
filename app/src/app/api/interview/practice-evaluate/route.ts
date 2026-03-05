@@ -6,12 +6,22 @@ import { creditService, CREDIT_COSTS } from '@/services/credit.service';
 import { z } from 'zod';
 import type { InterviewType } from '@/types';
 
+const previousContextSchema = z.object({
+  originalQuestion: z.string(),
+  originalAnswer: z.string(),
+  followUpHistory: z.array(z.object({
+    question: z.string(),
+    answer: z.string(),
+  })),
+}).optional();
+
 const schema = z.object({
   questionText: z.string().min(1),
   answerTranscript: z.string().min(1),
   interviewType: z.enum(['TECHNICAL', 'BEHAVIORAL', 'MIXED']),
   deepMode: z.boolean().optional(),
   relatedKeyPoints: z.array(z.string()).optional(),
+  previousContext: previousContextSchema,
 });
 
 export async function POST(request: NextRequest) {
@@ -30,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { questionText, answerTranscript, interviewType, deepMode, relatedKeyPoints } = schema.parse(body);
+    const { questionText, answerTranscript, interviewType, deepMode, relatedKeyPoints, previousContext } = schema.parse(body);
 
     // 꼬리질문 크레딧 차감
     try {
@@ -48,6 +58,7 @@ export async function POST(request: NextRequest) {
       interviewType: interviewType as InterviewType,
       deepMode,
       relatedKeyPoints,
+      previousContext,
     });
 
     return NextResponse.json(evaluation);
