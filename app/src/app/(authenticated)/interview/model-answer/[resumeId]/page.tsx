@@ -5,10 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  useModelAnswerStudy,
-  type ModelAnswerQuestion,
-} from '@/hooks/useModelAnswerStudy';
+import { useModelAnswerStudy } from '@/hooks/useModelAnswerStudy';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import {
   Loader2,

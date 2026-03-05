@@ -60,12 +60,14 @@ export async function GET(
     }));
 
     const deepMode = interviewSession.answers.some((a) => a.questionSource === 'deep_technical');
+    const systemDesign = interviewSession.answers.some((a) => a.questionSource === 'system_design');
 
     return NextResponse.json({
       questions,
       sessionStatus: interviewSession.status,
       interviewType: interviewSession.type,
       deepMode,
+      systemDesign,
     });
   } catch (error) {
     console.error('Questions fetch error:', error);

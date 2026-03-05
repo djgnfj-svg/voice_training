@@ -147,7 +147,8 @@ export default function InterviewSessionPage() {
             previousAnswers,
             finalResumeIndex,
             data.interviewType as InterviewType,
-            data.deepMode
+            data.deepMode,
+            data.systemDesign
           );
           return;
         }

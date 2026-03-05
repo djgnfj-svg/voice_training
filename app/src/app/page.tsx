@@ -50,7 +50,7 @@ const howItWorks = [
   {
     step: '03',
     title: '음성 답변 + 피드백',
-    description: '마이크로 답변하면 AI가 즉시 평가하고 꼬리질문으로 심화합니다.',
+    description: '음성으로 답변하면 AI가 즉시 평가하고 꼬리질문으로 심화합니다.',
   },
 ];
 
