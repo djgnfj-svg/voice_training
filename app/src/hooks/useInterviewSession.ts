@@ -44,7 +44,6 @@ interface InterviewSessionState {
   startTime: number | null;
   interviewType: InterviewType | null;
   deepMode: boolean;
-  systemDesign: boolean;
   isFollowUp: boolean;
   followUpRound: number;
   followUpEvaluations: AnswerEvaluation[];
@@ -68,7 +67,6 @@ export function useInterviewSession() {
     startTime: null,
     interviewType: null,
     deepMode: false,
-    systemDesign: false,
     isFollowUp: false,
     followUpRound: 0,
     followUpEvaluations: [],
@@ -81,7 +79,7 @@ export function useInterviewSession() {
   const analytics = useSpeechAnalytics();
 
   const startSession = useCallback(
-    async (sessionId: string, questions: InterviewQuestion[], interviewType?: InterviewType, deepMode?: boolean, systemDesign?: boolean) => {
+    async (sessionId: string, questions: InterviewQuestion[], interviewType?: InterviewType, deepMode?: boolean) => {
       setState({
         phase: 'asking',
         sessionId,
@@ -91,7 +89,6 @@ export function useInterviewSession() {
         startTime: Date.now(),
         interviewType: interviewType || null,
         deepMode: deepMode || false,
-        systemDesign: systemDesign || false,
         isFollowUp: false,
         followUpRound: 0,
         followUpEvaluations: [],
@@ -118,8 +115,7 @@ export function useInterviewSession() {
       previousAnswers: AnswerWithEval[],
       resumeFromIndex: number,
       interviewType?: InterviewType,
-      deepMode?: boolean,
-      systemDesign?: boolean
+      deepMode?: boolean
     ) => {
       // All questions already answered → complete immediately
       if (resumeFromIndex >= questions.length) {
@@ -132,7 +128,6 @@ export function useInterviewSession() {
           startTime: Date.now(),
           interviewType: interviewType || null,
           deepMode: deepMode || false,
-          systemDesign: systemDesign || false,
           isFollowUp: false,
           followUpRound: 0,
           followUpEvaluations: [],
@@ -150,7 +145,6 @@ export function useInterviewSession() {
         startTime: Date.now(),
         interviewType: interviewType || null,
         deepMode: deepMode || false,
-        systemDesign: systemDesign || false,
         isFollowUp: false,
         followUpRound: 0,
         followUpEvaluations: [],
@@ -204,8 +198,7 @@ export function useInterviewSession() {
           answerTranscript: transcript,
           responseTimeSec,
           ...(state.deepMode ? { deepMode: true } : {}),
-          ...(state.systemDesign ? { systemDesign: true } : {}),
-          ...((state.deepMode || state.systemDesign) && currentQ?.relatedKeyPoints ? { relatedKeyPoints: currentQ.relatedKeyPoints } : {}),
+          ...(state.deepMode && currentQ?.relatedKeyPoints ? { relatedKeyPoints: currentQ.relatedKeyPoints } : {}),
         }),
       });
 

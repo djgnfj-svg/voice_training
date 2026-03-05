@@ -49,16 +49,12 @@
   - **마이크 확인**: 면접 시작 클릭 → 마이크 확인 다이얼로그 (권한 요청, 레벨 미터, 장치 선택, 소리 감지) → 확인 후 API 호출
     - 훅: `hooks/useMicrophoneCheck.ts` (getUserMedia + AudioContext + AnalyserNode)
     - UI: `components/interview/mic-check-dialog.tsx` (shadcn Dialog)
-- **면접 모드 3종** (셋업에서 카드 선택):
+- **면접 모드 2종** (셋업에서 카드 선택):
   - **일반 모드**: 5-10 질문, 전반적 커버리지
   - **심화 모드**: 3-5 질문, 기술 깊이 집중. 질문 뱅크 매칭 → 이력서 프로젝트/기술 직접 언급
-    - 질문 뱅크: `app/src/data/questions/*.json` (8개 JSON, 서비스에서 직접 import)
+    - 질문 뱅크: `app/src/data/questions/*.json` (7개 JSON, 서비스에서 직접 import)
     - 프롬프트: `DEEP_INTERVIEW_PLAN_PROMPT`, `DEEP_INTERVIEW_QUESTION_PROMPT`, `DEEP_TECHNICAL_EVALUATION_PROMPT`
     - `questionSource: 'deep_technical'`로 심화 세션 식별
-  - **시스템 설계 모드**: 2-3 문제, 단계별 진행 (요구사항→설계→트레이드오프)
-    - 프롬프트: `app/src/prompts/system-design.ts` (PLAN, QUESTION, EVALUATION, FOLLOWUP 4종)
-    - `questionSource: 'system_design'`로 식별
-    - 평가 기준: requirements_clarification 15% + high_level_design 30% + detailed_design 25% + trade_offs 20% + communication 10%
 - **멀티라운드 꼬리질문**: 메인 답변 → 꼬리질문 최대 2회 연쇄
   - 깊이 사다리: what → why → tradeoffs/alternatives
   - depth < 80이면 followUpQuestion 필수 생성
@@ -89,7 +85,6 @@
 - **기술면접**: clarity 30% + accuracy 25% + practicality 25% + depth 15% + completeness 5%
 - **심화면접**: clarity 25% + accuracy 20% + practicality 25% + depth 25% + completeness 5%
 - **인성면접**: situation 15% + task 15% + action 30% + result 25% + communication 15%
-- **시스템 설계**: requirements_clarification 15% + high_level_design 30% + detailed_design 25% + trade_offs 20% + communication 10%
 - **꼬리질문 전용**: `FOLLOWUP_EVALUATION_PROMPT` — previousContext(원본 Q/A + 꼬리질문 히스토리) 기반 평가
 
 ## 크레딧 & 결제 시스템

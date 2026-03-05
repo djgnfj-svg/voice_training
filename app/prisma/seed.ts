@@ -5,7 +5,6 @@ import react from '../src/data/questions/react.json';
 import nextjs from '../src/data/questions/nextjs.json';
 import typescriptAdvanced from '../src/data/questions/typescript-advanced.json';
 import databaseAdvanced from '../src/data/questions/database-advanced.json';
-import systemDesign from '../src/data/questions/system-design.json';
 import devops from '../src/data/questions/devops.json';
 
 const prisma = new PrismaClient();
@@ -13,7 +12,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding question bank...');
 
-  const questionSets = [csBasics, javascript, react, nextjs, typescriptAdvanced, databaseAdvanced, systemDesign, devops];
+  const questionSets = [csBasics, javascript, react, nextjs, typescriptAdvanced, databaseAdvanced, devops];
 
   for (const set of questionSets) {
     for (const q of set.questions) {

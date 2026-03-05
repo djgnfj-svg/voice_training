@@ -147,8 +147,7 @@ export default function InterviewSessionPage() {
             previousAnswers,
             finalResumeIndex,
             data.interviewType as InterviewType,
-            data.deepMode,
-            data.systemDesign
+            data.deepMode
           );
           return;
         }
@@ -188,17 +187,15 @@ export default function InterviewSessionPage() {
     if (initialized && questions.length > 0 && interview.phase === 'idle' && !isResumed) {
       let interviewType: InterviewType | undefined;
       let deepMode = false;
-      let systemDesign = false;
       try {
         const stored = sessionStorage.getItem(`interview_${sessionId}`);
         if (stored) {
           const data = JSON.parse(stored);
           if (data.plan?.type) interviewType = data.plan.type;
           if (data.deepMode) deepMode = true;
-          if (data.systemDesign) systemDesign = true;
         }
       } catch {}
-      interview.startSession(sessionId, questions, interviewType, deepMode, systemDesign);
+      interview.startSession(sessionId, questions, interviewType, deepMode);
     }
   }, [initialized, questions, interview.phase, sessionId, isResumed]); // eslint-disable-line react-hooks/exhaustive-deps
 

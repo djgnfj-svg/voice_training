@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
 import { useToast } from '@/hooks/useToast';
-import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical, PlayCircle, Layers, AlertTriangle } from 'lucide-react';
+import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical, PlayCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 import { MicCheckDialog } from '@/components/interview/mic-check-dialog';
@@ -23,7 +23,7 @@ export default function InterviewSetupPage() {
   const [step, setStep] = useState<Step>('resume');
 
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [interviewMode, setInterviewMode] = useState<'standard' | 'deep' | 'system_design'>('standard');
+  const [interviewMode, setInterviewMode] = useState<'standard' | 'deep'>('standard');
   const [showCreditsDialog, setShowCreditsDialog] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
@@ -118,7 +118,7 @@ export default function InterviewSetupPage() {
       const data = await res.json();
       const { sessionId, plan, questions } = data;
 
-      sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ plan, questions, deepMode: interviewMode === 'deep', systemDesign: interviewMode === 'system_design' }));
+      sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ plan, questions, deepMode: interviewMode === 'deep' }));
 
       router.push(`/interview/session/${sessionId}`);
     } catch (error: unknown) {
@@ -314,7 +314,7 @@ export default function InterviewSetupPage() {
               <CardDescription>면접 유형을 선택하세요</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 {/* 일반 모드 */}
                 <button
                   type="button"
@@ -350,24 +350,6 @@ export default function InterviewSetupPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">3~5 질문, 기술 깊이 집중</p>
                 </button>
-
-                {/* 시스템 설계 모드 */}
-                <button
-                  type="button"
-                  className={cn(
-                    'rounded-lg border p-4 text-left transition-all',
-                    interviewMode === 'system_design'
-                      ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50 dark:bg-blue-950/30'
-                      : 'hover:border-muted-foreground/50'
-                  )}
-                  onClick={() => setInterviewMode('system_design')}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Layers className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm font-semibold">시스템 설계</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">2~3 문제, 단계별 설계</p>
-                </button>
               </div>
 
               {interviewMode === 'deep' && (
@@ -376,16 +358,6 @@ export default function InterviewSetupPage() {
                     <li>- 이력서의 프로젝트/기술을 직접 언급하는 질문</li>
                     <li>- INTERMEDIATE 이상 난이도, 점진적 깊이 증가</li>
                     <li>- 매 질문 후 꼬리질문으로 더 깊이 파고듦</li>
-                  </ul>
-                </div>
-              )}
-
-              {interviewMode === 'system_design' && (
-                <div className="mt-3 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
-                  <ul className="space-y-1 text-sm text-blue-700 dark:text-blue-300">
-                    <li>- 요구사항 확인 → 고수준 설계 → 세부 설계 → 트레이드오프</li>
-                    <li>- 이력서 기반 실무 연결 설계 문제</li>
-                    <li>- 아키텍처 설계 역량 집중 평가</li>
                   </ul>
                 </div>
               )}
