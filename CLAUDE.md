@@ -1,4 +1,4 @@
-# Project: AI 면접 코치
+# Project: VoicePrep (보이스프렙)
 
 ## 구조
 - 모노리포가 아님. **앱은 `app/` 하나**뿐임.
@@ -38,18 +38,42 @@
   - 프로덕션: Google 로그인 → PrismaAdapter가 User/Account 자동 생성
   - 미들웨어에서 세션 쿠키 체크 (`__Secure-authjs.session-token`)
 
+## 브랜드
+- **이름**: 보이스프렙 (VoicePrep)
+- **태그라인**: 말하며 준비하는 개발자 면접
+- **포지셔닝**: 타이핑이 아니라 실제로 말하며 연습하는 AI 기술 면접 코치
+- **상수**: `app/src/lib/brand.ts` — BRAND 객체 (name, nameEn, tagline, description)
+
 ## 주요 플로우
-- **면접 연습**: 이력서 선택(필수) → 채용공고 입력(선택) → AI 자동 설계 → 면접 시작
-- **심화 면접**: Setup에서 심화 모드 토글 ON → 질문 뱅크 매칭 → 이력서 프로젝트/기술 직접 언급하는 3~5개 심화 질문 → 꼬리질문 필수 생성
-  - 질문 뱅크: `app/src/data/questions/*.json` (8개 JSON, 서비스에서 직접 import)
-  - 프롬프트: `DEEP_INTERVIEW_PLAN_PROMPT`, `DEEP_INTERVIEW_QUESTION_PROMPT`, `DEEP_TECHNICAL_EVALUATION_PROMPT`
-  - `questionSource: 'deep_technical'`로 심화 세션 식별
+- **면접 연습**: 이력서 선택(필수) → 채용공고 입력(선택) → 면접 모드 선택 → AI 자동 설계 → 면접 시작
+- **면접 모드 3종** (셋업에서 카드 선택):
+  - **일반 모드**: 5-10 질문, 전반적 커버리지
+  - **심화 모드**: 3-5 질문, 기술 깊이 집중. 질문 뱅크 매칭 → 이력서 프로젝트/기술 직접 언급
+    - 질문 뱅크: `app/src/data/questions/*.json` (8개 JSON, 서비스에서 직접 import)
+    - 프롬프트: `DEEP_INTERVIEW_PLAN_PROMPT`, `DEEP_INTERVIEW_QUESTION_PROMPT`, `DEEP_TECHNICAL_EVALUATION_PROMPT`
+    - `questionSource: 'deep_technical'`로 심화 세션 식별
+  - **시스템 설계 모드**: 2-3 문제, 단계별 진행 (요구사항→설계→트레이드오프)
+    - 프롬프트: `app/src/prompts/system-design.ts` (PLAN, QUESTION, EVALUATION, FOLLOWUP 4종)
+    - `questionSource: 'system_design'`로 식별
+    - 평가 기준: requirements_clarification 15% + high_level_design 30% + detailed_design 25% + trade_offs 20% + communication 10%
+- **멀티라운드 꼬리질문**: 메인 답변 → 꼬리질문 최대 2회 연쇄
+  - 깊이 사다리: what → why → tradeoffs/alternatives
+  - depth < 80이면 followUpQuestion 필수 생성
+  - `followUpRound` (0=메인, 1=1차, 2=2차), `followUpEvaluations: AnswerEvaluation[]`
+  - 프롬프트: `FOLLOWUP_EVALUATION_PROMPT` (previousContext 포함)
+  - API: `/api/interview/practice-evaluate` (stateless, previousContext 전달)
+- **답변 녹음 재생**: 음성 답변 녹음 → fire-and-forget 업로드 → 리포트에서 재생 버튼
+  - `InterviewAnswer.audioUrl` 필드 (Prisma, migration 필요: `add-audio-url`)
+  - API: `POST /api/interview/audio` (multipart, 세션 소유권 검증)
+  - 저장: `public/audio/{sessionId}/{questionIndex}.webm`
 - **심층 기업 분석**: 채용공고 분석 후 "심층 분석" 버튼 → 1크레딧 차감 → Tavily 웹 검색 → LLM 구조화 → 면접 시 company_specific 질문 생성
   - API: `POST /api/job-posting/[id]/research` (멱등 — 이미 분석 완료 시 재과금 없음)
   - 프롬프트: `DEEP_COMPANY_ANALYSIS_PROMPT` (`app/src/prompts/company-research.ts`)
   - 결과: CompanyAnalysis에 deepResearch=true + companyOverview, recentNews, products 등 추가
-- **꼬리질문**: feedback에서 followUpQuestion 표시 → "꼬리질문 답변하기" → TTS → 음성인식 → `/api/interview/practice-evaluate` (stateless) → 피드백 → 다음 질문
 - **대시보드**: 성장 분석(점수 추이 차트 + 카테고리별 성과 차트)이 대시보드에 통합됨. 별도 analytics 페이지 없음.
+- **온보딩**: 첫 방문 시(sessionCount=0 && !freeTrialUsed) 웰컴 다이얼로그 3단계 표시
+  - `components/onboarding/welcome-dialog.tsx`
+  - 대시보드 빈 상태: 3단계 가이드 + CTA
 
 ## 레이아웃
 - **사이드바**: `components/layout/sidebar.tsx` — 대시보드, 면접 시작, 모범답안, 이력서 관리, 크레딧, 면접 기록
@@ -59,6 +83,8 @@
 - **기술면접**: clarity 30% + accuracy 25% + practicality 25% + depth 15% + completeness 5%
 - **심화면접**: clarity 25% + accuracy 20% + practicality 25% + depth 25% + completeness 5%
 - **인성면접**: situation 15% + task 15% + action 30% + result 25% + communication 15%
+- **시스템 설계**: requirements_clarification 15% + high_level_design 30% + detailed_design 25% + trade_offs 20% + communication 10%
+- **꼬리질문 전용**: `FOLLOWUP_EVALUATION_PROMPT` — previousContext(원본 Q/A + 꼬리질문 히스토리) 기반 평가
 
 ## 크레딧 & 결제 시스템
 - **과금 모델**: 크레딧 충전제. 세션 1회 = 10코인, 꼬리질문 1코인 (면접/모범답안 동일)
@@ -83,7 +109,7 @@
 - `Resume` — 복수 이력서 (userId, name, parsedData, fileUrl은 optional)
 - `JobPosting` — 채용공고
 - `InterviewSession` — 면접 세션 (resumeId 필수, jobPostingId 선택, creditDeducted)
-- `InterviewAnswer` — 답변/평가
+- `InterviewAnswer` — 답변/평가 (audioUrl: 녹음 파일 경로)
 - `CreditTransaction` — 크레딧 거래 내역 (amount, balance, type: CreditTxType, referenceId)
 - `PaymentOrder` — Toss 결제 주문 (orderId, paymentKey, amount, credits, status: PENDING/DONE/FAILED)
 
@@ -93,7 +119,7 @@
 - Redis 없음 — `lib/redis.ts`가 연결 실패 시 graceful 무시 (캐시만 스킵)
 
 ## 음성 처리
-- **transcript 정규화**: `lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 (클라이언트, 전 훅에서 사용)
+- **transcript 정규화**: `lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 + `countFillerWords()` (필러워드 카운트)
 - **AI 교정**: `lib/transcript-server.ts` — 서버 측 transcript 교정 (`correctedTranscript`), 질문 맥락 전달로 기술용어 교정 정확도 향상
 - **음성인식 (하이브리드)**:
   - 실시간 표시: Web Speech API (`maxAlternatives=3` + confidence 기반 최적 대안 선택)
@@ -101,6 +127,15 @@
   - 래퍼: `app/src/lib/whisper.ts` (싱글톤, `isWhisperAvailable` export)
   - 녹음 훅: `app/src/hooks/useAudioRecorder.ts` (MediaRecorder API)
   - API: `POST /api/transcribe` — multipart/form-data (audio 파일), 인증 필수
+- **실시간 발화 분석**: `hooks/useSpeechAnalytics.ts` — 답변 중 실시간 비언어적 피드백
+  - `SpeechMetrics`: wpm (음절/분), fillerCount, silenceSec, silenceRatio, elapsedSec
+  - 말 속도: 한국어 글자 수 ≈ 음절 수 / 경과 시간 → WPM. 느림 <200 / 적정 200-350 / 빠름 >350
+  - 필러워드: `countFillerWords()`로 원본 transcript에서 실시간 카운트
+  - 침묵 감지: transcript 변화 없는 구간 2초 이상 = 침묵, 500ms interval로 누적
+  - 세션 페이지: listening 단계에 3열 지표 패널 (말 속도/침묵/필러워드) + feedback에 한 줄 요약
+  - `useInterviewSession`에서 start/stop/reset/feed 연동, `AnswerWithEval.speechMetrics`에 저장
+  - 리포트: `report.service.ts`에서 실제 transcript 기반 fillerWordCount, WPM 기반 speechRate 계산
+  - `SpeechAnalysis` 타입: `averageWpm?`, `totalSilenceSec?`, `averageSilenceRatio?` 추가
 
 ## 환경 변수
 - `app/.env` — DB, Anthropic API 키, NextAuth, Google OAuth, Toss 등
