@@ -60,6 +60,7 @@ export class AnalyticsService {
       orderBy: { createdAt: 'desc' },
       take: limit,
       include: {
+        resume: { select: { name: true } },
         jobPosting: { select: { parsedData: true } },
         _count: { select: { answers: true } },
       },

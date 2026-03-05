@@ -20,6 +20,7 @@ interface SessionItem {
   matchingScore: number | null;
   createdAt: string;
   durationSeconds: number | null;
+  resume: { name: string } | null;
   jobPosting: { parsedData: ParsedJobPosting } | null;
   _count: { answers: number };
 }
@@ -127,6 +128,7 @@ function SessionCard({
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">
+              {session.resume?.name && <>{session.resume.name} | </>}
               {session.categories.join(', ')} | {session._count.answers}문제 | {formatDate(session.createdAt)}
             </p>
             {session.jobPosting?.parsedData && (
