@@ -78,9 +78,11 @@ export default function InterviewSessionPage() {
   }, [interview.phase]);
 
   const handleExitConfirm = useCallback(() => {
+    interview.tts.stop();
+    interview.speech.stopListening();
     setShowExitDialog(false);
     router.push(exitTargetRef.current || '/interview/setup');
-  }, [router]);
+  }, [router, interview.tts, interview.speech]);
 
   // Load session data on mount
   useEffect(() => {
