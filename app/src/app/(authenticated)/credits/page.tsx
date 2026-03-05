@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Coins, ShoppingCart, ArrowUpRight, ArrowDownLeft, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Coins, ShoppingCart, ArrowUpRight, ArrowDownLeft, Loader2, Gift } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/useToast';
 import { loadTossPayments, ANONYMOUS } from '@tosspayments/tosspayments-sdk';
 import { PAYMENT_PRODUCTS } from '@/lib/payment-products';
 import type { CreditInfo, CreditTransactionItem } from '@/types';
@@ -18,11 +20,16 @@ const TX_TYPE_LABELS: Record<string, string> = {
   PURCHASE: '결제 충전',
   SESSION_DEBIT: '세션 사용',
   REFUND: '환불',
+  COUPON: '쿠폰 사용',
 };
 
 export default function CreditsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
 
   const { data: creditInfo } = useQuery<CreditInfo>({
     queryKey: ['credits'],
@@ -89,6 +96,35 @@ export default function CreditsPage() {
     }
   };
 
+  const handleRedeemCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) return;
+
+    setCouponLoading(true);
+    try {
+      const res = await fetch('/api/coupons/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast({ title: data.error || '쿠폰 사용 실패', variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: data.message });
+      setCouponCode('');
+      queryClient.invalidateQueries({ queryKey: ['credits'] });
+      queryClient.invalidateQueries({ queryKey: ['credit-transactions'] });
+    } catch {
+      toast({ title: '쿠폰 사용 중 오류가 발생했습니다.', variant: 'destructive' });
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
@@ -114,6 +150,40 @@ export default function CreditsPage() {
               무료 체험 1회 사용 가능
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Coupon */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Gift className="h-5 w-5" />
+            쿠폰 사용
+          </CardTitle>
+          <CardDescription>쿠폰 코드를 입력하여 크레딧을 받으세요</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Input
+              placeholder="쿠폰 코드 입력"
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRedeemCoupon(); }}
+              disabled={couponLoading}
+              className="uppercase"
+            />
+            <Button
+              onClick={handleRedeemCoupon}
+              disabled={couponLoading || !couponCode.trim()}
+              className="shrink-0"
+            >
+              {couponLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                '사용하기'
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

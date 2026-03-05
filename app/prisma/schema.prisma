@@ -27,6 +27,7 @@ model User {
   creditTransactions CreditTransaction[]
   paymentOrders      PaymentOrder[]
   activityLogs       ActivityLog[]
+  couponUsages       CouponUsage[]
 
   @@map("users")
 }
@@ -197,6 +198,7 @@ enum CreditTxType {
   PURCHASE
   SESSION_DEBIT
   REFUND
+  COUPON
 }
 
 model PaymentOrder {
@@ -260,4 +262,32 @@ model ActivityItem {
 
 enum ActivityType {
   MODEL_ANSWER
+}
+
+model Coupon {
+  id          String        @id @default(uuid())
+  code        String        @unique
+  credits     Int
+  maxUses     Int?
+  usedCount   Int           @default(0)
+  isActive    Boolean       @default(true)
+  expiresAt   DateTime?
+  description String?
+  createdAt   DateTime      @default(now())
+  usages      CouponUsage[]
+
+  @@map("coupons")
+}
+
+model CouponUsage {
+  id        String   @id @default(uuid())
+  couponId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, userId])
+  @@map("coupon_usages")
 }

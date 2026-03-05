@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/useToast';
 import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical, PlayCircle, Layers, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
+import { MicCheckDialog } from '@/components/interview/mic-check-dialog';
 import { isSpeechRecognitionSupported } from '@/lib/utils';
 import type { ParsedJobPosting, CompanyAnalysis } from '@/types';
 
@@ -30,6 +31,7 @@ export default function InterviewSetupPage() {
     companyAnalysis: CompanyAnalysis;
     deepResearchAvailable: boolean;
   } | null>(null);
+  const [showMicCheck, setShowMicCheck] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
   const [inProgressSession, setInProgressSession] = useState<{
     id: string;
@@ -70,7 +72,7 @@ export default function InterviewSetupPage() {
     setStep('start');
   };
 
-  const startInterview = async () => {
+  const startInterview = () => {
     if (!selectedResumeId) {
       toast({ title: '이력서를 선택해주세요', variant: 'destructive' });
       return;
@@ -84,6 +86,12 @@ export default function InterviewSetupPage() {
       });
       return;
     }
+
+    setShowMicCheck(true);
+  };
+
+  const confirmAndStartInterview = async () => {
+    if (!selectedResumeId) return;
 
     setLoading(true);
     try {
@@ -100,6 +108,7 @@ export default function InterviewSetupPage() {
       if (!res.ok) {
         const data = await res.json();
         if (res.status === 402) {
+          setShowMicCheck(false);
           setShowCreditsDialog(true);
           return;
         }
@@ -404,6 +413,12 @@ export default function InterviewSetupPage() {
         </>
       )}
 
+      <MicCheckDialog
+        open={showMicCheck}
+        onOpenChange={setShowMicCheck}
+        onConfirm={confirmAndStartInterview}
+        loading={loading}
+      />
       <InsufficientCreditsDialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog} />
     </div>
   );
