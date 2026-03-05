@@ -45,7 +45,10 @@
 - **상수**: `app/src/lib/brand.ts` — BRAND 객체 (name, nameEn, tagline, description)
 
 ## 주요 플로우
-- **면접 연습**: 이력서 선택(필수) → 채용공고 입력(선택) → 면접 모드 선택 → AI 자동 설계 → 면접 시작
+- **면접 연습**: 이력서 선택(필수) → 채용공고 입력(선택) → 면접 모드 선택 → AI 자동 설계 → 마이크 확인 → 면접 시작
+  - **마이크 확인**: 면접 시작 클릭 → 마이크 확인 다이얼로그 (권한 요청, 레벨 미터, 장치 선택, 소리 감지) → 확인 후 API 호출
+    - 훅: `hooks/useMicrophoneCheck.ts` (getUserMedia + AudioContext + AnalyserNode)
+    - UI: `components/interview/mic-check-dialog.tsx` (shadcn Dialog)
 - **면접 모드 3종** (셋업에서 카드 선택):
   - **일반 모드**: 5-10 질문, 전반적 커버리지
   - **심화 모드**: 3-5 질문, 기술 깊이 집중. 질문 뱅크 매칭 → 이력서 프로젝트/기술 직접 언급
@@ -70,6 +73,9 @@
   - API: `POST /api/job-posting/[id]/research` (멱등 — 이미 분석 완료 시 재과금 없음)
   - 프롬프트: `DEEP_COMPANY_ANALYSIS_PROMPT` (`app/src/prompts/company-research.ts`)
   - 결과: CompanyAnalysis에 deepResearch=true + companyOverview, recentNews, products 등 추가
+- **모범답안 학습**: 이력서 선택 → AI가 질문+모범답안 생성 → 질문별 음성 답변 연습 → 모범답안 공개
+  - "내 답변 말해보기": `useSpeechRecognition` 훅 재사용, 실시간 transcript 표시
+  - 질문 이동 시 음성 상태 자동 리셋, transcript를 userNotes Map에 저장
 - **대시보드**: 성장 분석(점수 추이 차트 + 카테고리별 성과 차트)이 대시보드에 통합됨. 별도 analytics 페이지 없음.
 - **온보딩**: 첫 방문 시(sessionCount=0 && !freeTrialUsed) 웰컴 다이얼로그 3단계 표시
   - `components/onboarding/welcome-dialog.tsx`
@@ -94,6 +100,12 @@
 - **차감 시점**: AI 생성 성공 후 차감 (실패 시 미차감)
 - **서비스**: `app/src/services/credit.service.ts` — getBalance, canStartSession, deductForSession, deductForFeature, refundForSession, grantCredits, getTransactions
 - **API**: `GET /api/credits` (잔액), `GET /api/credits/transactions` (내역)
+- **쿠폰**: 프로모션 코드로 크레딧 지급
+  - 모델: `Coupon` (code, credits, maxUses, usedCount, isActive, expiresAt), `CouponUsage` (couponId+userId unique)
+  - 서비스: `app/src/services/coupon.service.ts` — validateCoupon, redeemCoupon (원자적 $transaction)
+  - API: `POST /api/coupons/redeem` — zod 검증, 에러 코드: INVALID_COUPON, EXPIRED_COUPON, MAX_USES_REACHED, ALREADY_USED
+  - UI: `/credits` 페이지에 쿠폰 입력 카드 (Gift 아이콘, uppercase, Enter 키 지원)
+  - `CreditTxType.COUPON` enum 값 추가
 - **게이팅 라우트**: `/api/interview/setup`, `/api/model-answer/generate`
 - **402 응답**: `{ error: '...', code: 'INSUFFICIENT_CREDITS' }` → UI에서 크레딧 부족 다이얼로그/페이지 표시
 - **UI**: `components/credit/credit-badge.tsx` (헤더), `components/credit/insufficient-credits-dialog.tsx`, `/credits` 페이지
@@ -112,6 +124,8 @@
 - `InterviewAnswer` — 답변/평가 (audioUrl: 녹음 파일 경로)
 - `CreditTransaction` — 크레딧 거래 내역 (amount, balance, type: CreditTxType, referenceId)
 - `PaymentOrder` — Toss 결제 주문 (orderId, paymentKey, amount, credits, status: PENDING/DONE/FAILED)
+- `Coupon` — 쿠폰 (code unique, credits, maxUses, usedCount, isActive, expiresAt)
+- `CouponUsage` — 쿠폰 사용 기록 (couponId+userId unique → 중복 사용 방지)
 
 ## 배포
 - Vercel, 리전: `icn1` (인천/서울) — `vercel.json`
