@@ -1,15 +1,15 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
 import {
   useModelAnswerStudy,
   type ModelAnswerQuestion,
 } from '@/hooks/useModelAnswerStudy';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import {
   Loader2,
   ChevronLeft,
@@ -17,7 +17,9 @@ import {
   Eye,
   EyeOff,
   BookOpen,
-  Lightbulb,
+  Mic,
+  Square,
+  RotateCcw,
   CheckCircle,
   ArrowLeft,
   ChevronsRight,
@@ -47,7 +49,38 @@ export default function ModelAnswerStudyPage({
     setNote,
   } = useModelAnswerStudy(resumeId);
 
-  const [noteOpen, setNoteOpen] = useState(false);
+  const speech = useSpeechRecognition();
+  const [practiceOpen, setPracticeOpen] = useState(false);
+  const [practicePhase, setPracticePhase] = useState<'idle' | 'recording' | 'done'>('idle');
+  const prevIndexRef = useRef(currentIndex);
+
+  // 질문 이동 시 음성 상태 리셋
+  useEffect(() => {
+    if (prevIndexRef.current !== currentIndex) {
+      prevIndexRef.current = currentIndex;
+      speech.stopListening();
+      speech.resetTranscript();
+      setPracticePhase('idle');
+    }
+  }, [currentIndex, speech]);
+
+  const startRecording = useCallback(() => {
+    speech.resetTranscript();
+    speech.startListening();
+    setPracticePhase('recording');
+  }, [speech]);
+
+  const stopRecording = useCallback(() => {
+    speech.stopListening();
+    setPracticePhase('done');
+    setNote(currentIndex, speech.transcript);
+  }, [speech, currentIndex, setNote]);
+
+  const retryRecording = useCallback(() => {
+    speech.resetTranscript();
+    speech.startListening();
+    setPracticePhase('recording');
+  }, [speech]);
 
   if (phase === 'loading') {
     return (
@@ -182,29 +215,89 @@ export default function ModelAnswerStudyPage({
             </CardContent>
           </Card>
 
-          {/* User Notes Section */}
+          {/* Voice Practice Section */}
           <Card>
             <CardHeader
               className="cursor-pointer"
-              onClick={() => setNoteOpen(!noteOpen)}
+              onClick={() => setPracticeOpen(!practiceOpen)}
             >
               <CardTitle className="flex items-center gap-2 text-base">
-                <Lightbulb className="h-4 w-4" />
-                내 답변 작성해보기
+                <Mic className="h-4 w-4" />
+                내 답변 말해보기
                 <span className="text-xs font-normal text-muted-foreground">(선택사항)</span>
                 <ChevronRight
-                  className={`ml-auto h-4 w-4 transition-transform ${noteOpen ? 'rotate-90' : ''}`}
+                  className={`ml-auto h-4 w-4 transition-transform ${practiceOpen ? 'rotate-90' : ''}`}
                 />
               </CardTitle>
             </CardHeader>
-            {noteOpen && (
-              <CardContent>
-                <Textarea
-                  placeholder="이 질문에 대한 나의 답변을 작성해보세요..."
-                  value={currentNote}
-                  onChange={(e) => setNote(currentIndex, e.target.value)}
-                  rows={5}
-                />
+            {practiceOpen && (
+              <CardContent className="space-y-4">
+                {practicePhase === 'idle' && (
+                  <div className="flex flex-col items-center gap-3 py-4">
+                    <Button
+                      size="lg"
+                      className="h-16 w-16 rounded-full"
+                      onClick={startRecording}
+                      disabled={!speech.isSupported}
+                    >
+                      <Mic className="h-6 w-6" />
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      {speech.isSupported
+                        ? '버튼을 눌러 답변을 말해보세요'
+                        : 'Chrome 또는 Edge 브라우저에서 사용 가능합니다'}
+                    </p>
+                    {currentNote && (
+                      <div className="w-full rounded-lg bg-muted p-3">
+                        <p className="text-sm leading-relaxed">{currentNote}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {practicePhase === 'recording' && (
+                  <div className="space-y-3">
+                    <div className="min-h-[80px] rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
+                      <p className="leading-relaxed">
+                        {speech.transcript}
+                        {speech.interimTranscript && (
+                          <span className="text-muted-foreground">{speech.interimTranscript}</span>
+                        )}
+                        {!speech.transcript && !speech.interimTranscript && (
+                          <span className="text-muted-foreground">듣고 있습니다...</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex justify-center">
+                      <Button
+                        size="lg"
+                        variant="destructive"
+                        className="h-14 w-14 rounded-full"
+                        onClick={stopRecording}
+                      >
+                        <Square className="h-5 w-5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {practicePhase === 'done' && (
+                  <div className="space-y-3">
+                    <div className="min-h-[80px] rounded-lg bg-muted p-4">
+                      <p className="leading-relaxed">
+                        {currentNote || '(음성이 인식되지 않았습니다)'}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={retryRecording}
+                    >
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      다시 말하기
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             )}
           </Card>
