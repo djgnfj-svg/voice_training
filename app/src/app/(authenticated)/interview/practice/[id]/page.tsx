@@ -53,6 +53,63 @@ export default function PracticePage() {
     );
   }
 
+  // Select phase — question list for choosing individual or full review
+  if (practice.phase === 'select') {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={() => router.push('/history')}>
+            <ArrowLeft className="mr-1 h-4 w-4" /> 기록으로 돌아가기
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => router.push(`/interview/report/${sessionId}`)}>
+            리포트 보기
+          </Button>
+        </div>
+
+        <div>
+          <h1 className="text-2xl font-bold">복습할 질문 선택</h1>
+          <p className="text-muted-foreground">질문을 선택하거나 전체 복습을 시작하세요</p>
+        </div>
+
+        <Button className="w-full" onClick={practice.startAll}>
+          전체 복습 시작
+        </Button>
+
+        <div className="space-y-3">
+          {practice.data.answers.map((answer, idx) => (
+            <Card
+              key={idx}
+              className="cursor-pointer transition-colors hover:bg-accent/50"
+              onClick={() => practice.goToQuestion(idx)}
+            >
+              <CardContent className="flex items-center justify-between py-4">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    Q{idx + 1}. {answer.questionText}
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {sourceLabels[answer.questionSource] || answer.questionSource}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="ml-4 text-right">
+                  {answer.overallScore !== null ? (
+                    <span className="text-lg font-bold text-primary">
+                      {answer.overallScore}점
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">-</span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   // Summary phase
   if (practice.phase === 'summary') {
     const practiced = practice.results.length;
@@ -139,6 +196,9 @@ export default function PracticePage() {
         </div>
 
         <div className="flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={practice.goToSelect}>
+            질문 선택으로
+          </Button>
           <Button variant="outline" className="flex-1" onClick={() => router.push(`/interview/report/${sessionId}`)}>
             리포트 보기
           </Button>
@@ -155,8 +215,8 @@ export default function PracticePage() {
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={() => router.push(`/interview/report/${sessionId}`)}>
-          <ArrowLeft className="mr-1 h-4 w-4" /> 리포트로
+        <Button variant="ghost" size="sm" onClick={practice.goToSelect}>
+          <ArrowLeft className="mr-1 h-4 w-4" /> 질문 선택
         </Button>
         <Button variant="ghost" size="sm" onClick={practice.goToSummary}>
           요약 보기 <ChevronRight className="ml-1 h-4 w-4" />

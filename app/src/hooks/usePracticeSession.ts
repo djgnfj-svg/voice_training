@@ -24,7 +24,7 @@ async function transcribeWithWhisper(audioBlob: Blob): Promise<string | null> {
   }
 }
 
-type PracticePhase = 'loading' | 'reviewing' | 'practicing' | 'comparing' | 'summary';
+type PracticePhase = 'loading' | 'select' | 'reviewing' | 'practicing' | 'comparing' | 'summary';
 
 interface PracticeAnswer {
   questionIndex: number;
@@ -73,9 +73,9 @@ export function usePracticeSession(sessionId: string) {
     },
   });
 
-  // Transition to reviewing once data loaded
+  // Transition to select once data loaded
   if (data && phase === 'loading' && !isLoading) {
-    setPhase('reviewing');
+    setPhase('select');
   }
 
   const answers = data?.answers ?? [];
@@ -178,12 +178,21 @@ export function usePracticeSession(sessionId: string) {
     setPhase(hasResult ? 'comparing' : 'reviewing');
   }, [totalQuestions, results]);
 
+  const startAll = useCallback(() => {
+    setCurrentIndex(0);
+    setPhase('reviewing');
+  }, []);
+
   const showModelAnswer = useCallback(() => {
     setPhase('comparing');
   }, []);
 
   const goToSummary = useCallback(() => {
     setPhase('summary');
+  }, []);
+
+  const goToSelect = useCallback(() => {
+    setPhase('select');
   }, []);
 
   return {
@@ -203,8 +212,10 @@ export function usePracticeSession(sessionId: string) {
     requestEvaluation,
     nextQuestion,
     goToQuestion,
+    startAll,
     showModelAnswer,
     goToSummary,
+    goToSelect,
     progress: totalQuestions ? ((currentIndex + 1) / totalQuestions) * 100 : 0,
   };
 }

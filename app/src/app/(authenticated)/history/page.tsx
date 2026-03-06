@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, History, Mic, RotateCcw, BookOpen } from 'lucide-react';
+import { Loader2, History, Mic, BookOpen } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import type { ParsedJobPosting } from '@/types';
 
@@ -116,7 +116,7 @@ function SessionCard({
     <Card className="transition-colors hover:bg-accent/50">
       <Link href={
         session.status === 'COMPLETED'
-          ? `/interview/report/${session.id}`
+          ? `/interview/practice/${session.id}`
           : `/interview/session/${session.id}`
       }>
         <CardContent className="flex items-center justify-between py-4">
@@ -151,16 +151,6 @@ function SessionCard({
           </div>
         </CardContent>
       </Link>
-      {session.status === 'COMPLETED' && (
-        <div className="border-t px-6 py-2">
-          <Link href={`/interview/practice/${session.id}`}>
-            <Button variant="ghost" size="sm" className="text-xs">
-              <RotateCcw className="mr-1 h-3 w-3" />
-              연습
-            </Button>
-          </Link>
-        </div>
-      )}
     </Card>
   );
 }
