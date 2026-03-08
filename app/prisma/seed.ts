@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 import csBasics from '../src/data/questions/cs-basics.json';
 import javascript from '../src/data/questions/javascript.json';
 import react from '../src/data/questions/react.json';
@@ -30,6 +31,24 @@ async function main() {
         },
       });
     }
+  }
+
+  // 테스트 계정 생성
+  const testEmail = 'test@voiceprep.kr';
+  const existing = await prisma.user.findUnique({ where: { email: testEmail } });
+  if (!existing) {
+    const hashedPassword = await bcrypt.hash('test1234', 12);
+    await prisma.user.create({
+      data: {
+        email: testEmail,
+        name: '면접관 테스트',
+        hashedPassword,
+        creditBalance: 100,
+      },
+    });
+    console.log(`테스트 계정 생성: ${testEmail} / test1234`);
+  } else {
+    console.log(`테스트 계정 이미 존재: ${testEmail}`);
   }
 
   console.log('Seeding complete!');
