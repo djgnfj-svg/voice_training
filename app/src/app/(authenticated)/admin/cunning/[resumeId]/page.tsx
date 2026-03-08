@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { isAdmin } from '@/lib/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useCunningMode } from '@/hooks/useCunningMode';
+import { Textarea } from '@/components/ui/textarea';
+import { useCunningMode, type CunningQA } from '@/hooks/useCunningMode';
 import {
   Eye,
   Pause,
@@ -16,7 +17,10 @@ import {
   Settings,
   Mic,
   MicOff,
+  Keyboard,
 } from 'lucide-react';
+
+type InputMode = 'voice' | 'text';
 
 export default function CunningModePage() {
   const params = useParams();
@@ -27,7 +31,12 @@ export default function CunningModePage() {
   const [jobPostingText, setJobPostingText] = useState<string | undefined>();
   const [silenceDelay, setSilenceDelay] = useState(2000);
   const [showSettings, setShowSettings] = useState(false);
+  const [inputMode, setInputMode] = useState<InputMode>('voice');
+  const [textQuestion, setTextQuestion] = useState('');
+  const [textQaHistory, setTextQaHistory] = useState<CunningQA[]>([]);
+  const [isTextStreaming, setIsTextStreaming] = useState(false);
   const historyEndRef = useRef<HTMLDivElement>(null);
+  const textAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('cunning_job_posting');
@@ -40,18 +49,120 @@ export default function CunningModePage() {
     silenceDelay,
   });
 
-  // Auto-start on mount
+  // Auto-start voice on mount
   useEffect(() => {
-    if (cunning.isSupported && cunning.phase === 'idle') {
+    if (inputMode === 'voice' && cunning.isSupported && cunning.phase === 'idle') {
       cunning.start();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cunning.isSupported]);
+  }, [cunning.isSupported, inputMode]);
+
+  // Get combined QA history for display
+  const qaHistory = inputMode === 'voice' ? cunning.qaHistory : textQaHistory;
 
   // Auto-scroll history
   useEffect(() => {
     historyEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [cunning.qaHistory]);
+  }, [qaHistory]);
+
+  // Text mode: submit question
+  const submitTextQuestion = useCallback(async () => {
+    const question = textQuestion.trim();
+    if (question.length < 2 || isTextStreaming) return;
+
+    setTextQuestion('');
+    setIsTextStreaming(true);
+    setTextQaHistory((prev) => [...prev, { question, answer: '', isStreaming: true }]);
+
+    textAbortRef.current = new AbortController();
+
+    try {
+      const historyForApi = textQaHistory.slice(-3).map((qa) => ({
+        question: qa.question,
+        answer: qa.answer,
+      }));
+
+      const res = await fetch('/api/cunning/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resumeId,
+          question,
+          jobPostingText: jobPostingText || undefined,
+          conversationHistory: historyForApi.length > 0 ? historyForApi : undefined,
+        }),
+        signal: textAbortRef.current.signal,
+      });
+
+      if (!res.ok) throw new Error('API 요청 실패');
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('스트림 읽기 실패');
+
+      const decoder = new TextDecoder();
+      let accumulated = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6);
+          if (data === '[DONE]') break;
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.text) {
+              accumulated += parsed.text;
+              setTextQaHistory((prev) => {
+                const updated = [...prev];
+                const idx = updated.length - 1;
+                if (idx >= 0) updated[idx] = { ...updated[idx], answer: accumulated };
+                return updated;
+              });
+            }
+          } catch {
+            // skip
+          }
+        }
+      }
+
+      setTextQaHistory((prev) => {
+        const updated = [...prev];
+        const idx = updated.length - 1;
+        if (idx >= 0) updated[idx] = { ...updated[idx], isStreaming: false };
+        return updated;
+      });
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      setTextQaHistory((prev) => {
+        const updated = [...prev];
+        const idx = updated.length - 1;
+        if (idx >= 0) {
+          updated[idx] = {
+            ...updated[idx],
+            answer: updated[idx].answer || '답변 생성에 실패했습니다.',
+            isStreaming: false,
+          };
+        }
+        return updated;
+      });
+    } finally {
+      textAbortRef.current = null;
+      setIsTextStreaming(false);
+    }
+  }, [textQuestion, isTextStreaming, textQaHistory, resumeId, jobPostingText]);
+
+  // Switch mode handler
+  const handleModeSwitch = (mode: InputMode) => {
+    if (mode === inputMode) return;
+    if (inputMode === 'voice') cunning.stop();
+    setInputMode(mode);
+  };
 
   if (!isAdmin(session?.user?.email)) {
     router.push('/dashboard');
@@ -60,78 +171,78 @@ export default function CunningModePage() {
 
   const handleStop = () => {
     cunning.stop();
+    if (textAbortRef.current) textAbortRef.current.abort();
     router.push('/admin/cunning');
   };
 
-  const latestQA = cunning.qaHistory[cunning.qaHistory.length - 1];
-  const olderHistory = cunning.qaHistory.slice(0, -1);
-
-  if (!cunning.isSupported) {
-    return (
-      <div className="mx-auto max-w-4xl py-12 text-center">
-        <MicOff className="mx-auto h-12 w-12 text-muted-foreground" />
-        <h2 className="mt-4 text-xl font-bold">음성 인식이 지원되지 않습니다</h2>
-        <p className="mt-2 text-muted-foreground">
-          Chrome 브라우저를 사용해주세요
-        </p>
-        <Button className="mt-4" onClick={() => router.push('/admin/cunning')}>
-          돌아가기
-        </Button>
-      </div>
-    );
-  }
+  const latestQA = qaHistory[qaHistory.length - 1];
+  const olderHistory = qaHistory.slice(0, -1);
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       {/* Header controls */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="relative flex items-center gap-2">
-            {cunning.phase === 'listening' && !cunning.isPaused && (
-              <span className="absolute -left-1 -top-1 h-4 w-4 animate-ping rounded-full bg-red-400 opacity-75" />
-            )}
-            <div
-              className={`h-3 w-3 rounded-full ${
-                cunning.phase === 'idle'
-                  ? 'bg-gray-400'
+          {inputMode === 'voice' && (
+            <div className="relative flex items-center gap-2">
+              {cunning.phase === 'listening' && !cunning.isPaused && (
+                <span className="absolute -left-1 -top-1 h-4 w-4 animate-ping rounded-full bg-red-400 opacity-75" />
+              )}
+              <div
+                className={`h-3 w-3 rounded-full ${
+                  cunning.phase === 'idle'
+                    ? 'bg-gray-400'
+                    : cunning.isPaused
+                      ? 'bg-yellow-400'
+                      : cunning.phase === 'listening'
+                        ? 'bg-red-500'
+                        : 'bg-blue-500'
+                }`}
+              />
+              <span className="text-sm font-medium">
+                {cunning.phase === 'idle'
+                  ? '대기 중'
                   : cunning.isPaused
-                    ? 'bg-yellow-400'
+                    ? '일시정지'
                     : cunning.phase === 'listening'
-                      ? 'bg-red-500'
-                      : 'bg-blue-500'
-              }`}
-            />
-            <span className="text-sm font-medium">
-              {cunning.phase === 'idle'
-                ? '대기 중'
-                : cunning.isPaused
-                  ? '일시정지'
-                  : cunning.phase === 'listening'
-                    ? '듣는 중...'
-                    : '답변 생성 중...'}
-            </span>
-          </div>
+                      ? '듣는 중...'
+                      : '답변 생성 중...'}
+              </span>
+            </div>
+          )}
+          {inputMode === 'text' && (
+            <div className="flex items-center gap-2">
+              <div className={`h-3 w-3 rounded-full ${isTextStreaming ? 'bg-blue-500' : 'bg-green-500'}`} />
+              <span className="text-sm font-medium">
+                {isTextStreaming ? '답변 생성 중...' : '텍스트 입력 대기'}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSettings(!showSettings)}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          {inputMode === 'voice' && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSettings(!showSettings)}
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
 
-          {cunning.isPaused ? (
-            <Button variant="outline" size="sm" onClick={cunning.resume}>
-              <Play className="mr-1 h-4 w-4" />
-              재개
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" onClick={cunning.pause}>
-              <Pause className="mr-1 h-4 w-4" />
-              일시정지
-            </Button>
+              {cunning.isPaused ? (
+                <Button variant="outline" size="sm" onClick={cunning.resume}>
+                  <Play className="mr-1 h-4 w-4" />
+                  재개
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" onClick={cunning.pause}>
+                  <Pause className="mr-1 h-4 w-4" />
+                  일시정지
+                </Button>
+              )}
+            </>
           )}
 
           <Button variant="destructive" size="sm" onClick={handleStop}>
@@ -141,8 +252,34 @@ export default function CunningModePage() {
         </div>
       </div>
 
-      {/* Settings panel */}
-      {showSettings && (
+      {/* Mode tabs */}
+      <div className="flex gap-1 rounded-lg bg-muted p-1">
+        <button
+          onClick={() => handleModeSwitch('voice')}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            inputMode === 'voice'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Mic className="h-4 w-4" />
+          음성 입력
+        </button>
+        <button
+          onClick={() => handleModeSwitch('text')}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            inputMode === 'text'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Keyboard className="h-4 w-4" />
+          텍스트 입력
+        </button>
+      </div>
+
+      {/* Settings panel (voice only) */}
+      {inputMode === 'voice' && showSettings && (
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center gap-4">
@@ -166,51 +303,101 @@ export default function CunningModePage() {
         </Card>
       )}
 
-      {/* Real-time transcript */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Mic className="h-4 w-4" />
-            실시간 음성 인식
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pb-3">
-          <div className="min-h-[60px] rounded-lg bg-muted/50 p-3">
-            {cunning.transcript || cunning.interimTranscript ? (
-              <p className="text-sm">
-                {cunning.transcript}
-                {cunning.interimTranscript && (
-                  <span className="text-muted-foreground">
-                    {cunning.interimTranscript}
-                  </span>
-                )}
-              </p>
+      {/* Voice input */}
+      {inputMode === 'voice' && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Mic className="h-4 w-4" />
+              실시간 음성 인식
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-3">
+            {!cunning.isSupported ? (
+              <div className="flex flex-col items-center gap-2 py-4">
+                <MicOff className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  음성 인식이 지원되지 않습니다. 텍스트 입력을 사용해주세요.
+                </p>
+              </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                {cunning.phase === 'listening' && !cunning.isPaused
-                  ? '면접관의 질문을 기다리고 있습니다...'
-                  : cunning.phase === 'generating'
-                    ? '답변 생성 중 — 다음 질문을 기다립니다...'
-                    : '시작 대기 중...'}
-              </p>
+              <>
+                <div className="min-h-[60px] rounded-lg bg-muted/50 p-3">
+                  {cunning.transcript || cunning.interimTranscript ? (
+                    <p className="text-sm">
+                      {cunning.transcript}
+                      {cunning.interimTranscript && (
+                        <span className="text-muted-foreground">
+                          {cunning.interimTranscript}
+                        </span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {cunning.phase === 'listening' && !cunning.isPaused
+                        ? '면접관의 질문을 기다리고 있습니다...'
+                        : cunning.phase === 'generating'
+                          ? '답변 생성 중 — 다음 질문을 기다립니다...'
+                          : '시작 대기 중...'}
+                    </p>
+                  )}
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => cunning.submitQuestion()}
+                    disabled={
+                      cunning.transcript.trim().length < 10 ||
+                      cunning.phase === 'generating'
+                    }
+                  >
+                    <Send className="mr-1 h-3 w-3" />
+                    수동 제출
+                  </Button>
+                </div>
+              </>
             )}
-          </div>
-          <div className="mt-2 flex justify-end">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => cunning.submitQuestion()}
-              disabled={
-                cunning.transcript.trim().length < 10 ||
-                cunning.phase === 'generating'
-              }
-            >
-              <Send className="mr-1 h-3 w-3" />
-              수동 제출
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Text input */}
+      {inputMode === 'text' && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Keyboard className="h-4 w-4" />
+              질문 입력
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-3">
+            <Textarea
+              placeholder="면접 질문을 입력하세요..."
+              value={textQuestion}
+              onChange={(e) => setTextQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submitTextQuestion();
+                }
+              }}
+              rows={3}
+              disabled={isTextStreaming}
+            />
+            <div className="mt-2 flex justify-end">
+              <Button
+                size="sm"
+                onClick={submitTextQuestion}
+                disabled={textQuestion.trim().length < 2 || isTextStreaming}
+              >
+                <Send className="mr-1 h-3 w-3" />
+                답변 생성
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Latest answer card */}
       {latestQA && (
