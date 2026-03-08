@@ -43,6 +43,9 @@ app/prisma/migrations/
 .claude/
 .mcp.json
 
+# Audio storage
+.audio-storage/
+
 # Misc
 *.tsbuildinfo
 next-env.d.ts

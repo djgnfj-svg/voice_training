@@ -83,11 +83,12 @@ export class EvaluationService {
     responseTimeSec?: number;
     deepMode?: boolean;
     relatedKeyPoints?: string[];
+    userId: string;
   }): Promise<AnswerEvaluation> {
-    const { sessionId, questionIndex, answerTranscript, responseTimeSec, deepMode, relatedKeyPoints } = params;
+    const { sessionId, questionIndex, answerTranscript, responseTimeSec, deepMode, relatedKeyPoints, userId } = params;
 
     const session = await prisma.interviewSession.findUnique({
-      where: { id: sessionId },
+      where: { id: sessionId, userId },
       include: { answers: true },
     });
     if (!session) throw new Error('Session not found');

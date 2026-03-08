@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       responseTimeSec,
       deepMode,
       relatedKeyPoints,
+      userId: session.user.id,
     });
     return NextResponse.json(evaluation);
   } catch (error) {

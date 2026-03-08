@@ -124,6 +124,7 @@
 
 ## 배포
 - Vercel, 리전: `icn1` (인천/서울) — `vercel.json`
+- **프로덕션 도메인**: `reseeall.com`
 - `output: 'standalone'` 사용하지 않음 (Vercel에서 불필요)
 - Redis 없음 — `lib/redis.ts`가 연결 실패 시 graceful 무시 (캐시만 스킵)
 
