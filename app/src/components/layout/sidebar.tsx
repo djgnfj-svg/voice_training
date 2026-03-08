@@ -14,6 +14,7 @@ import {
   BookOpen,
   Coins,
   AudioLines,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -29,6 +30,7 @@ const navItems = [
 ];
 
 const adminNavItems = [
+  { href: '/admin/cunning', label: '컨닝 모드', icon: Eye },
   { href: '/admin/voice-test', label: '음성 테스트', icon: AudioLines },
 ];
 
