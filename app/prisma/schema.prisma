@@ -29,6 +29,7 @@ model User {
   paymentOrders      PaymentOrder[]
   activityLogs       ActivityLog[]
   couponUsages       CouponUsage[]
+  answerAssistSessions AnswerAssistSession[]
 
   @@map("users")
 }
@@ -45,6 +46,7 @@ model Resume {
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   interviewSessions InterviewSession[]
   activityLogs      ActivityLog[]
+  answerAssistSessions AnswerAssistSession[]
 
   @@map("resumes")
 }
@@ -291,4 +293,36 @@ model CouponUsage {
 
   @@unique([couponId, userId])
   @@map("coupon_usages")
+}
+
+model AnswerAssistSession {
+  id        String   @id @default(uuid())
+  userId    String
+  resumeId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume Resume              @relation(fields: [resumeId], references: [id])
+  items  AnswerAssistItem[]
+
+  @@index([userId, createdAt])
+  @@map("answer_assist_sessions")
+}
+
+model AnswerAssistItem {
+  id            String   @id @default(uuid())
+  sessionId     String
+  questionIndex Int
+  questionText  String   @db.Text
+  conversation  Json     @default("[]")
+  finalAnswer   String?  @db.Text
+  isCompleted   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  session AnswerAssistSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionIndex])
+  @@map("answer_assist_items")
 }
