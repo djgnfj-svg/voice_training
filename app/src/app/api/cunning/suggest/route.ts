@@ -14,7 +14,15 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const body = await request.json();
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: '잘못된 요청입니다' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
   const { resumeId, question, jobPostingText, conversationHistory } = body as {
     resumeId: string;
     question: string;
@@ -41,58 +49,66 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const parsedResume =
-    typeof resume.parsedData === 'string'
-      ? resume.parsedData
-      : JSON.stringify(resume.parsedData, null, 2);
+  try {
+    const parsedResume =
+      typeof resume.parsedData === 'string'
+        ? resume.parsedData
+        : JSON.stringify(resume.parsedData, null, 2);
 
-  const { system, user } = buildCunningSuggestPrompt({
-    parsedResume,
-    question,
-    jobPostingText,
-    conversationHistory,
-  });
+    const { system, user } = buildCunningSuggestPrompt({
+      parsedResume,
+      question,
+      jobPostingText,
+      conversationHistory,
+    });
 
-  const stream = anthropic.messages.stream({
-    model: MODELS.ANALYSIS,
-    max_tokens: 512,
-    temperature: 0.7,
-    system,
-    messages: [{ role: 'user', content: user }],
-  });
+    const stream = anthropic.messages.stream({
+      model: MODELS.ANALYSIS,
+      max_tokens: 512,
+      temperature: 0.7,
+      system,
+      messages: [{ role: 'user', content: user }],
+    });
 
-  const encoder = new TextEncoder();
+    const encoder = new TextEncoder();
 
-  const readable = new ReadableStream({
-    async start(controller) {
-      try {
-        for await (const event of stream) {
-          if (
-            event.type === 'content_block_delta' &&
-            event.delta.type === 'text_delta'
-          ) {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`)
-            );
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const event of stream) {
+            if (
+              event.type === 'content_block_delta' &&
+              event.delta.type === 'text_delta'
+            ) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`)
+              );
+            }
           }
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        } catch (error) {
+          console.error('Cunning suggest streaming error:', error);
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ error: '답변 생성 중 오류가 발생했습니다' })}\n\n`)
+          );
+          controller.close();
         }
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-        controller.close();
-      } catch (error) {
-        console.error('Cunning suggest streaming error:', error);
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ error: '답변 생성 중 오류가 발생했습니다' })}\n\n`)
-        );
-        controller.close();
-      }
-    },
-  });
+      },
+    });
 
-  return new Response(readable, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    },
-  });
+    return new Response(readable, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    });
+  } catch (error) {
+    console.error('Cunning suggest error:', error);
+    return new Response(JSON.stringify({ error: '답변 생성 중 오류가 발생했습니다' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }

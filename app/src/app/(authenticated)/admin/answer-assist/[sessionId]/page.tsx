@@ -55,8 +55,13 @@ export default function AnswerAssistChatPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeItem?.conversation, streamingText, compilingText]);
 
+  useEffect(() => {
+    if (!isAdmin(authSession?.user?.email)) {
+      router.push('/dashboard');
+    }
+  }, [authSession?.user?.email, router]);
+
   if (!isAdmin(authSession?.user?.email)) {
-    router.push('/dashboard');
     return null;
   }
 

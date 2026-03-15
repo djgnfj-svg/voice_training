@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useQuery } from '@tanstack/react-query';
@@ -35,8 +35,13 @@ export default function AnswerAssistSetupPage() {
     },
   });
 
+  useEffect(() => {
+    if (!isAdmin(session?.user?.email)) {
+      router.push('/dashboard');
+    }
+  }, [session?.user?.email, router]);
+
   if (!isAdmin(session?.user?.email)) {
-    router.push('/dashboard');
     return null;
   }
 

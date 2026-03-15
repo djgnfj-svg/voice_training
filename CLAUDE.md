@@ -111,7 +111,7 @@
   - 서비스: `app/src/services/payment.service.ts` — createOrder, confirmPayment, failOrder
 
 ## DB 모델 (핵심)
-- `User` — 계정 (Google OAuth, hashedPassword 없음, creditBalance, freeTrialUsed)
+- `User` — 계정 (Google OAuth + 이메일/비밀번호 로그인, creditBalance, freeTrialUsed)
 - `Account` — OAuth 계정 (PrismaAdapter 관리)
 - `Resume` — 복수 이력서 (userId, name, parsedData, fileUrl은 optional)
 - `JobPosting` — 채용공고

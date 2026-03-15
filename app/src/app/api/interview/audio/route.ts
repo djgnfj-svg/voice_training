@@ -37,8 +37,14 @@ export async function POST(request: NextRequest) {
     }
 
     const qIndex = parseInt(questionIndex, 10);
-    if (isNaN(qIndex)) {
+    if (isNaN(qIndex) || qIndex < 0) {
       return NextResponse.json({ error: '잘못된 questionIndex' }, { status: 400 });
+    }
+
+    // Validate sessionId is UUID format to prevent path traversal
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(sessionId)) {
+      return NextResponse.json({ error: '잘못된 세션 ID' }, { status: 400 });
     }
 
     // File size validation
@@ -110,8 +116,14 @@ export async function GET(request: NextRequest) {
     }
 
     const qIndex = parseInt(questionIndex, 10);
-    if (isNaN(qIndex)) {
+    if (isNaN(qIndex) || qIndex < 0) {
       return NextResponse.json({ error: '잘못된 questionIndex' }, { status: 400 });
+    }
+
+    // Validate sessionId is UUID format to prevent path traversal
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(sessionId)) {
+      return NextResponse.json({ error: '잘못된 세션 ID' }, { status: 400 });
     }
 
     // Verify session ownership

@@ -117,8 +117,10 @@ export class JobPostingService {
     return JSON.parse(content) as Partial<CompanyAnalysis>;
   }
 
-  async getJobPosting(id: string) {
-    return prisma.jobPosting.findUnique({ where: { id } });
+  async getJobPosting(id: string, userId?: string) {
+    return prisma.jobPosting.findFirst({
+      where: { id, ...(userId ? { userId } : {}) },
+    });
   }
 
   async getUserJobPostings(userId: string) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { isAdmin } from '@/lib/admin';
@@ -19,8 +19,13 @@ export default function CunningSetupPage() {
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [jobPostingText, setJobPostingText] = useState('');
 
+  useEffect(() => {
+    if (!isAdmin(session?.user?.email)) {
+      router.push('/dashboard');
+    }
+  }, [session?.user?.email, router]);
+
   if (!isAdmin(session?.user?.email)) {
-    router.push('/dashboard');
     return null;
   }
 

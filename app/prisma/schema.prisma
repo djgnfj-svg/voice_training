@@ -48,6 +48,7 @@ model Resume {
   activityLogs      ActivityLog[]
   answerAssistSessions AnswerAssistSession[]
 
+  @@index([userId])
   @@map("resumes")
 }
 
@@ -94,6 +95,7 @@ model JobPosting {
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   interviewSessions InterviewSession[]
 
+  @@index([userId])
   @@map("job_postings")
 }
 
@@ -122,6 +124,9 @@ model InterviewSession {
   resume     Resume            @relation(fields: [resumeId], references: [id])
   answers    InterviewAnswer[]
 
+  @@index([userId])
+  @@index([resumeId])
+  @@index([jobPostingId])
   @@map("interview_sessions")
 }
 
@@ -200,6 +205,7 @@ enum CreditTxType {
   ADMIN_GRANT
   PURCHASE
   SESSION_DEBIT
+  FEATURE_DEBIT
   REFUND
   COUPON
 }

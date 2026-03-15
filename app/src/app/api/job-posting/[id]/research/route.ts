@@ -64,10 +64,6 @@ export async function POST(
       parsedData.techStack,
     );
 
-    if (!isDev) {
-      await creditService.deductForFeature(session.user.id, id, '심층 기업 분석', CREDIT_COSTS.DEEP_RESEARCH);
-    }
-
     const mergedAnalysis: CompanyAnalysis = {
       ...(existingAnalysis || { interviewStyle: '', culture: [], pastQuestionTrends: [] }),
       ...deepResult,
@@ -77,12 +73,46 @@ export async function POST(
       deepResearch: true,
     };
 
-    await prisma.jobPosting.update({
-      where: { id },
-      data: {
-        companyAnalysis: mergedAnalysis as unknown as Prisma.InputJsonValue,
-      },
-    });
+    // 크레딧 차감과 DB 저장을 트랜잭션으로 묶어 원자성 보장
+    if (!isDev) {
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.updateMany({
+          where: { id: session.user.id, creditBalance: { gte: CREDIT_COSTS.DEEP_RESEARCH } },
+          data: { creditBalance: { decrement: CREDIT_COSTS.DEEP_RESEARCH } },
+        });
+        if (updated.count === 0) throw new Error('INSUFFICIENT_CREDITS');
+
+        const user = await tx.user.findUnique({
+          where: { id: session.user.id },
+          select: { creditBalance: true },
+        });
+
+        await tx.creditTransaction.create({
+          data: {
+            userId: session.user.id,
+            amount: -CREDIT_COSTS.DEEP_RESEARCH,
+            balance: user!.creditBalance,
+            type: 'FEATURE_DEBIT',
+            description: '심층 기업 분석',
+            referenceId: id,
+          },
+        });
+
+        await tx.jobPosting.update({
+          where: { id },
+          data: {
+            companyAnalysis: mergedAnalysis as unknown as Prisma.InputJsonValue,
+          },
+        });
+      });
+    } else {
+      await prisma.jobPosting.update({
+        where: { id },
+        data: {
+          companyAnalysis: mergedAnalysis as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
 
     return NextResponse.json({ companyAnalysis: mergedAnalysis });
   } catch (error) {

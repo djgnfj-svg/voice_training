@@ -94,7 +94,10 @@ export class EvaluationService {
     if (!session) throw new Error('Session not found');
 
     const existingAnswer = session.answers.find(a => a.questionIndex === questionIndex);
-    const questionText = existingAnswer?.questionText || '';
+    if (!existingAnswer) {
+      throw new Error(`Answer not found for session ${sessionId}, questionIndex ${questionIndex}`);
+    }
+    const questionText = existingAnswer.questionText;
 
     const evaluation = await this.evaluateStateless({
       questionText,
