@@ -1,5 +1,4 @@
 import type { NextConfig } from 'next';
-import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['msedge-tts'],
@@ -45,7 +44,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https://lh3.googleusercontent.com",
               "font-src 'self'",
-              "connect-src 'self' https://api.tosspayments.com https://*.anthropic.com https://*.sentry.io https://www.google-analytics.com https://*.supabase.co",
+              "connect-src 'self' https://api.tosspayments.com https://*.anthropic.com https://www.google-analytics.com https://*.supabase.co",
               "frame-src https://js.tosspayments.com",
               "media-src 'self' blob: https://*.supabase.co",
             ].join('; '),
@@ -56,12 +55,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
-  silent: true,
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  authToken: process.env.SENTRY_AUTH_TOKEN,
-  sourcemaps: {
-    disable: !process.env.SENTRY_AUTH_TOKEN,
-  },
-});
+export default nextConfig;
