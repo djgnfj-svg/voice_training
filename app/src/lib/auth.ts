@@ -41,7 +41,7 @@ const nextAuth = NextAuth({
     },
   },
   providers: [
-    Google,
+    Google({ allowDangerousEmailAccountLinking: true }),
     Credentials({
       name: 'credentials',
       credentials: {
@@ -72,42 +72,6 @@ const nextAuth = NextAuth({
     }),
   ],
   callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider === 'google' && user.email) {
-        // 같은 이메일의 기존 유저가 있으면 Google 계정을 자동 연결
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email },
-          include: { accounts: { where: { provider: 'google' } } },
-        });
-
-        if (existingUser && existingUser.accounts.length === 0) {
-          await prisma.account.create({
-            data: {
-              userId: existingUser.id,
-              type: account.type,
-              provider: account.provider,
-              providerAccountId: account.providerAccountId,
-              access_token: account.access_token,
-              refresh_token: account.refresh_token,
-              expires_at: account.expires_at,
-              token_type: account.token_type,
-              scope: account.scope,
-              id_token: account.id_token,
-            },
-          });
-          // user 정보 업데이트 (이름, 프로필 이미지)
-          await prisma.user.update({
-            where: { id: existingUser.id },
-            data: {
-              name: user.name || existingUser.name,
-              image: user.image || existingUser.image,
-            },
-          });
-          return true;
-        }
-      }
-      return true;
-    },
     async session({ session, token }) {
       if (token.sub && session.user) {
         session.user.id = token.sub;
