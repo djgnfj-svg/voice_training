@@ -16,11 +16,9 @@ const serverEnvSchema = z.object({
   TAVILY_API_KEY: z.string().optional(),
   REDIS_URL: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
-  SENTRY_DSN: z.string().url().optional().or(z.literal('')),
   NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),
   SUPABASE_URL: z.string().url().optional().or(z.literal('')),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
-  SENTRY_AUTH_TOKEN: z.string().optional(),
   ADMIN_EMAILS: z
     .string()
     .default('')
