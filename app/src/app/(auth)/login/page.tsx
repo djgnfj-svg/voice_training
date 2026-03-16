@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { signIn, signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -88,7 +88,10 @@ export default function LoginPage() {
             className="w-full"
             size="lg"
             variant="outline"
-            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            onClick={async () => {
+              await signOut({ redirect: false });
+              signIn('google', { callbackUrl: '/dashboard' });
+            }}
           >
             <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
               <path
