@@ -8,8 +8,9 @@ const serverEnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
   AUTH_GOOGLE_ID: z.string().min(1, 'AUTH_GOOGLE_ID is required'),
   AUTH_GOOGLE_SECRET: z.string().min(1, 'AUTH_GOOGLE_SECRET is required'),
-  NEXT_PUBLIC_TOSS_CLIENT_KEY: z.string().min(1, 'NEXT_PUBLIC_TOSS_CLIENT_KEY is required'),
-  TOSS_SECRET_KEY: z.string().min(1, 'TOSS_SECRET_KEY is required'),
+  // Optional (결제 준비중)
+  NEXT_PUBLIC_TOSS_CLIENT_KEY: z.string().optional(),
+  TOSS_SECRET_KEY: z.string().optional(),
 
   // Optional
   TAVILY_API_KEY: z.string().optional(),
