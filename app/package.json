@@ -44,6 +44,7 @@
     "msedge-tts": "^2.0.4",
     "next": "^15.1.0",
     "next-auth": "5.0.0-beta.25",
+    "next-themes": "^0.4.6",
     "openai": "^4.77.0",
     "pdf-parse": "^1.1.1",
     "react": "^19.0.0",

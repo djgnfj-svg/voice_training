@@ -87,13 +87,13 @@ export default function ReportPage() {
             </div>
             {report.matchingScore !== undefined && (
               <div className="text-center">
-                <div className="text-3xl font-bold text-blue-500 sm:text-4xl">{report.matchingScore}%</div>
+                <div className="text-3xl font-bold text-blue-500 dark:text-blue-400 sm:text-4xl">{report.matchingScore}%</div>
                 <p className="text-sm text-muted-foreground">공고 매칭도</p>
               </div>
             )}
             {report.speechAnalysis && (
               <div className="text-center">
-                <div className="flex items-center gap-1 text-3xl font-bold text-green-500 sm:text-4xl">
+                <div className="flex items-center gap-1 text-3xl font-bold text-green-500 dark:text-green-400 sm:text-4xl">
                   <Clock className="h-6 w-6 sm:h-8 sm:w-8" />
                   {report.speechAnalysis.averageResponseTime}초
                 </div>
@@ -137,7 +137,7 @@ export default function ReportPage() {
                 <ul className="space-y-2">
                   {report.strengths.map((s, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
-                      <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-xs font-medium text-green-700">
+                      <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                         {i + 1}
                       </span>
                       {s}
@@ -290,7 +290,7 @@ export default function ReportPage() {
                 <ul className="space-y-2">
                   {report.improvements.map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
-                      <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-medium text-orange-700">
+                      <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
                         {i + 1}
                       </span>
                       {item}
@@ -318,9 +318,9 @@ export default function ReportPage() {
                       <span className="text-sm font-medium">{report.speechAnalysis.averageWpm}음절/분</span>
                     )}
                     <Badge variant="outline" className={
-                      report.speechAnalysis.speechRate === '적정' ? 'border-green-300 text-green-700' :
-                      report.speechAnalysis.speechRate === '느림' ? 'border-amber-300 text-amber-700' :
-                      'border-red-300 text-red-700'
+                      report.speechAnalysis.speechRate === '적정' ? 'border-green-300 text-green-700 dark:border-green-800 dark:text-green-400' :
+                      report.speechAnalysis.speechRate === '느림' ? 'border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400' :
+                      'border-red-300 text-red-700 dark:border-red-800 dark:text-red-400'
                     }>{report.speechAnalysis.speechRate}</Badge>
                   </div>
                 </div>
@@ -329,9 +329,9 @@ export default function ReportPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{report.speechAnalysis.fillerWordCount}회</span>
                     <Badge variant="outline" className={
-                      report.speechAnalysis.fillerWordCount <= 5 ? 'border-green-300 text-green-700' :
-                      report.speechAnalysis.fillerWordCount <= 15 ? 'border-amber-300 text-amber-700' :
-                      'border-red-300 text-red-700'
+                      report.speechAnalysis.fillerWordCount <= 5 ? 'border-green-300 text-green-700 dark:border-green-800 dark:text-green-400' :
+                      report.speechAnalysis.fillerWordCount <= 15 ? 'border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400' :
+                      'border-red-300 text-red-700 dark:border-red-800 dark:text-red-400'
                     }>
                       {report.speechAnalysis.fillerWordCount <= 5 ? '양호' :
                        report.speechAnalysis.fillerWordCount <= 15 ? '주의' : '많음'}

@@ -69,10 +69,11 @@ function SuccessContent() {
     return (
       <Card className="mx-auto max-w-md">
         <CardHeader>
-          <CardTitle className="flex items-center justify-center gap-2 text-red-600">
+          <CardTitle className="flex items-center justify-center gap-2 text-red-600 dark:text-red-400">
             <XCircle className="h-6 w-6" />
             결제 확인 실패
           </CardTitle>
+
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">
           <p className="text-center text-muted-foreground">{errorMessage}</p>
@@ -89,7 +90,7 @@ function SuccessContent() {
   return (
     <Card className="mx-auto max-w-md">
       <CardHeader>
-        <CardTitle className="flex items-center justify-center gap-2 text-green-600">
+        <CardTitle className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
           <CheckCircle className="h-6 w-6" />
           결제 완료
         </CardTitle>

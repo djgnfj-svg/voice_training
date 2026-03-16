@@ -11,7 +11,7 @@ function renderMarkdown(text: string) {
   return parts.map((part, i) => {
     if (part.startsWith('`') && part.endsWith('`')) {
       return (
-        <code key={i} className="rounded bg-black/10 px-1 py-0.5 text-xs font-mono">
+        <code key={i} className="rounded bg-black/10 dark:bg-white/10 px-1 py-0.5 text-xs font-mono">
           {part.slice(1, -1)}
         </code>
       );

@@ -191,9 +191,9 @@ export default function CunningModePage() {
               <div
                 className={`h-3 w-3 rounded-full ${
                   cunning.phase === 'idle'
-                    ? 'bg-gray-400'
+                    ? 'bg-gray-400 dark:bg-gray-600'
                     : cunning.isPaused
-                      ? 'bg-yellow-400'
+                      ? 'bg-yellow-400 dark:bg-yellow-500'
                       : cunning.phase === 'listening'
                         ? 'bg-red-500'
                         : 'bg-blue-500'
@@ -212,7 +212,7 @@ export default function CunningModePage() {
           )}
           {inputMode === 'text' && (
             <div className="flex items-center gap-2">
-              <div className={`h-3 w-3 rounded-full ${isTextStreaming ? 'bg-blue-500' : 'bg-green-500'}`} />
+              <div className={`h-3 w-3 rounded-full ${isTextStreaming ? 'bg-blue-500' : 'bg-green-500 dark:bg-green-400'}`} />
               <span className="text-sm font-medium">
                 {isTextStreaming ? '답변 생성 중...' : '텍스트 입력 대기'}
               </span>

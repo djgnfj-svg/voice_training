@@ -200,7 +200,7 @@ function PasswordChangeDialog({
             <p className="text-sm text-destructive">{error}</p>
           )}
           {success && (
-            <p className="text-sm text-green-600">{success}</p>
+            <p className="text-sm text-green-600 dark:text-green-400">{success}</p>
           )}
 
           <div className="flex justify-end gap-2">

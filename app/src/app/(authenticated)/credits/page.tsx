@@ -259,7 +259,7 @@ export default function CreditsPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-sm font-medium ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-sm font-medium ${tx.amount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                       {tx.amount > 0 ? `+${tx.amount}` : tx.amount}
                     </p>
                     <p className="text-xs text-muted-foreground">

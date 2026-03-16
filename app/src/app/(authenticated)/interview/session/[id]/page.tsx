@@ -332,8 +332,8 @@ export default function InterviewSessionPage() {
               })()}
 
               <div className="flex flex-col items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 ring-4 ring-red-100/50 animate-pulse">
-                  <Mic className="h-8 w-8 text-red-500" />
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 ring-4 ring-red-100/50 animate-pulse dark:bg-red-900/30 dark:ring-red-900/30">
+                  <Mic className="h-8 w-8 text-red-500 dark:text-red-400" />
                 </div>
                 <p className="text-sm font-medium text-red-500">녹음 중...</p>
               </div>
@@ -350,12 +350,12 @@ export default function InterviewSessionPage() {
               {/* Real-time speech metrics */}
               {(() => {
                 const m = interview.speechAnalytics;
-                const wpmStatus = m.wpm < 200 ? { label: '느림', color: 'text-amber-600 bg-amber-100' }
-                  : m.wpm > 350 ? { label: '빠름', color: 'text-red-600 bg-red-100' }
-                  : { label: '적정', color: 'text-green-600 bg-green-100' };
-                const fillerStatus = m.fillerCount <= 2 ? { label: '양호', color: 'text-green-600 bg-green-100' }
-                  : m.fillerCount <= 5 ? { label: '주의', color: 'text-amber-600 bg-amber-100' }
-                  : { label: '많음', color: 'text-red-600 bg-red-100' };
+                const wpmStatus = m.wpm < 200 ? { label: '느림', color: 'text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30' }
+                  : m.wpm > 350 ? { label: '빠름', color: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30' }
+                  : { label: '적정', color: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30' };
+                const fillerStatus = m.fillerCount <= 2 ? { label: '양호', color: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30' }
+                  : m.fillerCount <= 5 ? { label: '주의', color: 'text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30' }
+                  : { label: '많음', color: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30' };
                 return (
                   <div className="grid grid-cols-3 gap-2 rounded-lg border p-3">
                     <div className="text-center">
@@ -424,11 +424,11 @@ export default function InterviewSessionPage() {
               <div className="flex items-center gap-3">
                 <div className={cn(
                   'flex h-12 w-12 items-center justify-center rounded-full',
-                  score >= 80 ? 'bg-green-100' : score >= 60 ? 'bg-blue-100' : score >= 40 ? 'bg-amber-100' : 'bg-red-100'
+                  score >= 80 ? 'bg-green-100 dark:bg-green-900/30' : score >= 60 ? 'bg-blue-100 dark:bg-blue-900/30' : score >= 40 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-red-100 dark:bg-red-900/30'
                 )}>
                   <span className={cn(
                     'text-lg font-bold',
-                    score >= 80 ? 'text-green-600' : score >= 60 ? 'text-blue-600' : score >= 40 ? 'text-amber-600' : 'text-red-600'
+                    score >= 80 ? 'text-green-600 dark:text-green-400' : score >= 60 ? 'text-blue-600 dark:text-blue-400' : score >= 40 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
                   )}>
                     {score}
                   </span>
@@ -579,9 +579,9 @@ export default function InterviewSessionPage() {
 
       {/* Speech API not supported warning */}
       {!interview.speech.isSupported && (
-        <Card className="border-yellow-200 bg-yellow-50">
+        <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950">
           <CardContent className="py-4">
-            <p className="text-sm text-yellow-800">
+            <p className="text-sm text-yellow-800 dark:text-yellow-200">
               이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge 브라우저를 사용해주세요.
             </p>
           </CardContent>

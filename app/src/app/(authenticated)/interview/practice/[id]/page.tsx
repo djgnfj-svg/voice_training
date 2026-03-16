@@ -139,12 +139,12 @@ export default function PracticePage() {
                 <p className="text-sm text-muted-foreground">연습한 질문</p>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-bold text-blue-500">{evaluated}</div>
+                <div className="text-4xl font-bold text-blue-500 dark:text-blue-400">{evaluated}</div>
                 <p className="text-sm text-muted-foreground">AI 평가 받은 질문</p>
               </div>
               {avgScore !== null && (
                 <div className="text-center">
-                  <div className="text-4xl font-bold text-green-500">{avgScore}</div>
+                  <div className="text-4xl font-bold text-green-500 dark:text-green-400">{avgScore}</div>
                   <p className="text-sm text-muted-foreground">평균 점수</p>
                 </div>
               )}
@@ -295,8 +295,8 @@ export default function PracticePage() {
               ) : (
                 <>
                   <div className="flex flex-col items-center gap-4">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
-                      <Mic className="h-8 w-8 text-red-500" />
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                      <Mic className="h-8 w-8 text-red-500 dark:text-red-400" />
                     </div>
                     <p className="text-sm font-medium text-red-500">녹음 중...</p>
                   </div>
@@ -339,7 +339,7 @@ export default function PracticePage() {
               {/* Practice transcript */}
               {practice.currentResult && (
                 <div>
-                  <p className="mb-1 text-sm font-medium text-blue-600">이번 답변</p>
+                  <p className="mb-1 text-sm font-medium text-blue-600 dark:text-blue-400">이번 답변</p>
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-900 dark:bg-blue-950">
                     {practice.currentResult.practiceTranscript}
                   </div>
@@ -359,7 +359,7 @@ export default function PracticePage() {
               {/* Model answer */}
               {practice.currentAnswer.modelAnswer && (
                 <div>
-                  <p className="mb-1 text-sm font-medium text-green-600">모범 답안</p>
+                  <p className="mb-1 text-sm font-medium text-green-600 dark:text-green-400">모범 답안</p>
                   <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm dark:border-green-900 dark:bg-green-950">
                     {practice.currentAnswer.modelAnswer}
                   </div>
@@ -439,9 +439,9 @@ export default function PracticePage() {
 
       {/* Speech API warning */}
       {!practice.speech.isSupported && (
-        <Card className="border-yellow-200 bg-yellow-50">
+        <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950">
           <CardContent className="py-4">
-            <p className="text-sm text-yellow-800">
+            <p className="text-sm text-yellow-800 dark:text-yellow-200">
               이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge 브라우저를 사용해주세요.
             </p>
           </CardContent>

@@ -16,7 +16,7 @@ function FailContent() {
   return (
     <Card className="mx-auto max-w-md">
       <CardHeader>
-        <CardTitle className="flex items-center justify-center gap-2 text-red-600">
+        <CardTitle className="flex items-center justify-center gap-2 text-red-600 dark:text-red-400">
           <XCircle className="h-6 w-6" />
           결제 실패
         </CardTitle>

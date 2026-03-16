@@ -17,7 +17,10 @@ import {
   Eye,
   MessageSquare,
   Moon,
+  Sun,
+  Monitor,
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useMobileSidebar } from '@/hooks/useMobileSidebar';
@@ -37,6 +40,31 @@ const adminNavItems = [
   { href: '/admin/answer-assist', label: '답변 어시스트', icon: MessageSquare },
   { href: '/admin/voice-test', label: '음성 테스트', icon: AudioLines },
 ];
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+
+  const cycleTheme = () => {
+    if (theme === 'light') setTheme('dark');
+    else if (theme === 'dark') setTheme('system');
+    else setTheme('light');
+  };
+
+  const icon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
+  const label = theme === 'dark' ? '다크 모드' : theme === 'light' ? '라이트 모드' : '시스템 설정';
+  const Icon = icon;
+
+  return (
+    <Button
+      variant="ghost"
+      className="w-full justify-start gap-3"
+      onClick={cycleTheme}
+    >
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
+    </Button>
+  );
+}
 
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const pathname = usePathname();
@@ -102,7 +130,8 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       </nav>
 
       {/* User section */}
-      <div className="border-t p-3">
+      <div className="border-t p-3 space-y-1">
+        <ThemeToggle />
         <Button
           variant="ghost"
           className="w-full justify-start gap-3"

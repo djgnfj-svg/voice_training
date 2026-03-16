@@ -217,7 +217,7 @@ export default function AnswerAssistChatPage() {
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between">
                           <CardTitle className="flex items-center gap-2 text-sm">
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                             최종 답변
                           </CardTitle>
                           <Button
@@ -226,7 +226,7 @@ export default function AnswerAssistChatPage() {
                             onClick={() => handleCopy(finalAnswer)}
                           >
                             {copied ? (
-                              <Check className="h-3.5 w-3.5 text-green-600" />
+                              <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                             ) : (
                               <Copy className="h-3.5 w-3.5" />
                             )}
