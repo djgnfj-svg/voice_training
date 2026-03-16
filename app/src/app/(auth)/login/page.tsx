@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { signIn, signOut } from 'next-auth/react';
+import { useState, useEffect } from 'react';
+import { signIn, useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,10 +10,18 @@ import { Label } from '@/components/ui/label';
 import { Mic, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
+  const { status } = useSession();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.replace('/dashboard');
+    }
+  }, [status, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +41,14 @@ export default function LoginPage() {
       window.location.href = '/dashboard';
     }
   };
+
+  if (status === 'loading' || status === 'authenticated') {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/50">
@@ -88,10 +105,7 @@ export default function LoginPage() {
             className="w-full"
             size="lg"
             variant="outline"
-            onClick={async () => {
-              await signOut({ redirect: false });
-              signIn('google', { callbackUrl: '/dashboard' });
-            }}
+            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
           >
             <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
               <path

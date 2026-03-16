@@ -22,39 +22,9 @@ function checkLoginRateLimit(email: string): boolean {
   return entry.count <= LOGIN_LIMIT;
 }
 
-const basePrismaAdapter = PrismaAdapter(prisma);
-
 const nextAuth = NextAuth({
   debug: process.env.NODE_ENV !== 'production' || !!process.env.AUTH_DEBUG,
-  adapter: {
-    ...basePrismaAdapter,
-    // NextAuth v5 beta bug workaround: linkAccount이 중복 Account 생성 시도하는 문제 방지
-    linkAccount: async (account) => {
-      const existing = await prisma.account.findUnique({
-        where: {
-          provider_providerAccountId: {
-            provider: account.provider,
-            providerAccountId: account.providerAccountId,
-          },
-        },
-      });
-      if (existing) {
-        // 이미 존재하면 토큰만 업데이트
-        return prisma.account.update({
-          where: { id: existing.id },
-          data: {
-            refresh_token: account.refresh_token,
-            access_token: account.access_token,
-            expires_at: account.expires_at,
-            token_type: account.token_type,
-            scope: account.scope,
-            id_token: account.id_token,
-          },
-        }) as any;
-      }
-      return basePrismaAdapter.linkAccount!(account);
-    },
-  },
+  adapter: PrismaAdapter(prisma),
   session: {
     strategy: 'jwt',
     maxAge: 60 * 60 * 24, // 24 hours
