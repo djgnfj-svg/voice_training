@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { openai, MODELS } from '@/lib/openai';
 import { NIGHTLY_TUTOR_QUESTION_PROMPT } from '@/prompts/nightly-study';
+import { getKstMidnight } from '@/lib/date';
 import { z } from 'zod';
 
 import csBasics from '@/data/questions/cs-basics.json';
@@ -37,21 +38,13 @@ const CATEGORY_MAP: Record<string, QuestionBank> = {
   DEVOPS: devops as QuestionBank,
 };
 
+const VALID_CATEGORIES = ['CS_BASICS', 'JAVASCRIPT', 'REACT', 'NEXTJS', 'TYPESCRIPT', 'DATABASE', 'DEVOPS'] as const;
+
 const startSchema = z.object({
-  categories: z.array(z.string()).min(1),
+  categories: z.array(z.enum(VALID_CATEGORIES)).min(1),
   mode: z.enum(['deep', 'light']),
   resumeId: z.string().optional(),
 });
-
-function getKstMidnight(): Date {
-  const now = new Date();
-  const kstOffset = 9 * 60 * 60 * 1000;
-  const kstNow = new Date(now.getTime() + kstOffset);
-  const kstMidnight = new Date(
-    Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate())
-  );
-  return new Date(kstMidnight.getTime() - kstOffset);
-}
 
 function pickRandomQuestions(categories: string[], count: number): { question: BankQuestion; category: string }[] {
   const pool: { question: BankQuestion; category: string }[] = [];
@@ -133,7 +126,12 @@ export async function POST(request: NextRequest) {
         });
 
         const content = response.choices[0]?.message?.content;
-        const parsed = content ? JSON.parse(content) : { tutorQuestion: question.questionText };
+        let parsed: { tutorQuestion?: string };
+        try {
+          parsed = content ? JSON.parse(content) : { tutorQuestion: question.questionText };
+        } catch {
+          parsed = { tutorQuestion: question.questionText };
+        }
 
         return {
           originalQuestion: question.questionText,
@@ -145,7 +143,7 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    return NextResponse.json({ questions, dailyLimitUsed: false });
+    return NextResponse.json({ questions });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });

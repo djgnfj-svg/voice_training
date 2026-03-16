@@ -7,7 +7,6 @@ import { ConversationView } from '@/components/nightly-study/conversation-view';
 import { StudySummaryCard } from '@/components/nightly-study/study-summary-card';
 import { Button } from '@/components/ui/button';
 import { Mic, MicOff, SkipForward, Square, Loader2, Moon, AlertCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 export default function NightlyStudySessionPage() {
   const router = useRouter();
@@ -42,11 +41,12 @@ export default function NightlyStudySessionPage() {
     const config = JSON.parse(configStr);
     sessionStorage.removeItem('nightly_study_config');
     startSession(config.categories, config.mode, config.resumeId);
-  }, [router, startSession]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- startSession ref-stable via startedRef guard
+  }, [router]);
 
   // Prevent accidental navigation
   useEffect(() => {
-    if (phase === 'summary' || phase === 'setup' || phase === 'error') return;
+    if (phase === 'summary' || phase === 'setup' || phase === 'error' || phase === 'daily-limit' || phase === 'loading') return;
 
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();

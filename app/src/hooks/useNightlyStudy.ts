@@ -42,6 +42,14 @@ interface QuestionState {
   isComplete: boolean;
 }
 
+function updateQuestionState(
+  states: QuestionState[],
+  idx: number,
+  updater: (state: QuestionState) => QuestionState,
+): QuestionState[] {
+  return states.map((s, i) => (i === idx ? updater(s) : s));
+}
+
 export function useNightlyStudy() {
   const [phase, setPhase] = useState<NightlyStudyPhase>('setup');
   const [questions, setQuestions] = useState<StudyQuestion[]>([]);
@@ -52,12 +60,61 @@ export function useNightlyStudy() {
   const [mode, setMode] = useState<'deep' | 'light'>('deep');
 
   const modeRef = useRef<'deep' | 'light'>('deep');
+  const resumeIdRef = useRef<string | undefined>(undefined);
+  const questionStatesRef = useRef<QuestionState[]>([]);
+  questionStatesRef.current = questionStates;
+
+  const questionsRef = useRef<StudyQuestion[]>([]);
+  questionsRef.current = questions;
+
+  const currentQuestionIndexRef = useRef(0);
+  currentQuestionIndexRef.current = currentQuestionIndex;
 
   const speech = useSpeechRecognition();
   const tts = useTextToSpeech();
   const recorder = useAudioRecorder();
 
   const currentState = questionStates[currentQuestionIndex] || null;
+
+  const completeSession = useCallback(async () => {
+    setPhase('processing');
+    tts.stop();
+    speech.stopListening();
+    recorder.stopRecording();
+
+    try {
+      const states = questionStatesRef.current;
+      const res = await fetch('/api/nightly-study/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questions: states.map((s) => ({
+            originalQuestion: s.question.originalQuestion,
+            tutorQuestion: s.question.tutorQuestion,
+            category: s.question.category,
+            subcategory: s.question.subcategory,
+            conversation: s.conversation,
+            conceptsCovered: s.conceptsCovered,
+            keyPoints: s.question.keyPoints,
+          })),
+          mode: modeRef.current,
+          resumeId: resumeIdRef.current,
+        }),
+      });
+
+      if (!res.ok) throw new Error('완료 처리 실패');
+
+      const data = await res.json();
+      setSummary(data.summary);
+      setPhase('summary');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '알 수 없는 오류');
+      setPhase('error');
+    }
+  }, [tts, speech, recorder]);
+
+  const completeSessionRef = useRef(completeSession);
+  completeSessionRef.current = completeSession;
 
   const startSession = useCallback(async (
     categories: string[],
@@ -67,6 +124,7 @@ export function useNightlyStudy() {
     setPhase('loading');
     setError(null);
     modeRef.current = selectedMode;
+    resumeIdRef.current = resumeId;
     setMode(selectedMode);
 
     try {
@@ -90,21 +148,17 @@ export function useNightlyStudy() {
       setQuestions(qs);
       setCurrentQuestionIndex(0);
 
-      const states: QuestionState[] = qs.map((q) => ({
+      const firstMsg: ConversationMessage = { role: 'tutor', content: qs[0].tutorQuestion };
+      const states: QuestionState[] = qs.map((q, i) => ({
         question: q,
-        conversation: [],
+        conversation: i === 0 ? [firstMsg] : [],
         conceptsCovered: [],
         round: 0,
         isComplete: false,
       }));
       setQuestionStates(states);
 
-      // Start tutor speaking first question
       setPhase('tutor-speaking');
-      const firstMsg: ConversationMessage = { role: 'tutor', content: qs[0].tutorQuestion };
-      states[0].conversation.push(firstMsg);
-      setQuestionStates([...states]);
-
       try {
         await tts.speak(qs[0].tutorQuestion);
       } catch {
@@ -126,14 +180,21 @@ export function useNightlyStudy() {
     const transcript = speech.transcript.trim();
     setPhase('processing');
 
-    const idx = currentQuestionIndex;
-    const state = questionStates[idx];
+    const idx = currentQuestionIndexRef.current;
+    const states = questionStatesRef.current;
+    const state = states[idx];
     if (!state) return;
 
-    // Add user message
     const userMsg: ConversationMessage = { role: 'user', content: transcript || '(잘 모르겠어요)' };
-    state.conversation.push(userMsg);
-    state.round += 1;
+    const newRound = state.round + 1;
+
+    // Immutable update: add user message + increment round
+    const withUserMsg = updateQuestionState(states, idx, (s) => ({
+      ...s,
+      conversation: [...s.conversation, userMsg],
+      round: newRound,
+    }));
+    setQuestionStates(withUserMsg);
 
     try {
       const res = await fetch('/api/nightly-study/respond', {
@@ -142,9 +203,9 @@ export function useNightlyStudy() {
         body: JSON.stringify({
           questionText: state.question.originalQuestion,
           userAnswer: transcript || '',
-          conversationHistory: state.conversation.slice(0, -1), // exclude latest user msg for history
+          conversationHistory: state.conversation, // pre-update snapshot (excludes current userMsg)
           mode: modeRef.current,
-          round: state.round,
+          round: newRound,
           keyPoints: state.question.keyPoints,
         }),
       });
@@ -153,23 +214,29 @@ export function useNightlyStudy() {
 
       const data = await res.json();
 
-      // Add tutor response
       const tutorMsg: ConversationMessage = { role: 'tutor', content: data.tutorResponse };
-      state.conversation.push(tutorMsg);
-      state.conceptsCovered = [...new Set([...state.conceptsCovered, ...data.conceptsCovered])];
-      state.isComplete = data.isComplete;
+      const followUpMsg: ConversationMessage | null =
+        data.followUpQuestion && !data.isComplete
+          ? { role: 'tutor', content: data.followUpQuestion }
+          : null;
 
-      // If there's a follow-up, add it to the tutor response
-      if (data.followUpQuestion && !data.isComplete) {
-        const followUpMsg: ConversationMessage = { role: 'tutor', content: data.followUpQuestion };
-        state.conversation.push(followUpMsg);
-      }
+      // Immutable update: add tutor response + follow-up + concepts
+      const latestStates = questionStatesRef.current;
+      const withTutor = updateQuestionState(latestStates, idx, (s) => ({
+        ...s,
+        conversation: [
+          ...s.conversation,
+          tutorMsg,
+          ...(followUpMsg ? [followUpMsg] : []),
+        ],
+        conceptsCovered: [...new Set([...s.conceptsCovered, ...data.conceptsCovered])],
+        isComplete: data.isComplete,
+      }));
+      setQuestionStates(withTutor);
 
-      setQuestionStates([...questionStates]);
       setPhase('tutor-speaking');
 
-      // Speak tutor response + follow-up
-      const toSpeak = data.followUpQuestion && !data.isComplete
+      const toSpeak = followUpMsg
         ? `${data.tutorResponse} ... ${data.followUpQuestion}`
         : data.tutorResponse;
 
@@ -180,17 +247,22 @@ export function useNightlyStudy() {
       }
 
       if (data.isComplete) {
-        // Move to next question or summary
         const nextIdx = idx + 1;
-        if (nextIdx < questions.length) {
+        if (nextIdx < questionsRef.current.length) {
           setCurrentQuestionIndex(nextIdx);
-          const nextState = questionStates[nextIdx];
-          const nextMsg: ConversationMessage = { role: 'tutor', content: nextState.question.tutorQuestion };
-          nextState.conversation.push(nextMsg);
-          setQuestionStates([...questionStates]);
+          const nextQ = questionsRef.current[nextIdx];
+          const nextMsg: ConversationMessage = { role: 'tutor', content: nextQ.tutorQuestion };
+
+          setQuestionStates((prev) =>
+            updateQuestionState(prev, nextIdx, (s) => ({
+              ...s,
+              conversation: [...s.conversation, nextMsg],
+            }))
+          );
+
           setPhase('tutor-speaking');
           try {
-            await tts.speak(nextState.question.tutorQuestion);
+            await tts.speak(nextQ.tutorQuestion);
           } catch {
             // non-blocking
           }
@@ -199,7 +271,7 @@ export function useNightlyStudy() {
           speech.startListening();
           recorder.startRecording();
         } else {
-          await completeSession();
+          await completeSessionRef.current();
         }
       } else {
         setPhase('user-speaking');
@@ -211,7 +283,7 @@ export function useNightlyStudy() {
       setError(err instanceof Error ? err.message : '알 수 없는 오류');
       setPhase('error');
     }
-  }, [speech, recorder, currentQuestionIndex, questionStates, questions, tts]);
+  }, [speech, recorder, tts]);
 
   const submitAnswerRef = useRef(submitAnswer);
   submitAnswerRef.current = submitAnswer;
@@ -222,7 +294,6 @@ export function useNightlyStudy() {
 
   useEffect(() => {
     if (phase !== 'user-speaking') {
-      // Reset when not in speaking phase
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = null;
@@ -236,16 +307,13 @@ export function useNightlyStudy() {
       hadSpeechRef.current = true;
     }
 
-    // Only start silence timer if user has spoken something
     if (!hadSpeechRef.current) return;
 
-    // Reset timer on any transcript change
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
     }
 
     silenceTimerRef.current = setTimeout(() => {
-      // Only auto-submit if still in user-speaking phase and no interim (= silence)
       if (!speech.interimTranscript) {
         submitAnswerRef.current();
       }
@@ -260,50 +328,15 @@ export function useNightlyStudy() {
 
   const skipAnswer = useCallback(async () => {
     speech.resetTranscript();
-    await submitAnswer();
-  }, [speech, submitAnswer]);
-
-  const completeSession = useCallback(async () => {
-    setPhase('processing');
-    tts.stop();
-    speech.stopListening();
-    recorder.stopRecording();
-
-    try {
-      const res = await fetch('/api/nightly-study/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          questions: questionStates.map((s) => ({
-            originalQuestion: s.question.originalQuestion,
-            tutorQuestion: s.question.tutorQuestion,
-            category: s.question.category,
-            subcategory: s.question.subcategory,
-            conversation: s.conversation,
-            conceptsCovered: s.conceptsCovered,
-            keyPoints: s.question.keyPoints,
-          })),
-          mode: modeRef.current,
-        }),
-      });
-
-      if (!res.ok) throw new Error('완료 처리 실패');
-
-      const data = await res.json();
-      setSummary(data.summary);
-      setPhase('summary');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '알 수 없는 오류');
-      setPhase('error');
-    }
-  }, [questionStates, tts, speech, recorder]);
+    await submitAnswerRef.current();
+  }, [speech]);
 
   const finishEarly = useCallback(async () => {
     tts.stop();
     speech.stopListening();
     recorder.stopRecording();
-    await completeSession();
-  }, [tts, speech, recorder, completeSession]);
+    await completeSessionRef.current();
+  }, [tts, speech, recorder]);
 
   const finishEarlyRef = useRef(finishEarly);
   finishEarlyRef.current = finishEarly;
@@ -321,14 +354,13 @@ export function useNightlyStudy() {
       return;
     }
 
-    // Reset timer on phase change (= activity)
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
     }
 
     inactivityTimerRef.current = setTimeout(() => {
       finishEarlyRef.current();
-    }, 3 * 60 * 1000); // 3분
+    }, 3 * 60 * 1000);
 
     return () => {
       if (inactivityTimerRef.current) {
@@ -336,20 +368,6 @@ export function useNightlyStudy() {
       }
     };
   }, [phase, speech.transcript]);
-
-  const checkDailyLimit = useCallback(async (): Promise<boolean> => {
-    try {
-      const res = await fetch('/api/nightly-study/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categories: ['CS_BASICS'], mode: 'deep', _checkOnly: true }),
-      });
-      // We don't actually have a check-only endpoint, so we'll handle this in the page
-      return true;
-    } catch {
-      return false;
-    }
-  }, []);
 
   return {
     // State
@@ -373,6 +391,5 @@ export function useNightlyStudy() {
     submitAnswer,
     skipAnswer,
     finishEarly,
-    checkDailyLimit,
   };
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { openai, MODELS } from '@/lib/openai';
 import { NIGHTLY_STUDY_SUMMARY_PROMPT } from '@/prompts/nightly-study';
@@ -29,6 +30,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
     }
 
+    const rateLimit = await checkRateLimit(session.user.id, 'ai-light');
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+        { status: 429 },
+      );
+    }
+
     const body = await request.json();
     const { questions, mode, resumeId } = completeSchema.parse(body);
 
@@ -55,9 +64,13 @@ export async function POST(request: NextRequest) {
     });
 
     const content = response.choices[0]?.message?.content;
-    const summary = content
-      ? JSON.parse(content)
-      : { strengths: [], reviewTopics: [], encouragement: '오늘도 수고했어요!' };
+    const fallbackSummary = { strengths: [], reviewTopics: [], encouragement: '오늘도 수고했어요!' };
+    let summary;
+    try {
+      summary = content ? JSON.parse(content) : fallbackSummary;
+    } catch {
+      summary = fallbackSummary;
+    }
 
     // Save ActivityLog + ActivityItems (no credit deduction)
     await prisma.activityLog.create({

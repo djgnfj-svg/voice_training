@@ -62,10 +62,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AI 응답 생성에 실패했습니다' }, { status: 500 });
     }
 
-    const parsed = JSON.parse(content);
+    let parsed: { tutorResponse?: string; followUpQuestion?: string; isComplete?: boolean; conceptsCovered?: string[] };
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return NextResponse.json({ error: 'AI 응답 파싱에 실패했습니다' }, { status: 500 });
+    }
 
     return NextResponse.json({
-      tutorResponse: parsed.tutorResponse,
+      tutorResponse: parsed.tutorResponse || content,
       followUpQuestion: parsed.followUpQuestion || null,
       isComplete: parsed.isComplete ?? (round >= maxRounds),
       conceptsCovered: parsed.conceptsCovered || [],

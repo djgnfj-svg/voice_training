@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TopicSelector } from '@/components/nightly-study/topic-selector';
 import { ResumeSelector } from '@/components/resume/resume-selector';
@@ -14,21 +14,16 @@ export default function NightlyStudyPage() {
   const [selectedMode, setSelectedMode] = useState<'deep' | 'light'>('deep');
   const [resumeId, setResumeId] = useState<string | null>(null);
   const [showMicCheck, setShowMicCheck] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
 
   // Check daily limit on mount
   useEffect(() => {
     async function checkLimit() {
       try {
-        const res = await fetch('/api/nightly-study/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ categories: ['CS_BASICS'], mode: 'deep' }),
-        });
-        if (!res.ok) {
+        const res = await fetch('/api/nightly-study/status');
+        if (res.ok) {
           const data = await res.json();
-          if (data.code === 'DAILY_LIMIT_REACHED') {
+          if (data.dailyLimitReached) {
             setDailyLimitReached(true);
           }
         }
@@ -36,9 +31,7 @@ export default function NightlyStudyPage() {
         // ignore
       }
     }
-    if (process.env.NODE_ENV !== 'development') {
-      checkLimit();
-    }
+    checkLimit();
   }, []);
 
   const handleTopicSelect = (categories: string[], mode: 'deep' | 'light') => {
@@ -90,7 +83,7 @@ export default function NightlyStudyPage() {
         </p>
       </div>
 
-      <TopicSelector onStart={handleTopicSelect} disabled={isLoading} />
+      <TopicSelector onStart={handleTopicSelect} />
 
       {/* Optional resume selector */}
       <div className="space-y-2">
@@ -102,7 +95,7 @@ export default function NightlyStudyPage() {
         open={showMicCheck}
         onOpenChange={setShowMicCheck}
         onConfirm={handleMicConfirm}
-        loading={isLoading}
+        loading={false}
       />
     </div>
   );
