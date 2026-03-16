@@ -33,6 +33,10 @@ const serverEnvSchema = z.object({
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
 
 function validateEnv(): ServerEnv {
+  if (typeof window !== 'undefined') {
+    return {} as ServerEnv;
+  }
+
   if (process.env.SKIP_ENV_VALIDATION === '1') {
     const raw = process.env as unknown as Record<string, string | undefined>;
     return {
