@@ -18,10 +18,27 @@ export async function POST(
   }
 
   const { sessionId, itemId } = await params;
-  const { message } = await request.json();
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: '잘못된 요청입니다' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  const { message } = body as { message: string };
 
   if (!message?.trim()) {
     return new Response(JSON.stringify({ error: '메시지를 입력해주세요' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (message.length > 5000) {
+    return new Response(JSON.stringify({ error: '메시지가 너무 깁니다 (최대 5000자)' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });

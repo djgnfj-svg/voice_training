@@ -35,7 +35,11 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), geolocation=(), interest-cohort=()',
+            value: 'camera=(), geolocation=(), microphone=(self), interest-cohort=()',
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.tosspayments.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://lh3.googleusercontent.com; font-src 'self'; connect-src 'self' https://api.tosspayments.com https://*.anthropic.com; frame-src https://js.tosspayments.com; media-src 'self' blob:;",
           },
         ],
       },

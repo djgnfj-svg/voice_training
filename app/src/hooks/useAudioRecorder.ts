@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 export interface AudioRecorderHook {
   isRecording: boolean;
@@ -76,6 +76,13 @@ export function useAudioRecorder(): AudioRecorderHook {
     return blobRef.current;
   }, []);
 
+  const releaseStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  }, []);
+
   const resetRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
@@ -83,7 +90,20 @@ export function useAudioRecorder(): AudioRecorderHook {
     chunksRef.current = [];
     blobRef.current = null;
     mediaRecorderRef.current = null;
+    releaseStream();
     setIsRecording(false);
+  }, [releaseStream]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
   }, []);
 
   return {

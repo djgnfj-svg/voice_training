@@ -25,13 +25,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = await request.json();
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: '잘못된 요청입니다' }, { status: 400 });
+  }
   const { resumeId, jobPostingText } = body as {
     resumeId: string;
     jobPostingText?: string;
   };
 
-  if (!resumeId) {
+  if (!resumeId || typeof resumeId !== 'string') {
     return NextResponse.json({ error: 'resumeId는 필수입니다' }, { status: 400 });
   }
 

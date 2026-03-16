@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { countFillerWords } from '@/lib/transcript';
 
 export interface SpeechMetrics {
@@ -111,6 +111,16 @@ export function useSpeechAnalytics() {
     silenceAccRef.current = 0;
     setMetrics(INITIAL_METRICS);
   }, [cleanup]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, []);
 
   return { metrics, start, feed, stop, reset };
 }

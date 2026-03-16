@@ -15,9 +15,18 @@ export async function POST(
 
     const { id } = await params;
 
+    // Verify session exists and belongs to user
+    const interviewSession = await prisma.interviewSession.findUnique({
+      where: { id, userId: session.user.id },
+    });
+
+    if (!interviewSession) {
+      return NextResponse.json({ error: '면접 세션을 찾을 수 없습니다' }, { status: 404 });
+    }
+
     // Update session status
     await prisma.interviewSession.update({
-      where: { id, userId: session.user.id },
+      where: { id },
       data: { status: 'COMPLETED' },
     });
 

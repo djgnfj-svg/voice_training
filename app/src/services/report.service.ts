@@ -5,9 +5,9 @@ import { countFillerWords } from '@/lib/transcript';
 import type { InterviewReport, GapAnalysis, AnswerReport, SpeechAnalysis, EvaluationScores, ParsedJobPosting } from '@/types';
 
 export class ReportService {
-  async generateReport(sessionId: string): Promise<InterviewReport> {
+  async generateReport(sessionId: string, userId?: string): Promise<InterviewReport> {
     const session = await prisma.interviewSession.findUnique({
-      where: { id: sessionId },
+      where: { id: sessionId, ...(userId ? { userId } : {}) },
       include: {
         answers: { orderBy: { questionIndex: 'asc' } },
         jobPosting: true,

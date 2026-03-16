@@ -1,3 +1,4 @@
+import type { CreditTxType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 export const CREDIT_COSTS = {
@@ -42,16 +43,23 @@ export class CreditService {
   async deductForSession(userId: string, sessionId: string, usingFreeTrial: boolean) {
 
     if (usingFreeTrial) {
-      await prisma.$transaction([
-        prisma.user.update({
-          where: { id: userId },
+      // 원자적 조건부 업데이트로 race condition 방지
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.updateMany({
+          where: { id: userId, freeTrialUsed: false },
           data: { freeTrialUsed: true },
-        }),
-        prisma.interviewSession.update({
+        });
+
+        if (updated.count === 0) {
+          throw new Error('FREE_TRIAL_ALREADY_USED');
+        }
+
+        await tx.interviewSession.update({
           where: { id: sessionId },
           data: { creditDeducted: true },
-        }),
-        prisma.creditTransaction.create({
+        });
+
+        await tx.creditTransaction.create({
           data: {
             userId,
             amount: 0,
@@ -60,8 +68,8 @@ export class CreditService {
             description: '무료 체험 사용',
             referenceId: sessionId,
           },
-        }),
-      ]);
+        });
+      });
       return;
     }
 
@@ -99,7 +107,7 @@ export class CreditService {
     });
   }
 
-  async deductForFeature(userId: string, referenceId: string, description: string, cost: number) {
+  async deductForFeature(userId: string, referenceId: string, description: string, cost: number, txType: CreditTxType = 'FEATURE_DEBIT') {
 
     await prisma.$transaction(async (tx) => {
       const updated = await tx.user.updateMany({
@@ -121,7 +129,7 @@ export class CreditService {
           userId,
           amount: -cost,
           balance: user!.creditBalance,
-          type: 'SESSION_DEBIT',
+          type: txType,
           description,
           referenceId,
         },
@@ -196,7 +204,7 @@ export class CreditService {
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: limit,
-      skip: offset,
+      skip: Math.max(0, offset),
     });
   }
 }

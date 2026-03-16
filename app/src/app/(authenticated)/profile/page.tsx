@@ -260,7 +260,11 @@ export default function ProfilePage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => deleteMutation.mutate(resume.id)}
+                        onClick={() => {
+                          if (window.confirm('이력서를 삭제하시겠습니까?')) {
+                            deleteMutation.mutate(resume.id);
+                          }
+                        }}
                         disabled={deleteMutation.isPending}
                       >
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />

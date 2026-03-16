@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { evaluationService } from '@/services/evaluation.service';
 import { creditService, CREDIT_COSTS } from '@/services/credit.service';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import type { InterviewType } from '@/types';
 
@@ -42,16 +43,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { questionText, answerTranscript, interviewType, deepMode, relatedKeyPoints, previousContext } = schema.parse(body);
 
-    // 꼬리질문 크레딧 차감
-    try {
-      await creditService.deductForFeature(session.user.id, 'follow-up', '꼬리질문 평가', CREDIT_COSTS.FOLLOW_UP);
-    } catch {
-      return NextResponse.json(
-        { error: '크레딧이 부족합니다.', code: 'INSUFFICIENT_CREDITS' },
-        { status: 402 },
-      );
-    }
-
+    // AI 평가 먼저 수행 (성공 후 크레딧 차감)
     const evaluation = await evaluationService.evaluateStateless({
       questionText,
       answerTranscript,
@@ -60,6 +52,21 @@ export async function POST(request: NextRequest) {
       relatedKeyPoints,
       previousContext,
     });
+
+    // 평가 성공 후 크레딧 차감
+    try {
+      await creditService.deductForFeature(
+        session.user.id,
+        `follow-up-${randomUUID()}`,
+        '꼬리질문 평가',
+        CREDIT_COSTS.FOLLOW_UP,
+      );
+    } catch {
+      return NextResponse.json(
+        { error: '크레딧이 부족합니다.', code: 'INSUFFICIENT_CREDITS' },
+        { status: 402 },
+      );
+    }
 
     return NextResponse.json(evaluation);
   } catch (error) {

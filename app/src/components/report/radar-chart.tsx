@@ -1,7 +1,7 @@
 'use client';
 
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
-import type { AnswerReport, EvaluationScores } from '@/types';
+import type { AnswerReport } from '@/types';
 
 interface ScoreRadarChartProps {
   answers: AnswerReport[];
