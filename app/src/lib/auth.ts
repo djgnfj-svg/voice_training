@@ -23,6 +23,7 @@ function checkLoginRateLimit(email: string): boolean {
 }
 
 const nextAuth = NextAuth({
+  debug: process.env.NODE_ENV !== 'production' || !!process.env.AUTH_DEBUG,
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: 'jwt',
@@ -30,6 +31,14 @@ const nextAuth = NextAuth({
   },
   pages: {
     signIn: '/login',
+  },
+  logger: {
+    error(error) {
+      console.error('[NextAuth Error]', error);
+    },
+    warn(code) {
+      console.warn('[NextAuth Warn]', code);
+    },
   },
   providers: [
     Google,
