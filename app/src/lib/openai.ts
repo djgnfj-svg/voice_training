@@ -34,6 +34,7 @@ export const openai = {
         messages: { role: string; content: string }[];
         response_format?: { type: string };
         temperature?: number;
+        max_tokens?: number;
       }) => {
         const userMessage = params.messages.find((m) => m.role === 'user')?.content || '';
         const systemMessage = params.messages.find((m) => m.role === 'system')?.content;
@@ -48,7 +49,7 @@ export const openai = {
 
         const response = await anthropic.messages.create({
           model: params.model,
-          max_tokens: 4096,
+          max_tokens: params.max_tokens ?? 4096,
           temperature: params.temperature ?? 0.5,
           ...(systemPrompt ? { system: systemPrompt } : {}),
           messages: [{ role: 'user', content: userMessage }],

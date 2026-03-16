@@ -271,6 +271,7 @@ model ActivityItem {
 
 enum ActivityType {
   MODEL_ANSWER
+  NIGHTLY_STUDY
 }
 
 model Coupon {
