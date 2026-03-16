@@ -4,6 +4,7 @@ import { isAdmin } from '@/lib/admin';
 import { prisma } from '@/lib/prisma';
 import { openai, MODELS } from '@/lib/openai';
 import { ANSWER_ASSIST_QUESTION_PROMPT } from '@/prompts/answer-assist';
+import { captureError } from '@/lib/error';
 
 export async function POST(request: NextRequest) {
   try {
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(assistSession);
   } catch (error) {
-    console.error('Answer assist session creation error:', error);
+    captureError(error, { context: 'answer-assist-session-creation' });
     return NextResponse.json({ error: '세션 생성에 실패했습니다' }, { status: 500 });
   }
 }
@@ -108,7 +109,7 @@ export async function GET() {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Answer assist sessions list error:', error);
+    captureError(error, { context: 'answer-assist-sessions-list' });
     return NextResponse.json({ error: '세션 목록 조회에 실패했습니다' }, { status: 500 });
   }
 }

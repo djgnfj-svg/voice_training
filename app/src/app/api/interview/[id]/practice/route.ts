@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { captureError } from '@/lib/error';
 
 export async function GET(
   request: NextRequest,
@@ -48,7 +49,7 @@ export async function GET(
       answers: interviewSession.answers,
     });
   } catch (error) {
-    console.error('Practice data fetch error:', error);
+    captureError(error, { context: 'practice-data-fetch' });
     return NextResponse.json({ error: '연습 데이터 조회에 실패했습니다' }, { status: 500 });
   }
 }

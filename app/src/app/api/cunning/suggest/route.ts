@@ -4,6 +4,7 @@ import { isAdmin } from '@/lib/admin';
 import { anthropic, MODELS } from '@/lib/openai';
 import { prisma } from '@/lib/prisma';
 import { buildCunningSuggestPrompt } from '@/prompts/cunning';
+import { captureError } from '@/lib/error';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
         } catch (error) {
-          console.error('Cunning suggest streaming error:', error);
+          captureError(error, { context: 'cunning-suggest-streaming' });
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ error: '답변 생성 중 오류가 발생했습니다' })}\n\n`)
           );
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Cunning suggest error:', error);
+    captureError(error, { context: 'cunning-suggest' });
     return new Response(JSON.stringify({ error: '답변 생성 중 오류가 발생했습니다' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

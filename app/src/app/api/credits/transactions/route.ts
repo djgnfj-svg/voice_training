@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { creditService } from '@/services/credit.service';
+import { captureError } from '@/lib/error';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     const transactions = await creditService.getTransactions(session.user.id, limit, offset);
     return NextResponse.json(transactions);
   } catch (error) {
-    console.error('Credit transactions error:', error);
+    captureError(error, { context: 'credit-transactions' });
     return NextResponse.json({ error: '거래 내역 조회에 실패했습니다' }, { status: 500 });
   }
 }

@@ -6,6 +6,7 @@ import { creditService, CREDIT_COSTS } from '@/services/credit.service';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import type { InterviewType } from '@/types';
+import { captureError } from '@/lib/error';
 
 const previousContextSchema = z.object({
   originalQuestion: z.string(),
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
     }
-    console.error('Practice evaluation error:', error);
+    captureError(error, { context: 'practice-evaluation' });
     return NextResponse.json({ error: '평가에 실패했습니다' }, { status: 500 });
   }
 }

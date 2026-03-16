@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { captureError } from '@/lib/error';
 
 export async function GET() {
   try {
@@ -42,7 +43,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('In-progress session fetch error:', error);
+    captureError(error, { context: 'in-progress-session-fetch' });
     return NextResponse.json({ error: '조회에 실패했습니다' }, { status: 500 });
   }
 }

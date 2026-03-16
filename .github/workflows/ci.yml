@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: cd app && npm ci
+
+      - name: Generate Prisma client
+        run: cd app && npx prisma generate
+
+      - name: Lint
+        run: cd app && npm run lint
+
+      - name: Type check
+        run: cd app && npm run type-check
+
+      - name: Build
+        run: cd app && npm run build
+        env:
+          SKIP_ENV_VALIDATION: '1'
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
+          DIRECT_URL: postgresql://dummy:dummy@localhost:5432/dummy
+          NEXTAUTH_SECRET: ci-dummy-secret
+          ANTHROPIC_API_KEY: sk-dummy
+          AUTH_GOOGLE_ID: dummy.apps.googleusercontent.com
+          AUTH_GOOGLE_SECRET: dummy-secret
+          NEXT_PUBLIC_TOSS_CLIENT_KEY: test_ck_dummy
+          TOSS_SECRET_KEY: test_sk_dummy

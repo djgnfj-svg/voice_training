@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { evaluationService } from '@/services/evaluation.service';
+import { captureError } from '@/lib/error';
 import { z } from 'zod';
 
 const evaluateSchema = z.object({
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
     }
-    console.error('Evaluation error:', error);
+    captureError(error, { context: 'evaluation' });
     return NextResponse.json({ error: '답변 평가에 실패했습니다' }, { status: 500 });
   }
 }

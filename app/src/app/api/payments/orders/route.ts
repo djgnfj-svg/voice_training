@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { paymentService } from '@/services/payment.service';
+import { captureError } from '@/lib/error';
 
 const schema = z.object({
   productId: z.string(),
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
-    console.error('[Payment Orders] Error:', e);
+    captureError(e, { context: 'payment-orders' });
     if (message === 'INVALID_PRODUCT') {
       return NextResponse.json({ error: '유효하지 않은 상품입니다' }, { status: 400 });
     }

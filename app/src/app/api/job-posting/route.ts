@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { jobPostingService } from '@/services/job-posting.service';
 import { isTavilyAvailable } from '@/lib/tavily';
+import { captureError } from '@/lib/error';
 import { z } from 'zod';
 
 const analyzeSchema = z.object({
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
     }
-    console.error('Job posting analysis error:', error);
+    captureError(error, { context: 'job-posting-analysis' });
     return NextResponse.json({ error: '채용 공고 분석에 실패했습니다' }, { status: 500 });
   }
 }
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
     const postings = await jobPostingService.getUserJobPostings(session.user.id);
     return NextResponse.json(postings);
   } catch (error) {
-    console.error('Job posting fetch error:', error);
+    captureError(error, { context: 'job-posting-fetch' });
     return NextResponse.json({ error: '채용 공고 조회에 실패했습니다' }, { status: 500 });
   }
 }

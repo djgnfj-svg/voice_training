@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { analyticsService } from '@/services/analytics.service';
+import { captureError } from '@/lib/error';
 
 export async function GET() {
   const session = await auth();
@@ -42,7 +43,7 @@ export async function GET() {
       categoryPerformance,
     });
   } catch (error) {
-    console.error('Dashboard data fetch error:', error);
+    captureError(error, { context: 'dashboard-data-fetch' });
     return NextResponse.json({ error: '대시보드 데이터를 불러오는 중 오류가 발생했습니다' }, { status: 500 });
   }
 }

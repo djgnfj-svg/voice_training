@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { analyticsService } from '@/services/analytics.service';
+import { captureError } from '@/lib/error';
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(merged);
   } catch (error) {
-    console.error('History fetch error:', error);
+    captureError(error, { context: 'history-fetch' });
     return NextResponse.json({ error: '히스토리 조회에 실패했습니다' }, { status: 500 });
   }
 }

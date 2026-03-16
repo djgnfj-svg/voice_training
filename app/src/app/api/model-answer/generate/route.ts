@@ -10,6 +10,7 @@ import {
   MODEL_ANSWER_RESUME_PROMPT,
   MODEL_ANSWER_WITH_JOB_PROMPT,
 } from '@/prompts/model-answer';
+import { captureError } from '@/lib/error';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -153,12 +154,12 @@ export async function POST(request: NextRequest) {
       });
       activityLogId = log.id;
     } catch (logError) {
-      console.error('Activity log save failed (credit already deducted):', logError);
+      captureError(logError, { context: 'model-answer-activity-log-save' });
     }
 
     return NextResponse.json({ plan, questions, activityLogId });
   } catch (error) {
-    console.error('Model answer generation error:', error);
+    captureError(error, { context: 'model-answer-generation' });
     return NextResponse.json(
       { error: '모범답안 생성 중 오류가 발생했습니다' },
       { status: 500 }

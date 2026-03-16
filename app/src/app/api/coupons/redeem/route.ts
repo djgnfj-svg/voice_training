@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { couponService, CouponRedeemError } from '@/services/coupon.service';
+import { captureError } from '@/lib/error';
 import { z } from 'zod';
 
 const redeemSchema = z.object({
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
     if (err instanceof CouponRedeemError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: 400 });
     }
-    console.error('[Coupon Redeem Error]', err);
+    captureError(err, { context: 'coupon-redeem' });
     return NextResponse.json({ error: '쿠폰 사용 중 오류가 발생했습니다.' }, { status: 500 });
   }
 }

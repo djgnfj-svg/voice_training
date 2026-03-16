@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { paymentService } from '@/services/payment.service';
+import { captureError } from '@/lib/error';
 
 const schema = z.object({
   paymentKey: z.string(),
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '처리할 수 없는 주문 상태입니다' }, { status: 400 });
     }
 
-    console.error('[payments/confirm] error:', message);
+    captureError(e, { context: 'payments-confirm' });
     return NextResponse.json({ error: '결제 확인 실패' }, { status: 500 });
   }
 }

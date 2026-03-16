@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { openai, MODELS } from '@/lib/openai';
 import { NIGHTLY_STUDY_SUMMARY_PROMPT } from '@/prompts/nightly-study';
+import { captureError } from '@/lib/error';
 import { z } from 'zod';
 
 const completeSchema = z.object({
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
     }
-    console.error('Nightly study complete error:', error);
+    captureError(error, { context: 'nightly-study-complete' });
     return NextResponse.json({ error: '학습 완료 처리에 실패했습니다' }, { status: 500 });
   }
 }

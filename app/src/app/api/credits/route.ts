@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { creditService } from '@/services/credit.service';
+import { captureError } from '@/lib/error';
 
 export async function GET() {
   const session = await auth();
@@ -12,7 +13,7 @@ export async function GET() {
     const info = await creditService.getCreditInfo(session.user.id);
     return NextResponse.json(info);
   } catch (error) {
-    console.error('Credit info fetch error:', error);
+    captureError(error, { context: 'credit-info-fetch' });
     return NextResponse.json({ error: '크레딧 정보를 불러오는 중 오류가 발생했습니다' }, { status: 500 });
   }
 }

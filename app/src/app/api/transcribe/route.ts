@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { isWhisperAvailable, transcribeAudio } from '@/lib/whisper';
+import { captureError } from '@/lib/error';
 
 export const maxDuration = 30;
 
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ transcript, source: 'whisper' });
   } catch (error) {
-    console.error('Transcribe error:', error);
+    captureError(error, { context: 'transcribe' });
     return NextResponse.json({ error: '전사에 실패했습니다' }, { status: 500 });
   }
 }

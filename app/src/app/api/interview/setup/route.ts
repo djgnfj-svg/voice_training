@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { questionService } from '@/services/question.service';
 import { creditService } from '@/services/credit.service';
+import { captureError } from '@/lib/error';
 import { z } from 'zod';
 
 const setupSchema = z.object({
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
     }
-    console.error('Interview setup error:', error);
+    captureError(error, { context: 'interview-setup' });
     return NextResponse.json({ error: '면접 설정에 실패했습니다' }, { status: 500 });
   }
 }

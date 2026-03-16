@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { captureError } from '@/lib/error';
 
 export async function GET(
   _request: Request,
@@ -28,7 +29,7 @@ export async function GET(
 
     return NextResponse.json(log);
   } catch (error) {
-    console.error('Activity log fetch error:', error);
+    captureError(error, { context: 'activity-log-fetch' });
     return NextResponse.json({ error: '활동 기록을 불러오는 중 오류가 발생했습니다' }, { status: 500 });
   }
 }

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { openai, MODELS } from '@/lib/openai';
 import { NIGHTLY_TUTOR_QUESTION_PROMPT } from '@/prompts/nightly-study';
 import { getKstMidnight } from '@/lib/date';
+import { captureError } from '@/lib/error';
 import { z } from 'zod';
 
 import csBasics from '@/data/questions/cs-basics.json';
@@ -148,7 +149,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
     }
-    console.error('Nightly study start error:', error);
+    captureError(error, { context: 'nightly-study-start' });
     return NextResponse.json({ error: '학습 세션 시작에 실패했습니다' }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { openai, MODELS } from '@/lib/openai';
 import { NIGHTLY_TUTOR_RESPONSE_PROMPT } from '@/prompts/nightly-study';
+import { captureError } from '@/lib/error';
 import { z } from 'zod';
 
 const respondSchema = z.object({
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
     }
-    console.error('Nightly study respond error:', error);
+    captureError(error, { context: 'nightly-study-respond' });
     return NextResponse.json({ error: '튜터 응답 생성에 실패했습니다' }, { status: 500 });
   }
 }

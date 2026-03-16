@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getKstMidnight } from '@/lib/date';
+import { captureError } from '@/lib/error';
 
 export async function GET() {
   try {
@@ -25,7 +26,7 @@ export async function GET() {
 
     return NextResponse.json({ dailyLimitReached: !!todaySession });
   } catch (error) {
-    console.error('Nightly study status error:', error);
+    captureError(error, { context: 'nightly-study-status' });
     return NextResponse.json({ error: '상태 확인에 실패했습니다' }, { status: 500 });
   }
 }

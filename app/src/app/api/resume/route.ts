@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { resumeService } from '@/services/resume.service';
 import type { ParsedResume } from '@/types';
+import { captureError } from '@/lib/error';
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(resume);
   } catch (error) {
-    console.error('Resume upload error:', error);
+    captureError(error, { context: 'resume-upload' });
     return NextResponse.json({ error: '이력서 업로드에 실패했습니다' }, { status: 500 });
   }
 }
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(items);
   } catch (error) {
-    console.error('Resume fetch error:', error);
+    captureError(error, { context: 'resume-fetch' });
     return NextResponse.json({ error: '이력서 조회에 실패했습니다' }, { status: 500 });
   }
 }

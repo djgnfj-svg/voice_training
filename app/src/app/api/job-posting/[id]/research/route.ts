@@ -7,6 +7,7 @@ import { isTavilyAvailable } from '@/lib/tavily';
 import { jobPostingService } from '@/services/job-posting.service';
 import { creditService, CREDIT_COSTS } from '@/services/credit.service';
 import type { CompanyAnalysis, ParsedJobPosting } from '@/types';
+import { captureError } from '@/lib/error';
 
 export async function POST(
   request: NextRequest,
@@ -116,7 +117,7 @@ export async function POST(
 
     return NextResponse.json({ companyAnalysis: mergedAnalysis });
   } catch (error) {
-    console.error('Deep company research error:', error);
+    captureError(error, { context: 'deep-company-research' });
     if (error instanceof Error && error.message === 'INSUFFICIENT_CREDITS') {
       return NextResponse.json(
         { error: '크레딧이 부족합니다', code: 'INSUFFICIENT_CREDITS' },

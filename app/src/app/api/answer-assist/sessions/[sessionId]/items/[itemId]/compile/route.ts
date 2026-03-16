@@ -4,6 +4,7 @@ import { isAdmin } from '@/lib/admin';
 import { prisma } from '@/lib/prisma';
 import { anthropic, MODELS } from '@/lib/openai';
 import { buildAnswerAssistCompilePrompt } from '@/prompts/answer-assist';
+import { captureError } from '@/lib/error';
 
 export async function POST(
   _request: NextRequest,
@@ -98,7 +99,7 @@ export async function POST(
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         controller.close();
       } catch (error) {
-        console.error('Answer assist compile streaming error:', error);
+        captureError(error, { context: 'answer-assist-compile-streaming' });
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ error: '최종 답변 정리 중 오류가 발생했습니다' })}\n\n`)
         );

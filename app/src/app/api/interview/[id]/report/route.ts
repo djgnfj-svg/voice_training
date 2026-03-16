@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { reportService } from '@/services/report.service';
+import { captureError } from '@/lib/error';
 
 export async function GET(
   request: NextRequest,
@@ -32,7 +33,7 @@ export async function GET(
     const report = await reportService.generateReport(id);
     return NextResponse.json(report);
   } catch (error) {
-    console.error('Report fetch error:', error);
+    captureError(error, { context: 'report-fetch' });
     return NextResponse.json({ error: '리포트 조회에 실패했습니다' }, { status: 500 });
   }
 }

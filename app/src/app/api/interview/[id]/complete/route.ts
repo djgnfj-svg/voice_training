@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { reportService } from '@/services/report.service';
+import { captureError } from '@/lib/error';
 
 export async function POST(
   request: NextRequest,
@@ -34,7 +35,7 @@ export async function POST(
     const report = await reportService.generateReport(id);
     return NextResponse.json(report);
   } catch (error) {
-    console.error('Session complete error:', error);
+    captureError(error, { context: 'session-complete' });
     return NextResponse.json({ error: '면접 완료 처리에 실패했습니다' }, { status: 500 });
   }
 }

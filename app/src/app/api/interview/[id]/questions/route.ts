@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { captureError } from '@/lib/error';
 
 export async function GET(
   request: NextRequest,
@@ -68,7 +69,7 @@ export async function GET(
       deepMode,
     });
   } catch (error) {
-    console.error('Questions fetch error:', error);
+    captureError(error, { context: 'questions-fetch' });
     return NextResponse.json({ error: '질문 조회에 실패했습니다' }, { status: 500 });
   }
 }

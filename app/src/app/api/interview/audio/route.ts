@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { isStorageAvailable, uploadAudio, getAudioUrl } from '@/lib/storage';
+import { captureError } from '@/lib/error';
 import { writeFile, mkdir, readFile } from 'fs/promises';
 import path from 'path';
 
@@ -15,9 +17,14 @@ const ALLOWED_MIME_TYPES = new Set([
   'audio/wave',
 ]);
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function getAudioStorageDir() {
   return path.join(process.cwd(), '.audio-storage');
+}
+
+function shouldUseLocalStorage(): boolean {
+  return !isStorageAvailable && process.env.NODE_ENV === 'development';
 }
 
 export async function POST(request: NextRequest) {
@@ -41,29 +48,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '잘못된 questionIndex' }, { status: 400 });
     }
 
-    // Validate sessionId is UUID format to prevent path traversal
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!UUID_REGEX.test(sessionId)) {
       return NextResponse.json({ error: '잘못된 세션 ID' }, { status: 400 });
     }
 
-    // File size validation
     if (audio.size > MAX_FILE_SIZE) {
       return NextResponse.json({ error: '파일 크기가 10MB를 초과합니다' }, { status: 400 });
     }
 
-    // Extension validation
     const ext = (audio.name?.split('.').pop() || '').toLowerCase();
     if (!ALLOWED_EXTENSIONS.has(ext)) {
       return NextResponse.json({ error: '허용되지 않는 파일 형식입니다' }, { status: 400 });
     }
 
-    // MIME type validation
     if (!ALLOWED_MIME_TYPES.has(audio.type)) {
       return NextResponse.json({ error: '허용되지 않는 MIME 타입입니다' }, { status: 400 });
     }
 
-    // Verify session ownership
     const interviewSession = await prisma.interviewSession.findUnique({
       where: { id: sessionId, userId: session.user.id },
     });
@@ -72,30 +73,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '세션을 찾을 수 없습니다' }, { status: 404 });
     }
 
-    // Save to non-public directory
-    const audioDir = path.join(getAudioStorageDir(), sessionId);
-    await mkdir(audioDir, { recursive: true });
-
-    const fileName = `${qIndex}.${ext}`;
-    const filePath = path.join(audioDir, fileName);
-
     const buffer = Buffer.from(await audio.arrayBuffer());
-    await writeFile(filePath, buffer);
+    let audioUrl: string;
 
-    const audioUrl = `/api/interview/audio?sessionId=${sessionId}&questionIndex=${qIndex}`;
+    if (shouldUseLocalStorage()) {
+      // Development fallback: local filesystem
+      const audioDir = path.join(getAudioStorageDir(), sessionId);
+      await mkdir(audioDir, { recursive: true });
+      const fileName = `${qIndex}.${ext}`;
+      await writeFile(path.join(audioDir, fileName), buffer);
+      audioUrl = `/api/interview/audio?sessionId=${sessionId}&questionIndex=${qIndex}`;
+    } else if (isStorageAvailable) {
+      // Production: Supabase Storage
+      const storagePath = `${session.user.id}/${sessionId}/${qIndex}.${ext}`;
+      const mimeMap: Record<string, string> = {
+        webm: 'audio/webm',
+        mp3: 'audio/mpeg',
+        wav: 'audio/wav',
+        ogg: 'audio/ogg',
+      };
+      await uploadAudio(storagePath, buffer, mimeMap[ext] || 'audio/webm');
+      audioUrl = `/api/interview/audio?sessionId=${sessionId}&questionIndex=${qIndex}`;
+    } else {
+      return NextResponse.json(
+        { error: '오디오 저장소가 설정되지 않았습니다' },
+        { status: 503 },
+      );
+    }
 
-    // Update InterviewAnswer with audioUrl
     await prisma.interviewAnswer.updateMany({
-      where: {
-        sessionId,
-        questionIndex: qIndex,
-      },
+      where: { sessionId, questionIndex: qIndex },
       data: { audioUrl },
     });
 
     return NextResponse.json({ audioUrl });
   } catch (error) {
-    console.error('Audio upload error:', error);
+    captureError(error, { context: 'audio-upload' });
     return NextResponse.json({ error: '오디오 업로드에 실패했습니다' }, { status: 500 });
   }
 }
@@ -120,13 +133,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '잘못된 questionIndex' }, { status: 400 });
     }
 
-    // Validate sessionId is UUID format to prevent path traversal
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!UUID_REGEX.test(sessionId)) {
       return NextResponse.json({ error: '잘못된 세션 ID' }, { status: 400 });
     }
 
-    // Verify session ownership
     const interviewSession = await prisma.interviewSession.findUnique({
       where: { id: sessionId, userId: session.user.id },
     });
@@ -135,42 +145,60 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '세션을 찾을 수 없습니다' }, { status: 404 });
     }
 
-    // Find the audio file
-    const audioDir = path.join(getAudioStorageDir(), sessionId);
-    const possibleExts = ['webm', 'mp3', 'wav', 'ogg'];
-    let fileBuffer: Buffer | null = null;
-    let contentType = 'audio/webm';
+    if (shouldUseLocalStorage()) {
+      // Development: serve from local filesystem
+      const audioDir = path.join(getAudioStorageDir(), sessionId);
+      const possibleExts = ['webm', 'mp3', 'wav', 'ogg'];
+      let fileBuffer: Buffer | null = null;
+      let contentType = 'audio/webm';
 
+      for (const ext of possibleExts) {
+        const filePath = path.join(audioDir, `${qIndex}.${ext}`);
+        try {
+          fileBuffer = await readFile(filePath);
+          const mimeMap: Record<string, string> = {
+            webm: 'audio/webm',
+            mp3: 'audio/mpeg',
+            wav: 'audio/wav',
+            ogg: 'audio/ogg',
+          };
+          contentType = mimeMap[ext] || 'audio/webm';
+          break;
+        } catch {
+          continue;
+        }
+      }
+
+      if (!fileBuffer) {
+        return NextResponse.json({ error: '오디오 파일을 찾을 수 없습니다' }, { status: 404 });
+      }
+
+      return new NextResponse(new Uint8Array(fileBuffer), {
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': fileBuffer.length.toString(),
+          'Cache-Control': 'private, max-age=3600',
+        },
+      });
+    }
+
+    // Production: redirect to Supabase signed URL
+    const possibleExts = ['webm', 'mp3', 'wav', 'ogg'];
     for (const ext of possibleExts) {
-      const filePath = path.join(audioDir, `${qIndex}.${ext}`);
+      const storagePath = `${session.user.id}/${sessionId}/${qIndex}.${ext}`;
       try {
-        fileBuffer = await readFile(filePath);
-        const mimeMap: Record<string, string> = {
-          webm: 'audio/webm',
-          mp3: 'audio/mpeg',
-          wav: 'audio/wav',
-          ogg: 'audio/ogg',
-        };
-        contentType = mimeMap[ext] || 'audio/webm';
-        break;
+        const signedUrl = await getAudioUrl(storagePath);
+        if (signedUrl) {
+          return NextResponse.redirect(signedUrl);
+        }
       } catch {
         continue;
       }
     }
 
-    if (!fileBuffer) {
-      return NextResponse.json({ error: '오디오 파일을 찾을 수 없습니다' }, { status: 404 });
-    }
-
-    return new NextResponse(new Uint8Array(fileBuffer), {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Length': fileBuffer.length.toString(),
-        'Cache-Control': 'private, max-age=3600',
-      },
-    });
+    return NextResponse.json({ error: '오디오 파일을 찾을 수 없습니다' }, { status: 404 });
   } catch (error) {
-    console.error('Audio serve error:', error);
+    captureError(error, { context: 'audio-serve' });
     return NextResponse.json({ error: '오디오 파일 제공에 실패했습니다' }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { captureError } from '@/lib/error';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
-    console.error('TTS error:', error);
+    captureError(error, { context: 'tts' });
     return NextResponse.json({ error: 'TTS generation failed' }, { status: 500 });
   }
 }
