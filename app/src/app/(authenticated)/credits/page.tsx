@@ -188,13 +188,14 @@ export default function CreditsPage() {
       </Card>
 
       {/* Purchase Plans */}
-      <Card>
+      <Card className="opacity-70">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
             크레딧 충전
+            <Badge variant="secondary" className="ml-2">준비중</Badge>
           </CardTitle>
-          <CardDescription>원하는 크레딧 상품을 선택하세요</CardDescription>
+          <CardDescription>결제 시스템을 준비하고 있습니다. 곧 만나보실 수 있어요!</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">
@@ -202,7 +203,7 @@ export default function CreditsPage() {
               <div
                 key={product.id}
                 className={cn(
-                  'relative rounded-lg border p-4 transition-all duration-200 hover:shadow-md',
+                  'relative rounded-lg border p-4 opacity-50',
                   product.id === 'credit_15' && 'border-primary ring-1 ring-primary/20'
                 )}
               >
@@ -213,17 +214,9 @@ export default function CreditsPage() {
                 <p className="mt-1 text-lg text-muted-foreground">{product.priceLabel}</p>
                 <Button
                   className="mt-3 w-full"
-                  disabled={loadingProductId !== null}
-                  onClick={() => handlePurchase(product.id)}
+                  disabled
                 >
-                  {loadingProductId === product.id ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      처리 중...
-                    </>
-                  ) : (
-                    '구매하기'
-                  )}
+                  준비중
                 </Button>
               </div>
             ))}
