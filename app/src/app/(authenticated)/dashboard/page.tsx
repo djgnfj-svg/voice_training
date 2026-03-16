@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,7 +29,7 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
-  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeDismissed, setWelcomeDismissed] = useState(true);
 
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ['dashboard'],
@@ -40,8 +40,25 @@ export default function DashboardPage() {
     },
   });
 
-  // Show welcome dialog for first-time users
-  const shouldShowWelcome = data && data.sessionCount === 0 && !data.freeTrialUsed && !showWelcome;
+  useEffect(() => {
+    if (!data) return;
+    const key = `welcome_dismissed_${data.userName ?? 'default'}`;
+    if (localStorage.getItem(key)) {
+      setWelcomeDismissed(true);
+    } else if (data.sessionCount === 0 && !data.freeTrialUsed) {
+      setWelcomeDismissed(false);
+    }
+  }, [data]);
+
+  const handleWelcomeClose = () => {
+    if (data) {
+      const key = `welcome_dismissed_${data.userName ?? 'default'}`;
+      localStorage.setItem(key, '1');
+    }
+    setWelcomeDismissed(true);
+  };
+
+  const shouldShowWelcome = !welcomeDismissed;
 
   if (isLoading || !data) {
     return (
@@ -66,8 +83,8 @@ export default function DashboardPage() {
       {/* Welcome dialog for first-time users */}
       {shouldShowWelcome && (
         <WelcomeDialog
-          open={!showWelcome}
-          onOpenChange={(open) => { if (!open) setShowWelcome(true); }}
+          open={true}
+          onOpenChange={(open) => { if (!open) handleWelcomeClose(); }}
         />
       )}
 
