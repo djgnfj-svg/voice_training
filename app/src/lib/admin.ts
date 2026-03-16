@@ -2,5 +2,6 @@ import { env } from '@/lib/env';
 
 export function isAdmin(email: string | null | undefined): boolean {
   if (!email) return false;
-  return env.ADMIN_EMAILS.includes(email.toLowerCase());
+  const adminEmails = env.ADMIN_EMAILS ?? [];
+  return adminEmails.includes(email.toLowerCase());
 }
