@@ -6,9 +6,9 @@ import { useTextToSpeech } from './useTextToSpeech';
 import { useAudioRecorder } from './useAudioRecorder';
 import { useSpeechAnalytics, type SpeechMetrics } from './useSpeechAnalytics';
 import { normalizeTranscript } from '@/lib/transcript';
+import { transcribeWithWhisper } from '@/lib/whisper-client';
 import type { InterviewQuestion, AnswerEvaluation, InterviewType } from '@/types';
 
-const MAX_AUDIO_SIZE = 4.5 * 1024 * 1024; // 4.5MB
 const MAX_FOLLOWUP_ROUNDS = 2;
 
 function uploadAudioFireAndForget(sessionId: string, questionIndex: number, audioBlob: Blob) {
@@ -17,20 +17,6 @@ function uploadAudioFireAndForget(sessionId: string, questionIndex: number, audi
   formData.append('sessionId', sessionId);
   formData.append('questionIndex', String(questionIndex));
   fetch('/api/interview/audio', { method: 'POST', body: formData }).catch(() => {});
-}
-
-async function transcribeWithWhisper(audioBlob: Blob): Promise<string | null> {
-  if (audioBlob.size > MAX_AUDIO_SIZE) return null;
-  try {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-    const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.transcript || null;
-  } catch {
-    return null;
-  }
 }
 
 type SessionPhase = 'idle' | 'asking' | 'listening' | 'evaluating' | 'feedback' | 'completed';

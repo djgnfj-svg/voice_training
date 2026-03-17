@@ -6,23 +6,8 @@ import { useSpeechRecognition } from './useSpeechRecognition';
 import { useTextToSpeech } from './useTextToSpeech';
 import { useAudioRecorder } from './useAudioRecorder';
 import { normalizeTranscript } from '@/lib/transcript';
+import { transcribeWithWhisper } from '@/lib/whisper-client';
 import type { AnswerEvaluation, InterviewType } from '@/types';
-
-const MAX_AUDIO_SIZE = 4.5 * 1024 * 1024;
-
-async function transcribeWithWhisper(audioBlob: Blob): Promise<string | null> {
-  if (audioBlob.size > MAX_AUDIO_SIZE) return null;
-  try {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-    const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.transcript || null;
-  } catch {
-    return null;
-  }
-}
 
 type PracticePhase = 'loading' | 'select' | 'reviewing' | 'practicing' | 'comparing' | 'summary';
 

@@ -46,6 +46,11 @@ app/prisma/migrations/
 # Audio storage
 .audio-storage/
 
+# Images (screenshots, references)
+*.png
+*.jpg
+*.jpeg
+
 # Misc
 *.tsbuildinfo
 next-env.d.ts
