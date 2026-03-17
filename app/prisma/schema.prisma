@@ -30,6 +30,8 @@ model User {
   activityLogs       ActivityLog[]
   couponUsages       CouponUsage[]
   answerAssistSessions AnswerAssistSession[]
+  userKnowledge      UserKnowledge[]
+  dailyProgress      DailyProgress[]
 
   @@map("users")
 }
@@ -208,6 +210,7 @@ enum CreditTxType {
   FEATURE_DEBIT
   REFUND
   COUPON
+  LEARNING_DEBIT
 }
 
 model PaymentOrder {
@@ -272,6 +275,7 @@ model ActivityItem {
 enum ActivityType {
   MODEL_ANSWER
   NIGHTLY_STUDY
+  LEARNING_SESSION
 }
 
 model Coupon {
@@ -332,4 +336,91 @@ model AnswerAssistItem {
 
   @@unique([sessionId, questionIndex])
   @@map("answer_assist_items")
+}
+
+// ========================
+// Learning System Models
+// ========================
+
+model Subject {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  nameEn      String?
+  description String?  @db.Text
+  icon        String?
+  isSystem    Boolean  @default(false)
+  createdBy   String?
+  parentId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   Subject?  @relation("SubjectHierarchy", fields: [parentId], references: [id])
+  children Subject[] @relation("SubjectHierarchy")
+  topics   Topic[]
+
+  @@index([isSystem])
+  @@index([createdBy])
+  @@map("subjects")
+}
+
+model Topic {
+  id          String     @id @default(uuid())
+  subjectId   String
+  name        String
+  description String?    @db.Text
+  difficulty  Difficulty @default(INTERMEDIATE)
+  keyPoints   String[]
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+
+  subject       Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  userKnowledge UserKnowledge[]
+
+  @@index([subjectId])
+  @@map("topics")
+}
+
+model UserKnowledge {
+  id            String    @id @default(uuid())
+  userId        String
+  topicId       String
+  proficiency   Int       @default(0)
+  successCount  Int       @default(0)
+  failureCount  Int       @default(0)
+  streakCount   Int       @default(0)
+  lastPracticed DateTime?
+  nextReviewAt  DateTime?
+  metadata      Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@index([userId, nextReviewAt])
+  @@map("user_knowledge")
+}
+
+model DailyProgress {
+  id              String   @id @default(uuid())
+  userId          String
+  date            DateTime @db.Date
+  totalSessions   Int      @default(0)
+  totalQuestions   Int      @default(0)
+  totalCorrect    Int      @default(0)
+  totalMinutes    Int      @default(0)
+  topicsStudied   String[]
+  subjectsStudied String[]
+  streakDay       Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("daily_progress")
 }

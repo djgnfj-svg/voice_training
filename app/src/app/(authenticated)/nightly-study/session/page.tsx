@@ -44,7 +44,7 @@ export default function NightlyStudySessionPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- startSession ref-stable via startedRef guard
   }, [router]);
 
-  // Prevent accidental navigation
+  // Prevent accidental tab close / refresh
   useEffect(() => {
     if (phase === 'summary' || phase === 'setup' || phase === 'error' || phase === 'daily-limit' || phase === 'loading') return;
 
@@ -54,6 +54,22 @@ export default function NightlyStudySessionPage() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [phase]);
+
+  // Browser back button → 확인 후 종료
+  useEffect(() => {
+    if (phase === 'summary' || phase === 'setup' || phase === 'error' || phase === 'daily-limit' || phase === 'loading') return;
+
+    const handler = () => {
+      window.history.pushState(null, '', window.location.href);
+      if (confirm('학습을 그만할까요?')) {
+        finishEarly();
+      }
+    };
+
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [phase, finishEarly]);
 
   // Loading state
   if (phase === 'loading') {
@@ -123,15 +139,6 @@ export default function NightlyStudySessionPage() {
             <span className="text-xs text-muted-foreground">— {questionLabel}</span>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={finishEarly}
-          disabled={phase === 'processing'}
-        >
-          <Square className="mr-1 h-3 w-3" />
-          그만하기
-        </Button>
       </div>
 
       {/* Conversation area */}
@@ -218,6 +225,18 @@ export default function NightlyStudySessionPage() {
             </div>
           )}
         </div>
+
+        {/* 그만하기 — 항상 하단에 표시 */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-3 w-full text-muted-foreground"
+          onClick={finishEarly}
+          disabled={phase === 'processing'}
+        >
+          <Square className="mr-1 h-3 w-3" />
+          그만하기
+        </Button>
       </div>
     </div>
   );

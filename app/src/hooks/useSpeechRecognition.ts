@@ -106,10 +106,9 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     };
 
     recognition.onerror = (event: Event & { error: string }) => {
-      console.error('Speech recognition error:', event.error);
-      if (event.error !== 'no-speech') {
-        setIsListening(false);
-      }
+      if (event.error === 'no-speech') return;
+      console.warn('Speech recognition error:', event.error);
+      setIsListening(false);
     };
 
     recognition.onend = () => {
@@ -140,7 +139,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       recognitionRef.current.start();
       setIsListening(true);
     } catch (error) {
-      console.error('Failed to start speech recognition:', error);
+      console.warn('Failed to start speech recognition:', error);
     }
   }, []);
 

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
 import { useToast } from '@/hooks/useToast';
-import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical, PlayCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical, PlayCircle, AlertTriangle, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 import { MicCheckDialog } from '@/components/interview/mic-check-dialog';
@@ -23,7 +23,7 @@ export default function InterviewSetupPage() {
   const [step, setStep] = useState<Step>('resume');
 
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [interviewMode, setInterviewMode] = useState<'standard' | 'deep'>('standard');
+  const [interviewMode, setInterviewMode] = useState<'standard' | 'deep' | 'model-answer'>('standard');
   const [showCreditsDialog, setShowCreditsDialog] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
@@ -75,6 +75,17 @@ export default function InterviewSetupPage() {
   const startInterview = () => {
     if (!selectedResumeId) {
       toast({ title: '이력서를 선택해주세요', variant: 'destructive' });
+      return;
+    }
+
+    // 모범답안 학습 모드 → 별도 페이지로 이동
+    if (interviewMode === 'model-answer') {
+      if (jobPostingData) {
+        sessionStorage.setItem('model_answer_job_posting', jobPostingData.id);
+      } else {
+        sessionStorage.removeItem('model_answer_job_posting');
+      }
+      router.push(`/interview/model-answer/${selectedResumeId}`);
       return;
     }
 
@@ -314,7 +325,7 @@ export default function InterviewSetupPage() {
               <CardDescription>면접 유형을 선택하세요</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 {/* 일반 모드 */}
                 <button
                   type="button"
@@ -328,7 +339,7 @@ export default function InterviewSetupPage() {
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <Mic className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">일반 모드</span>
+                    <span className="text-sm font-semibold">시험 모드</span>
                   </div>
                   <p className="text-xs text-muted-foreground">5~10 질문, 전반적 커버리지</p>
                 </button>
@@ -350,6 +361,24 @@ export default function InterviewSetupPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">3~5 질문, 기술 깊이 집중</p>
                 </button>
+
+                {/* 모범답안 학습 모드 */}
+                <button
+                  type="button"
+                  className={cn(
+                    'rounded-lg border p-4 text-left transition-all',
+                    interviewMode === 'model-answer'
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50 dark:bg-emerald-950/30'
+                      : 'hover:border-muted-foreground/50'
+                  )}
+                  onClick={() => setInterviewMode('model-answer')}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <BookOpen className="h-4 w-4 text-emerald-500" />
+                    <span className="text-sm font-semibold">학습 모드</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">모범답안 보며 학습</p>
+                </button>
               </div>
 
               {interviewMode === 'deep' && (
@@ -358,6 +387,16 @@ export default function InterviewSetupPage() {
                     <li>- 이력서의 프로젝트/기술을 직접 언급하는 질문</li>
                     <li>- INTERMEDIATE 이상 난이도, 점진적 깊이 증가</li>
                     <li>- 매 질문 후 꼬리질문으로 더 깊이 파고듦</li>
+                  </ul>
+                </div>
+              )}
+
+              {interviewMode === 'model-answer' && (
+                <div className="mt-3 rounded-lg bg-emerald-50 p-3 dark:bg-emerald-950/30">
+                  <ul className="space-y-1 text-sm text-emerald-700 dark:text-emerald-300">
+                    <li>- AI가 예상 질문과 모범답안을 함께 생성</li>
+                    <li>- 질문을 보고 먼저 음성으로 답변 연습</li>
+                    <li>- 모범답안을 공개하여 비교하고 학습</li>
                   </ul>
                 </div>
               )}
@@ -374,6 +413,11 @@ export default function InterviewSetupPage() {
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 AI가 면접을 설계하고 있습니다...
+              </>
+            ) : interviewMode === 'model-answer' ? (
+              <>
+                <BookOpen className="mr-2 h-4 w-4" />
+                모범답안 학습 시작
               </>
             ) : (
               <>

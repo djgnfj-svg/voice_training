@@ -110,6 +110,23 @@
   - 멱등성: `orderId`를 Toss `Idempotency-Key`로 전달, DONE 상태 주문은 재처리 없이 성공
   - 서비스: `app/src/services/payment.service.ts` — createOrder, confirmPayment, failOrder
 
+## 멀티 종목 학습 시스템
+- **Subject** — 학습 종목 (시스템 7개 + 커스텀). 시스템: CS기초, JavaScript, React, Next.js, TypeScript심화, DB심화, DevOps
+- **Topic** — 종목 내 세부 개념 (난이도, keyPoints). 커스텀 종목 생성 시 AI가 자동 추출
+- **UserKnowledge** — 사용자별 토픽별 숙련도 (0-100, SM-2 간소화 간격 반복)
+  - 정답: proficiency += (100 - proficiency) * 0.2, streak++, nextReview 지수 증가
+  - 오답: proficiency -= proficiency * 0.15, streak=0, nextReview 1일
+- **LearningSession** — 학습 세션 (mode: practice/review/quiz, 크레딧 10코인)
+- **LearningItem** — 세션 내 개별 문제 + 평가 결과
+- **DailyProgress** — 일별 학습 요약 (세션수, 문제수, 정답수, 학습시간, 스트릭)
+- **서비스**: subject.service, knowledge.service, learning-question.service, daily-progress.service
+- **프롬프트**: `prompts/learning.ts` (LEARNING_QUESTION/EVALUATION/SUMMARY/TOPIC_EXTRACTION)
+- **평가 3축**: accuracy 40% + understanding 35% + expression 25% → overallScore, isCorrect (>=60)
+- **API**: `/api/subjects`, `/api/learning/{setup,evaluate,complete}`, `/api/knowledge`, `/api/progress/{daily,streak}`
+- **UI**: `/learn` (종목 그리드), `/learn/[id]` (종목 대시보드), `/learn/[id]/session` (음성 학습), `/progress` (현황)
+- **사이드바**: "학습하기" `/learn`, "학습 현황" `/progress` 추가
+- **시드**: `prisma/seed-subjects.ts` — 7개 시스템 종목 + 37개 토픽
+
 ## DB 모델 (핵심)
 - `User` — 계정 (Google OAuth + 이메일/비밀번호 로그인, creditBalance, freeTrialUsed)
 - `Account` — OAuth 계정 (PrismaAdapter 관리)
@@ -121,6 +138,12 @@
 - `PaymentOrder` — Toss 결제 주문 (orderId, paymentKey, amount, credits, status: PENDING/DONE/FAILED)
 - `Coupon` — 쿠폰 (code unique, credits, maxUses, usedCount, isActive, expiresAt)
 - `CouponUsage` — 쿠폰 사용 기록 (couponId+userId unique → 중복 사용 방지)
+- `Subject` — 학습 종목 (slug unique, isSystem, parentId 계층)
+- `Topic` — 종목 내 토픽 (difficulty, keyPoints[])
+- `UserKnowledge` — 사용자별 토픽별 학습 기억 (proficiency, streak, nextReviewAt)
+- `LearningSession` — 학습 세션 (subjectId, mode, correctCount)
+- `LearningItem` — 학습 문제 (topicId, evaluation JSON, isCorrect)
+- `DailyProgress` — 일별 진도 (userId+date unique)
 
 ## 배포
 - Vercel, 리전: `icn1` (인천/서울) — `vercel.json`

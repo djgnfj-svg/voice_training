@@ -4,8 +4,18 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { openai, MODELS } from '@/lib/openai';
 import { NIGHTLY_STUDY_SUMMARY_PROMPT } from '@/prompts/nightly-study';
+import { knowledgeService } from '@/services/knowledge.service';
+import { dailyProgressService } from '@/services/daily-progress.service';
 import { captureError } from '@/lib/error';
 import { z } from 'zod';
+
+function hashQuestion(q: string): string {
+  let hash = 0;
+  for (let i = 0; i < q.length; i++) {
+    hash = ((hash << 5) - hash + q.charCodeAt(i)) | 0;
+  }
+  return (hash >>> 0).toString(36).padStart(6, '0');
+}
 
 const completeSchema = z.object({
   questions: z.array(z.object({
@@ -19,6 +29,8 @@ const completeSchema = z.object({
     })),
     conceptsCovered: z.array(z.string()),
     keyPoints: z.array(z.string()),
+    understandingScore: z.number().min(0).max(100).optional().default(50),
+    weakPoints: z.array(z.string()).optional().default([]),
   })),
   mode: z.enum(['deep', 'light']),
   resumeId: z.string().optional(),
@@ -98,6 +110,76 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // 학습 기억 갱신
+    try {
+      for (const q of questions) {
+        // subcategory → topic 매핑 (다단계 폴백)
+        let topic = await prisma.topic.findFirst({
+          where: { name: { equals: q.subcategory, mode: 'insensitive' } },
+        });
+        if (!topic) {
+          topic = await prisma.topic.findFirst({
+            where: { name: { contains: q.subcategory, mode: 'insensitive' } },
+          });
+        }
+        if (!topic) {
+          const firstWord = q.subcategory.split(/[\/\s]/)[0];
+          if (firstWord && firstWord !== q.subcategory) {
+            topic = await prisma.topic.findFirst({
+              where: { subject: { name: { contains: firstWord, mode: 'insensitive' } } },
+            });
+          }
+        }
+        if (!topic && q.keyPoints.length > 0) {
+          topic = await prisma.topic.findFirst({
+            where: { keyPoints: { hasSome: q.keyPoints.slice(0, 3) } },
+          });
+        }
+        if (!topic) continue;
+
+        // 기존 metadata 읽기
+        const existing = await prisma.userKnowledge.findUnique({
+          where: { userId_topicId: { userId: session.user.id, topicId: topic.id } },
+        });
+        const prevMeta = (existing?.metadata as { askedQuestions?: string[]; weakPoints?: string[]; lastScore?: number; studyCount?: number } | null) ?? {
+          askedQuestions: [],
+          weakPoints: [],
+          lastScore: 0,
+          studyCount: 0,
+        };
+
+        // 질문 해시 (중복 출제 방지용)
+        const qHash = hashQuestion(q.originalQuestion);
+
+        // 약점 병합: 점수 높으면 이전 약점 제거, 아니면 누적
+        const mergedWeakPoints = q.understandingScore >= 80
+          ? (q.weakPoints || []).slice(0, 5)
+          : [...new Set([...(prevMeta.weakPoints || []), ...(q.weakPoints || [])])].slice(-5);
+
+        const newMeta = {
+          askedQuestions: [...(prevMeta.askedQuestions || []), qHash].slice(-30),
+          weakPoints: mergedWeakPoints,
+          lastScore: q.understandingScore,
+          studyCount: (prevMeta.studyCount || 0) + 1,
+        };
+
+        const wasCorrect = q.understandingScore >= 60;
+        await knowledgeService.updateKnowledge(session.user.id, topic.id, wasCorrect, q.understandingScore, newMeta);
+      }
+
+      // 일일 진도 기록
+      const topicsStudied = [...new Set(questions.map(q => q.subcategory))];
+      await dailyProgressService.recordProgress(session.user.id, {
+        subjectId: 'nightly-study',
+        totalQuestions: questions.length,
+        correctCount: questions.filter(q => q.understandingScore >= 60).length,
+        durationSeconds: 0,
+        topicsStudied,
+      });
+    } catch (knowledgeErr) {
+      captureError(knowledgeErr, { context: 'nightly-study-knowledge-update' });
+    }
 
     return NextResponse.json({ summary });
   } catch (error) {

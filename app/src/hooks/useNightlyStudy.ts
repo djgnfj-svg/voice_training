@@ -40,6 +40,8 @@ interface QuestionState {
   conceptsCovered: string[];
   round: number;
   isComplete: boolean;
+  understandingScore: number;
+  weakPoints: string[];
 }
 
 function updateQuestionState(
@@ -96,6 +98,8 @@ export function useNightlyStudy() {
             conversation: s.conversation,
             conceptsCovered: s.conceptsCovered,
             keyPoints: s.question.keyPoints,
+            understandingScore: s.understandingScore,
+            weakPoints: s.weakPoints,
           })),
           mode: modeRef.current,
           resumeId: resumeIdRef.current,
@@ -155,6 +159,8 @@ export function useNightlyStudy() {
         conceptsCovered: [],
         round: 0,
         isComplete: false,
+        understandingScore: 0,
+        weakPoints: [],
       }));
       setQuestionStates(states);
 
@@ -214,29 +220,33 @@ export function useNightlyStudy() {
 
       const data = await res.json();
 
-      const tutorMsg: ConversationMessage = { role: 'tutor', content: data.tutorResponse };
-      const followUpMsg: ConversationMessage | null =
-        data.followUpQuestion && !data.isComplete
-          ? { role: 'tutor', content: data.followUpQuestion }
-          : null;
+      // 피드백 + 꼬리질문을 하나의 메시지로 합침
+      const hasFollowUp = data.followUpQuestion && !data.isComplete;
+      const combinedContent = hasFollowUp
+        ? `${data.tutorResponse}\n\n${data.followUpQuestion}`
+        : data.tutorResponse;
+      const tutorMsg: ConversationMessage = { role: 'tutor', content: combinedContent };
 
-      // Immutable update: add tutor response + follow-up + concepts
+      // Immutable update: add tutor response + concepts + scores
       const latestStates = questionStatesRef.current;
       const withTutor = updateQuestionState(latestStates, idx, (s) => ({
         ...s,
         conversation: [
           ...s.conversation,
           tutorMsg,
-          ...(followUpMsg ? [followUpMsg] : []),
         ],
         conceptsCovered: [...new Set([...s.conceptsCovered, ...data.conceptsCovered])],
         isComplete: data.isComplete,
+        // 최고 점수 유지 (여러 라운드 중 최고)
+        understandingScore: Math.max(s.understandingScore, data.understandingScore ?? 0),
+        // 약점 누적 (중복 제거)
+        weakPoints: [...new Set([...s.weakPoints, ...(data.weakPoints ?? [])])].slice(0, 5),
       }));
       setQuestionStates(withTutor);
 
       setPhase('tutor-speaking');
 
-      const toSpeak = followUpMsg
+      const toSpeak = hasFollowUp
         ? `${data.tutorResponse} ... ${data.followUpQuestion}`
         : data.tutorResponse;
 

@@ -63,7 +63,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AI 응답 생성에 실패했습니다' }, { status: 500 });
     }
 
-    let parsed: { tutorResponse?: string; followUpQuestion?: string; isComplete?: boolean; conceptsCovered?: string[] };
+    let parsed: {
+      tutorResponse?: string;
+      followUpQuestion?: string;
+      isComplete?: boolean;
+      conceptsCovered?: string[];
+      understandingScore?: number;
+      weakPoints?: string[];
+    };
     try {
       parsed = JSON.parse(content);
     } catch {
@@ -75,6 +82,8 @@ export async function POST(request: NextRequest) {
       followUpQuestion: parsed.followUpQuestion || null,
       isComplete: parsed.isComplete ?? (round >= maxRounds),
       conceptsCovered: parsed.conceptsCovered || [],
+      understandingScore: parsed.understandingScore ?? 50,
+      weakPoints: parsed.weakPoints ?? [],
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
