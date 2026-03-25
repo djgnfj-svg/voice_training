@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -44,15 +46,21 @@ async def change_password(
     if not db_user.hashed_password:
         raise HTTPException(status_code=400, detail="비밀번호가 설정되지 않은 계정입니다.")
 
-    if not bcrypt.checkpw(
+    password_valid = await asyncio.to_thread(
+        bcrypt.checkpw,
         body.currentPassword.encode("utf-8"),
         db_user.hashed_password.encode("utf-8"),
-    ):
+    )
+    if not password_valid:
         raise HTTPException(status_code=400, detail="현재 비밀번호가 일치하지 않습니다.")
 
-    new_hash = bcrypt.hashpw(
-        body.newPassword.encode("utf-8"),
-        bcrypt.gensalt(rounds=12),
+    salt = await asyncio.to_thread(bcrypt.gensalt, 12)
+    new_hash = (
+        await asyncio.to_thread(
+            bcrypt.hashpw,
+            body.newPassword.encode("utf-8"),
+            salt,
+        )
     ).decode("utf-8")
 
     db_user.hashed_password = new_hash

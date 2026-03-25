@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy import select, func
@@ -62,7 +62,7 @@ async def get_due_for_review(
     limit: int = 10,
 ) -> list[UserKnowledge]:
     """Return topics due for review (nextReviewAt <= now)."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     stmt = (
         select(UserKnowledge)
         .options(
@@ -96,7 +96,7 @@ async def update_knowledge(
     result = await db.execute(stmt)
     existing = result.scalar_one_or_none()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     if not existing:
         # First learning

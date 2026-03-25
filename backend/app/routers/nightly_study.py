@@ -169,7 +169,7 @@ async def _pick_smart_questions(
         knowledge_map[k.topic.name.lower()] = entry
 
     # Score each question
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     scored: list[dict] = []
 
     for item in pool:

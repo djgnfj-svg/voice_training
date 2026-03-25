@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 
@@ -14,7 +15,7 @@ from app.models.interview import InterviewSession, InterviewAnswer
 
 router = APIRouter()
 
-AUDIO_DIR = Path(".audio-storage")
+AUDIO_DIR = Path(__file__).resolve().parent.parent.parent / ".audio-storage"
 MAX_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_EXTS = {"webm", "mp3", "wav", "ogg"}
 UUID_RE = re.compile(
@@ -40,7 +41,10 @@ async def upload_audio(
     if not UUID_RE.match(sessionId):
         raise HTTPException(400, "Invalid sessionId")
 
-    q_idx = int(questionIndex)
+    try:
+        q_idx = int(questionIndex)
+    except ValueError:
+        raise HTTPException(400, "Invalid questionIndex")
     if q_idx < 0:
         raise HTTPException(400, "Invalid questionIndex")
 
@@ -68,7 +72,7 @@ async def upload_audio(
     dir_path = AUDIO_DIR / sessionId
     dir_path.mkdir(parents=True, exist_ok=True)
     file_path = dir_path / f"{q_idx}.{ext}"
-    file_path.write_bytes(content)
+    await asyncio.to_thread(file_path.write_bytes, content)
 
     audio_url = f"/api/interview/audio?sessionId={sessionId}&questionIndex={q_idx}"
 

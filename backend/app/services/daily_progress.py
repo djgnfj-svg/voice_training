@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -12,7 +12,7 @@ from app.models.learning import DailyProgress
 def _date_only(d: date | None = None) -> date:
     """Return a date object (no time component)."""
     if d is None:
-        return datetime.utcnow().date()
+        return datetime.now(timezone.utc).date()
     if isinstance(d, datetime):
         return d.date()
     return d

@@ -60,14 +60,14 @@ async def transcribe(
         raise HTTPException(413, "오디오 파일이 너무 큽니다")
 
     try:
-        from openai import OpenAI
+        from openai import AsyncOpenAI
 
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
         audio_file = io.BytesIO(content)
         audio_file.name = audio.filename or "recording.webm"
 
-        result = client.audio.transcriptions.create(
+        result = await client.audio.transcriptions.create(
             model="whisper-1",
             file=audio_file,
             language="ko",
