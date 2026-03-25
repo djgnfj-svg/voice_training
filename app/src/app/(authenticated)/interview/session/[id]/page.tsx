@@ -105,16 +105,16 @@ export default function InterviewSessionPage() {
 
         // Check if this is a resume scenario (API loaded, has answer data)
         const questionsData = data.questions as QuestionWithAnswer[];
-        const hasAnsweredQuestions = questionsData.some((q: QuestionWithAnswer) => q.answer !== null);
+        const hasAnsweredQuestions = questionsData.some((q: QuestionWithAnswer) => q.answer != null);
 
         if (hasAnsweredQuestions && data.sessionStatus === 'IN_PROGRESS') {
           // Resume mode: find first unanswered question
-          const resumeFromIndex = questionsData.findIndex((q: QuestionWithAnswer) => q.answer === null);
+          const resumeFromIndex = questionsData.findIndex((q: QuestionWithAnswer) => q.answer == null);
           const finalResumeIndex = resumeFromIndex === -1 ? questionsData.length : resumeFromIndex;
 
           // Build previous answers for the hook
           const previousAnswers = questionsData
-            .filter((q: QuestionWithAnswer) => q.answer !== null)
+            .filter((q: QuestionWithAnswer) => q.answer != null)
             .map((q: QuestionWithAnswer) => ({
               questionIndex: q.index,
               transcript: q.answer!.answerTranscript,
