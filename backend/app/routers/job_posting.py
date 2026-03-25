@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
-from app.models.interview import JobPosting
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -28,7 +30,8 @@ async def analyze_job_posting(
         result = await analyze(db, user.id, body.rawText)
         return result
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Failed to analyze job posting")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/api/job-posting")

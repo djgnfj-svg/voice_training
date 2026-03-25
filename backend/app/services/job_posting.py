@@ -209,6 +209,73 @@ async def _search_company_info(
 
 
 # ---------------------------------------------------------------------------
+# Deep research orchestrator (DB + credits + Tavily + Claude)
+# ---------------------------------------------------------------------------
+
+async def do_deep_research(
+    db: AsyncSession, posting_id: str, user_id: str
+) -> dict[str, Any]:
+    """Look up job posting, deduct credit, run deep research, persist results."""
+    from app.services.credit import (
+        deduct_for_feature,
+        CREDIT_COSTS,
+        InsufficientCreditsError,
+    )
+
+    # 1. Look up & verify ownership
+    result = await db.execute(
+        select(JobPosting).where(
+            JobPosting.id == posting_id,
+            JobPosting.user_id == user_id,
+        )
+    )
+    jp = result.scalar_one_or_none()
+    if not jp:
+        raise ValueError("NOT_FOUND")
+
+    # 2. Tavily availability check
+    if not tavily_available:
+        raise ValueError("TAVILY_NOT_AVAILABLE")
+
+    parsed = jp.parsed_data or {}
+    company = parsed.get("company", "")
+    position = parsed.get("position", "")
+    tech_stack = parsed.get("techStack", [])
+
+    # 3. Deduct credit
+    try:
+        await deduct_for_feature(
+            db,
+            user_id,
+            posting_id,
+            "심층 기업 분석",
+            CREDIT_COSTS["DEEP_RESEARCH"],
+        )
+    except InsufficientCreditsError:
+        raise ValueError("INSUFFICIENT_CREDITS")
+
+    # 4. Run deep research
+    research_data = await deep_company_research(company, position, tech_stack)
+
+    # 5. Merge into companyAnalysis and persist
+    existing_analysis = jp.company_analysis or {}
+    existing_analysis["deepResearch"] = research_data
+    await db.execute(
+        update(JobPosting)
+        .where(JobPosting.id == posting_id)
+        .values(company_analysis=existing_analysis)
+    )
+    await db.commit()
+
+    # Re-fetch and return
+    result = await db.execute(
+        select(JobPosting).where(JobPosting.id == posting_id)
+    )
+    updated = result.scalar_one()
+    return _serialize_job_posting(updated)
+
+
+# ---------------------------------------------------------------------------
 # Query helpers
 # ---------------------------------------------------------------------------
 
