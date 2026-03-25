@@ -6,11 +6,8 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Required
     DATABASE_URL: str
-    DIRECT_URL: str
     NEXTAUTH_SECRET: str
     ANTHROPIC_API_KEY: str
-    AUTH_GOOGLE_ID: str
-    AUTH_GOOGLE_SECRET: str
 
     # Optional
     ENVIRONMENT: str = "development"

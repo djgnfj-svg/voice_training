@@ -14,6 +14,8 @@ from app.models.resume import Resume
 
 router = APIRouter()
 
+MAX_PDF_SIZE = 10 * 1024 * 1024  # 10MB
+
 
 @router.get("/api/resume")
 async def list_resumes(
@@ -70,6 +72,8 @@ async def upload_resume(
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
 
     content = await file.read()
+    if len(content) > MAX_PDF_SIZE:
+        raise HTTPException(status_code=413, detail="PDF 파일이 너무 큽니다 (최대 10MB)")
 
     try:
         doc = pymupdf.open(stream=content, filetype="pdf")

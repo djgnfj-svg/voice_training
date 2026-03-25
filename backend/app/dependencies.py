@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import subprocess
@@ -11,9 +12,10 @@ from app.config import settings
 from app.database import get_db
 
 
-def _decrypt_nextauth_token(token: str, cookie_name: str) -> dict:
+async def _decrypt_nextauth_token(token: str, cookie_name: str) -> dict:
     """Decrypt NextAuth v5 JWE token by calling @auth/core via Node.js subprocess."""
-    result = subprocess.run(
+    result = await asyncio.to_thread(
+        subprocess.run,
         ["node", "decode_token.mjs", token, settings.NEXTAUTH_SECRET, cookie_name],
         capture_output=True,
         text=True,
@@ -47,7 +49,7 @@ async def get_current_user(request: Request) -> AuthUser:
 
     if token and cookie_name:
         try:
-            payload = _decrypt_nextauth_token(token, cookie_name)
+            payload = await _decrypt_nextauth_token(token, cookie_name)
             user_id = payload.get("sub")
             if user_id:
                 return AuthUser(
