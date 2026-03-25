@@ -125,15 +125,12 @@ async def deduct_for_session(
         update(User)
         .where(User.id == user_id, User.credit_balance >= cost)
         .values(credit_balance=User.credit_balance - cost)
+        .returning(User.credit_balance)
     )
-    if result.rowcount == 0:
+    row = result.one_or_none()
+    if row is None:
         raise InsufficientCreditsError("INSUFFICIENT_CREDITS")
-
-    # Get updated balance
-    bal_result = await db.execute(
-        select(User.credit_balance).where(User.id == user_id)
-    )
-    new_balance = bal_result.scalar_one()
+    new_balance = row.credit_balance
 
     await db.execute(
         update(InterviewSession)
@@ -170,15 +167,12 @@ async def deduct_for_feature(
         update(User)
         .where(User.id == user_id, User.credit_balance >= cost)
         .values(credit_balance=User.credit_balance - cost)
+        .returning(User.credit_balance)
     )
-    if result.rowcount == 0:
+    row = result.one_or_none()
+    if row is None:
         raise InsufficientCreditsError("INSUFFICIENT_CREDITS")
-
-    # Get updated balance
-    bal_result = await db.execute(
-        select(User.credit_balance).where(User.id == user_id)
-    )
-    new_balance = bal_result.scalar_one()
+    new_balance = row.credit_balance
 
     tx = CreditTransaction(
         id=str(uuid4()),
@@ -205,18 +199,15 @@ async def refund_for_session(
     if not row or not row.credit_deducted:
         return
 
-    cost = CREDIT_COSTS["SESSION"]
-
-    await db.execute(
-        update(User)
-        .where(User.id == user_id)
-        .values(credit_balance=User.credit_balance + cost)
+    # Check if this session was a free trial by looking at the transaction record
+    tx_result = await db.execute(
+        select(CreditTransaction.type)
+        .where(
+            CreditTransaction.reference_id == session_id,
+            CreditTransaction.type.in_(["FREE_TRIAL", "SESSION_DEBIT"]),
+        )
     )
-
-    bal_result = await db.execute(
-        select(User.credit_balance).where(User.id == user_id)
-    )
-    new_balance = bal_result.scalar_one()
+    original_tx = tx_result.scalar_one_or_none()
 
     await db.execute(
         update(InterviewSession)
@@ -224,16 +215,47 @@ async def refund_for_session(
         .values(credit_deducted=False)
     )
 
-    tx = CreditTransaction(
-        id=str(uuid4()),
-        user_id=user_id,
-        amount=cost,
-        balance=new_balance,
-        type="REFUND",
-        description="세션 생성 실패 환불",
-        reference_id=session_id,
-    )
-    db.add(tx)
+    if original_tx == "FREE_TRIAL":
+        # Free trial: restore free_trial_used flag, no credit refund
+        await db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(free_trial_used=False)
+        )
+
+        tx = CreditTransaction(
+            id=str(uuid4()),
+            user_id=user_id,
+            amount=0,
+            balance=0,
+            type="REFUND",
+            description="무료 체험 세션 실패 환불",
+            reference_id=session_id,
+        )
+        db.add(tx)
+    else:
+        # Paid session: refund credits
+        cost = CREDIT_COSTS["SESSION"]
+
+        result = await db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(credit_balance=User.credit_balance + cost)
+            .returning(User.credit_balance)
+        )
+        new_balance = result.scalar_one()
+
+        tx = CreditTransaction(
+            id=str(uuid4()),
+            user_id=user_id,
+            amount=cost,
+            balance=new_balance,
+            type="REFUND",
+            description="세션 생성 실패 환불",
+            reference_id=session_id,
+        )
+        db.add(tx)
+
     await db.commit()
 
 
@@ -241,16 +263,13 @@ async def grant_credits(
     db: AsyncSession, user_id: str, amount: int, description: str
 ) -> None:
     """Admin grant credits to a user."""
-    await db.execute(
+    result = await db.execute(
         update(User)
         .where(User.id == user_id)
         .values(credit_balance=User.credit_balance + amount)
+        .returning(User.credit_balance)
     )
-
-    bal_result = await db.execute(
-        select(User.credit_balance).where(User.id == user_id)
-    )
-    new_balance = bal_result.scalar_one()
+    new_balance = result.scalar_one()
 
     tx = CreditTransaction(
         id=str(uuid4()),
