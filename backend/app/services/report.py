@@ -88,8 +88,17 @@ async def generate_report(
     # Strengths and improvements
     # -----------------------------------------------------------------------
     sorted_answers = sorted(answered, key=lambda a: (a.overall_score or 0), reverse=True)
-    strengths = [a.brief_feedback or "" for a in sorted_answers[:3]]
-    improvements = [a.brief_feedback or "" for a in sorted_answers[-3:][::-1]]
+    n = len(sorted_answers)
+    if n <= 1:
+        strengths = [a.brief_feedback or "" for a in sorted_answers]
+        improvements = []
+    elif n <= 3:
+        mid = n // 2
+        strengths = [a.brief_feedback or "" for a in sorted_answers[:mid]]
+        improvements = [a.brief_feedback or "" for a in sorted_answers[mid:][::-1]]
+    else:
+        strengths = [a.brief_feedback or "" for a in sorted_answers[:3]]
+        improvements = [a.brief_feedback or "" for a in sorted_answers[-3:][::-1]]
 
     # -----------------------------------------------------------------------
     # Speech analysis
