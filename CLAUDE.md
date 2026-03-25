@@ -27,8 +27,7 @@
 - TanStack Query (클라이언트 상태)
 - shadcn/ui (UI 컴포넌트)
 - NextAuth v5 + Google OAuth (인증)
-  - 개발 모드: 가짜 세션 (`dev-user-00000000-0000-0000-0000`)
-  - 프로덕션: Google 로그인 → PrismaAdapter가 User/Account 자동 생성
+  - Google 로그인 → PrismaAdapter가 User/Account 자동 생성
   - 미들웨어에서 세션 쿠키 체크 (`__Secure-authjs.session-token`)
 - Prisma — NextAuth PrismaAdapter용으로만 사용 (`frontend/src/lib/prisma.ts`, `frontend/src/lib/auth.ts`)
 
@@ -87,7 +86,7 @@
 ## 크레딧 & 결제 시스템
 - **과금 모델**: 크레딧 충전제. 세션 1회 = 10코인, 꼬리질문 1코인 (면접/모범답안 동일)
 - **무료 체험**: 신규 유저 1회 무료 (질문 3개 제한). `User.freeTrialUsed` boolean으로 관리
-- **Dev 모드**: `NODE_ENV === 'development'`면 크레딧 체크 스킵
+- **Dev 모드**: `ENVIRONMENT=development`면 크레딧 체크 스킵 (backend config)
 - **원자적 차감**: DB 트랜잭션으로 동시 요청 방지
 - **차감 시점**: AI 생성 성공 후 차감 (실패 시 미차감)
 - **API**: `GET /api/credits` (잔액), `GET /api/credits/transactions` (내역)
@@ -152,5 +151,5 @@
 - `frontend/.env` — DB, NextAuth, Google OAuth, Toss, BACKEND_URL
 - `backend/.env` — DB, Anthropic API 키, Tavily, OpenAI (Whisper)
 - Vercel 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `NEXT_PUBLIC_TOSS_CLIENT_KEY`, `BACKEND_URL`
-- Backend 필수: `DATABASE_URL`, `ANTHROPIC_API_KEY`
-- Backend 선택: `TAVILY_API_KEY`, `OPENAI_API_KEY` (Whisper), `TOSS_SECRET_KEY`
+- Backend 필수: `DATABASE_URL`, `NEXTAUTH_SECRET`, `ANTHROPIC_API_KEY`
+- Backend 선택: `ENVIRONMENT`, `TAVILY_API_KEY`, `OPENAI_API_KEY` (Whisper), `TOSS_SECRET_KEY`, `ADMIN_EMAILS`
