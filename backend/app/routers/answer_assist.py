@@ -60,7 +60,7 @@ async def create_session(
     )
 
     # Generate questions via Claude
-    prompt = f"{ANSWER_ASSIST_QUESTION_PROMPT}\n\n\uc774\ub825\uc11c:\n{parsed_resume}\n\n\uc704 \uc774\ub825\uc11c\ub97c \ubd84\uc11d\ud558\uc5ec \uba74\uc811 \uc9c8\ubb38\uc744 \uc0dd\uc131\ud558\uc138\uc694."
+    prompt = f"{ANSWER_ASSIST_QUESTION_PROMPT}\n\n<resume>\n{parsed_resume}\n</resume>\n\n\uc704 \uc774\ub825\uc11c\ub97c \ubd84\uc11d\ud558\uc5ec \uba74\uc811 \uc9c8\ubb38\uc744 \uc0dd\uc131\ud558\uc138\uc694."
     try:
         data = await call_llm_json(
             prompt,

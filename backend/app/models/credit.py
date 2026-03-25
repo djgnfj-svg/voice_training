@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
-from app.models.enums import PgCreditTxType, PgPaymentStatus
+from app.models.enums import PgCreditTxType, PgPaymentStatus, PaymentStatus
 
 
 class CreditTransaction(Base):
@@ -30,7 +30,7 @@ class PaymentOrder(Base):
     order_name = Column("orderName", String, nullable=False)
     amount = Column(Integer, nullable=False)
     credits = Column(Integer, nullable=False)
-    status = Column(PgPaymentStatus, nullable=False, default="PENDING")
+    status = Column(PgPaymentStatus, nullable=False, default=PaymentStatus.PENDING)
     payment_key = Column("paymentKey", String, nullable=True)
     method = Column(String, nullable=True)
     approved_at = Column("approvedAt", DateTime, nullable=True)

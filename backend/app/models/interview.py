@@ -4,7 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
-from app.models.enums import PgInterviewType, PgDifficulty, PgSessionStatus
+from app.models.enums import PgInterviewType, PgDifficulty, PgSessionStatus, InterviewType, Difficulty, SessionStatus
 
 
 class JobPosting(Base):
@@ -29,10 +29,10 @@ class InterviewSession(Base):
     user_id = Column("userId", String, ForeignKey("users.id"), nullable=False)
     job_posting_id = Column("jobPostingId", String, ForeignKey("job_postings.id"), nullable=True)
     resume_id = Column("resumeId", String, ForeignKey("resumes.id"), nullable=False)
-    type = Column(PgInterviewType, nullable=False, default="TECHNICAL")
+    type = Column(PgInterviewType, nullable=False, default=InterviewType.TECHNICAL)
     categories = Column(ARRAY(String), nullable=True)
-    difficulty = Column(PgDifficulty, nullable=False, default="INTERMEDIATE")
-    status = Column(PgSessionStatus, nullable=False, default="IN_PROGRESS")
+    difficulty = Column(PgDifficulty, nullable=False, default=Difficulty.INTERMEDIATE)
+    status = Column(PgSessionStatus, nullable=False, default=SessionStatus.IN_PROGRESS)
     overall_score = Column("overallScore", Float, nullable=True)
     matching_score = Column("matchingScore", Float, nullable=True)
     gap_analysis = Column("gapAnalysis", JSON, nullable=True)
@@ -80,7 +80,7 @@ class QuestionBank(Base):
     id = Column(String, primary_key=True)
     category = Column(String, nullable=False)
     subcategory = Column(String, nullable=False)
-    difficulty = Column(PgDifficulty, nullable=False, default="INTERMEDIATE")
+    difficulty = Column(PgDifficulty, nullable=False, default=Difficulty.INTERMEDIATE)
     question_text = Column("questionText", Text, nullable=False)
     key_points = Column("keyPoints", ARRAY(String), nullable=True)
     created_at = Column("createdAt", DateTime, server_default=func.now())
