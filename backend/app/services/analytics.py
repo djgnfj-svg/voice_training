@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -57,8 +57,18 @@ async def get_category_performance(db: AsyncSession, user_id: str) -> list[dict]
 
 
 async def get_session_history(db: AsyncSession, user_id: str, limit: int = 20) -> list[dict]:
+    answer_count_sub = (
+        select(
+            InterviewAnswer.session_id,
+            func.count().label("cnt"),
+        )
+        .group_by(InterviewAnswer.session_id)
+        .subquery()
+    )
+
     result = await db.execute(
-        select(InterviewSession)
+        select(InterviewSession, func.coalesce(answer_count_sub.c.cnt, 0).label("answer_count"))
+        .outerjoin(answer_count_sub, InterviewSession.id == answer_count_sub.c.session_id)
         .options(
             selectinload(InterviewSession.resume),
             selectinload(InterviewSession.job_posting),
@@ -67,17 +77,10 @@ async def get_session_history(db: AsyncSession, user_id: str, limit: int = 20) -
         .order_by(InterviewSession.created_at.desc())
         .limit(limit)
     )
-    sessions = result.scalars().all()
+    rows = result.all()
 
-    out = []
-    for s in sessions:
-        # Count answers
-        count_result = await db.execute(
-            select(func.count()).where(InterviewAnswer.session_id == s.id)
-        )
-        answer_count = count_result.scalar() or 0
-
-        out.append({
+    return [
+        {
             "_kind": "session",
             "id": s.id,
             "userId": s.user_id,
@@ -89,28 +92,33 @@ async def get_session_history(db: AsyncSession, user_id: str, limit: int = 20) -
             "resumeName": s.resume.name if s.resume else None,
             "jobPostingData": s.job_posting.parsed_data if s.job_posting else None,
             "answerCount": answer_count,
-        })
-    return out
+        }
+        for s, answer_count in rows
+    ]
 
 
 async def get_activity_history(db: AsyncSession, user_id: str, limit: int = 20) -> list[dict]:
+    item_count_sub = (
+        select(
+            ActivityItem.activity_log_id,
+            func.count().label("cnt"),
+        )
+        .group_by(ActivityItem.activity_log_id)
+        .subquery()
+    )
+
     result = await db.execute(
-        select(ActivityLog)
+        select(ActivityLog, func.coalesce(item_count_sub.c.cnt, 0).label("item_count"))
+        .outerjoin(item_count_sub, ActivityLog.id == item_count_sub.c.activity_log_id)
         .options(selectinload(ActivityLog.resume))
         .where(ActivityLog.user_id == user_id)
         .order_by(ActivityLog.created_at.desc())
         .limit(limit)
     )
-    logs = result.scalars().all()
+    rows = result.all()
 
-    out = []
-    for a in logs:
-        count_result = await db.execute(
-            select(func.count()).where(ActivityItem.activity_log_id == a.id)
-        )
-        item_count = count_result.scalar() or 0
-
-        out.append({
+    return [
+        {
             "_kind": "activity",
             "id": a.id,
             "userId": a.user_id,
@@ -120,5 +128,6 @@ async def get_activity_history(db: AsyncSession, user_id: str, limit: int = 20) 
             "createdAt": a.created_at.isoformat() if a.created_at else None,
             "resumeName": a.resume.name if a.resume else None,
             "itemCount": item_count,
-        })
-    return out
+        }
+        for a, item_count in rows
+    ]
