@@ -61,11 +61,6 @@ async def get_current_user(request: Request) -> AuthUser:
             logging.error(f"JWT decode failed: {e}")
             # Fall through to dev mode or 401
 
-    # Dev mode: allow X-User-Id header override
-    if settings.is_dev:
-        dev_user_id = request.headers.get("X-User-Id", "dev-user-00000000-0000-0000-0000")
-        return AuthUser(id=dev_user_id, email="dev@localhost")
-
     raise HTTPException(status_code=401, detail="Unauthorized")
 
 
