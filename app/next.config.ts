@@ -19,6 +19,20 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
+    return {
+      // afterFiles: runs AFTER checking API route files, before fallback
+      // This means existing API route files still win, but non-existent ones proxy to FastAPI
+      // To proxy ALL api routes to FastAPI, use beforeFiles
+      beforeFiles: [
+        {
+          source: '/api/:path((?!auth).*)',
+          destination: `${backendUrl}/api/:path*`,
+        },
+      ],
+    };
+  },
   async headers() {
     return [
       {

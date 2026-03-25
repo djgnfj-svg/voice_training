@@ -1,0 +1,10 @@
+{
+  "name": "voiceprep-token-decoder",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@auth/core": "^0.37.0",
+    "@panva/hkdf": "^1.2.1",
+    "jose": "^5.9.0"
+  }
+}

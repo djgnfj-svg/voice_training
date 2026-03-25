@@ -1,0 +1,61 @@
+{
+  "category": "LANGUAGES",
+  "questions": [
+    {
+      "subcategory": "TypeScript",
+      "difficulty": "INTERMEDIATE",
+      "questionText": "TypeScript의 제네릭을 실무에서 어떻게 활용하는지 구체적인 예시와 함께 설명해주세요.",
+      "keyPoints": ["타입 매개변수", "제약 조건(extends)", "기본값 타입", "함수/클래스/인터페이스 제네릭"],
+      "deepDiveTopics": ["조건부 타입과 제네릭 조합", "제네릭 추론 메커니즘", "고차 함수 타이핑"]
+    },
+    {
+      "subcategory": "TypeScript",
+      "difficulty": "ADVANCED",
+      "questionText": "TypeScript의 조건부 타입(Conditional Types)과 infer 키워드의 동작 원리를 설명해주세요.",
+      "keyPoints": ["T extends U ? X : Y 구조", "infer로 타입 추출", "분배 조건부 타입(distributive)", "Exclude/Extract 구현 원리"],
+      "deepDiveTopics": ["재귀 조건부 타입", "템플릿 리터럴 타입과 조건부 타입", "조건부 타입으로 타입 레벨 프로그래밍"]
+    },
+    {
+      "subcategory": "TypeScript",
+      "difficulty": "INTERMEDIATE",
+      "questionText": "TypeScript의 유틸리티 타입(Partial, Required, Pick, Omit 등)의 동작 원리와 활용 방법을 설명해주세요.",
+      "keyPoints": ["Partial<T>", "Required<T>", "Pick<T, K>", "Omit<T, K>", "Record<K, V>", "mapped types로 구현"],
+      "deepDiveTopics": ["커스텀 유틸리티 타입 설계", "DeepPartial 구현", "키 리매핑(as 절)"]
+    },
+    {
+      "subcategory": "TypeScript",
+      "difficulty": "INTERMEDIATE",
+      "questionText": "TypeScript의 타입 가드(Type Guard)가 무엇이고, 어떤 종류가 있는지 설명해주세요.",
+      "keyPoints": ["typeof", "instanceof", "in 연산자", "사용자 정의 타입 가드(is)", "discriminated union"],
+      "deepDiveTopics": ["assertion function", "narrowing 동작 원리", "제어 흐름 분석(control flow analysis)"]
+    },
+    {
+      "subcategory": "TypeScript",
+      "difficulty": "ADVANCED",
+      "questionText": "TypeScript의 구조적 타입 시스템(Structural Typing)과 명목적 타입 시스템의 차이를 설명해주세요.",
+      "keyPoints": ["덕 타이핑", "구조적 호환성", "초과 속성 검사", "명목적 타이핑이 필요한 사례"],
+      "deepDiveTopics": ["브랜디드 타입(branded types)", "opaque type 패턴", "타입 호환성 규칙"]
+    },
+    {
+      "subcategory": "TypeScript",
+      "difficulty": "ADVANCED",
+      "questionText": "TypeScript의 선언 병합(Declaration Merging)과 모듈 보강(Module Augmentation)을 설명해주세요.",
+      "keyPoints": ["인터페이스 병합", "네임스페이스 병합", "모듈 보강 구문", "글로벌 타입 확장"],
+      "deepDiveTopics": ["d.ts 파일 작성", "서드파티 라이브러리 타입 확장", "환경 선언(ambient declaration)"]
+    },
+    {
+      "subcategory": "TypeScript",
+      "difficulty": "INTERMEDIATE",
+      "questionText": "TypeScript에서 any, unknown, never 타입의 차이점과 각각 언제 사용해야 하는지 설명해주세요.",
+      "keyPoints": ["any: 타입 검사 비활성화", "unknown: 안전한 any", "never: 도달 불가능", "타입 안전성 순서"],
+      "deepDiveTopics": ["exhaustive check에서 never 활용", "타입 좁히기와 unknown", "any 사용을 줄이는 전략"]
+    },
+    {
+      "subcategory": "TypeScript",
+      "difficulty": "ADVANCED",
+      "questionText": "TypeScript의 템플릿 리터럴 타입과 mapped types를 조합하여 어떤 고급 패턴을 만들 수 있는지 설명해주세요.",
+      "keyPoints": ["템플릿 리터럴 타입 문법", "문자열 조작 유틸리티(Uppercase 등)", "mapped types의 키 리매핑", "타입 레벨 문자열 파싱"],
+      "deepDiveTopics": ["라우트 파라미터 타입 추출", "이벤트 이름 기반 타입 생성", "재귀적 문자열 타입"]
+    }
+  ]
+}

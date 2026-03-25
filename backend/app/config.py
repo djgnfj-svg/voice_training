@@ -1,0 +1,40 @@
+from __future__ import annotations
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    # Required
+    DATABASE_URL: str
+    DIRECT_URL: str
+    NEXTAUTH_SECRET: str
+    ANTHROPIC_API_KEY: str
+    AUTH_GOOGLE_ID: str
+    AUTH_GOOGLE_SECRET: str
+
+    # Optional
+    ENVIRONMENT: str = "development"
+    REDIS_URL: str | None = None
+    TAVILY_API_KEY: str | None = None
+    OPENAI_API_KEY: str | None = None
+    TOSS_SECRET_KEY: str | None = None
+    NEXT_PUBLIC_TOSS_CLIENT_KEY: str | None = None
+    ADMIN_EMAILS: str = ""
+
+    @property
+    def is_dev(self) -> bool:
+        return self.ENVIRONMENT == "development"
+
+    @property
+    def admin_email_list(self) -> list[str]:
+        if not self.ADMIN_EMAILS:
+            return []
+        return [email.strip().lower() for email in self.ADMIN_EMAILS.split(",") if email.strip()]
+
+    model_config = {
+        "env_file": ".env",
+        "extra": "ignore",
+    }
+
+
+settings = Settings()

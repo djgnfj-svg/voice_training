@@ -51,6 +51,16 @@ app/prisma/migrations/
 *.jpg
 *.jpeg
 
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+backend/.env
+backend/node_modules/
+
+# API backup (migrated to FastAPI)
+app/_api_backup/
+
 # Misc
 *.tsbuildinfo
 next-env.d.ts
