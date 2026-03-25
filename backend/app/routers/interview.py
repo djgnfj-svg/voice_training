@@ -4,15 +4,19 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, update
+from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+import logging
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
 from app.models.interview import InterviewSession, InterviewAnswer
 from app.models.resume import Resume
 from app.models.enums import SessionStatus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -31,7 +35,7 @@ async def setup_interview(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services.credit import can_start_session, deduct_for_session
+    from app.services.credit import can_start_session, deduct_for_session, InsufficientCreditsError, FreeTrialAlreadyUsedError
     from app.services.question import plan_interview, generate_questions
     from uuid import uuid4
 
@@ -108,8 +112,21 @@ async def setup_interview(
         await deduct_for_session(
             db, user.id, session_id, credit_check["usingFreeTrial"]
         )
+    except (InsufficientCreditsError, FreeTrialAlreadyUsedError):
+        # Rollback any partial transaction, then delete the already-committed session
+        await db.rollback()
+        await db.execute(
+            delete(InterviewAnswer).where(InterviewAnswer.session_id == session_id)
+        )
+        await db.execute(
+            delete(InterviewSession).where(InterviewSession.id == session_id)
+        )
+        await db.commit()
+        raise HTTPException(
+            402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
+        )
     except Exception:
-        pass  # Don't fail the session if credit deduction fails
+        logger.exception("Credit deduction failed for session %s", session_id)
 
     return {"sessionId": session_id, "plan": plan, "questions": questions}
 
@@ -120,7 +137,7 @@ async def get_in_progress(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    cutoff = datetime.utcnow() - timedelta(hours=24)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     result = await db.execute(
         select(InterviewSession)
         .where(
@@ -285,7 +302,8 @@ async def evaluate_answer(
             raise HTTPException(404, str(e))
         raise HTTPException(400, str(e))
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Failed to evaluate answer")
+        raise HTTPException(500, "Internal server error")
 
 
 # --- POST /api/interview/practice-evaluate ---
@@ -307,20 +325,21 @@ async def practice_evaluate(
     from app.services.evaluation import evaluate_stateless
     from app.services.credit import (
         deduct_for_feature,
+        get_credit_info,
         CREDIT_COSTS,
         InsufficientCreditsError,
     )
+    from app.config import settings
 
-    result = await evaluate_stateless(
-        question_text=body.questionText,
-        answer_transcript=body.answerTranscript,
-        interview_type=body.interviewType,
-        deep_mode=body.deepMode,
-        related_key_points=body.relatedKeyPoints,
-        previous_context=body.previousContext,
-    )
+    # Check credits before AI call to prevent free evaluation abuse
+    if not settings.is_dev:
+        info = await get_credit_info(db, user.id)
+        if info["balance"] < CREDIT_COSTS["FOLLOW_UP"]:
+            raise HTTPException(
+                402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
+            )
 
-    # Deduct follow-up credit
+    # Deduct follow-up credit before AI call
     try:
         await deduct_for_feature(
             db,
@@ -334,6 +353,15 @@ async def practice_evaluate(
         raise HTTPException(
             402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
         )
+
+    result = await evaluate_stateless(
+        question_text=body.questionText,
+        answer_transcript=body.answerTranscript,
+        interview_type=body.interviewType,
+        deep_mode=body.deepMode,
+        related_key_points=body.relatedKeyPoints,
+        previous_context=body.previousContext,
+    )
 
     return result
 
