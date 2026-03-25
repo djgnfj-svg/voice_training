@@ -410,6 +410,21 @@ async def complete_nightly_study(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Daily limit check to prevent race condition (duplicate complete requests)
+    if not settings.is_dev:
+        kst_midnight = _get_kst_midnight()
+        stmt = select(ActivityLog).where(
+            ActivityLog.user_id == user.id,
+            ActivityLog.type == "NIGHTLY_STUDY",
+            ActivityLog.created_at >= kst_midnight,
+        )
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                429,
+                {"error": "오늘은 이미 학습을 완료했어요!", "code": "DAILY_LIMIT_REACHED"},
+            )
+
     # Build session data for summary
     session_data = []
     for q in body.questions:
