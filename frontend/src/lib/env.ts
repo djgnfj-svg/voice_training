@@ -30,7 +30,7 @@ const serverEnvSchema = z.object({
     ),
 });
 
-export type ServerEnv = z.infer<typeof serverEnvSchema>;
+type ServerEnv = z.infer<typeof serverEnvSchema>;
 
 function validateEnv(): ServerEnv {
   if (typeof window !== 'undefined') {

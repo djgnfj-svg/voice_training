@@ -16,12 +16,6 @@ export function getGrade(score: number): string {
   return 'F';
 }
 
-export function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}분 ${secs}초`;
-}
-
 export function formatDate(date: Date | string): string {
   return new Date(date).toLocaleDateString('ko-KR', {
     year: 'numeric',

@@ -1,5 +1,5 @@
 // 한국어 필러워드 — word boundary 대신 공백/문장부호/시작/끝을 경계로 사용
-export const FILLER_WORDS = /(?:^|[\s,.])(음|어|그|아|뭐|이제|그러니까|그래서|약간|좀|저기|뭐랄까|그니까|어쨌든|일단|뭐냐면|막|진짜|되게|아마)(?=$|[\s,.])/g;
+const FILLER_WORDS = /(?:^|[\s,.])(음|어|그|아|뭐|이제|그러니까|그래서|약간|좀|저기|뭐랄까|그니까|어쨌든|일단|뭐냐면|막|진짜|되게|아마)(?=$|[\s,.])/g;
 
 export function countFillerWords(text: string): number {
   const matches = text.match(FILLER_WORDS);
