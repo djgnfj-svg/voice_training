@@ -93,28 +93,37 @@ async def get_streak(
     *,
     user_id: str,
 ) -> int:
-    """Count consecutive days with at least 1 session."""
+    """Count consecutive days with at least 1 session.
+
+    Uses a single query to fetch up to 365 days of progress,
+    then calculates the streak in Python.
+    """
     today = _date_only()
+    cutoff = today - timedelta(days=365)
+
+    stmt = (
+        select(DailyProgress.date, DailyProgress.total_sessions)
+        .where(
+            DailyProgress.user_id == user_id,
+            DailyProgress.date >= cutoff,
+            DailyProgress.date <= today,
+            DailyProgress.total_sessions > 0,
+        )
+        .order_by(DailyProgress.date.desc())
+    )
+    result = await db.execute(stmt)
+    active_dates = {row.date for row in result.all()}
+
     streak = 0
     check_date = today
 
-    while True:
-        stmt = select(DailyProgress).where(
-            DailyProgress.user_id == user_id,
-            DailyProgress.date == check_date,
-        )
-        result = await db.execute(stmt)
-        progress = result.scalar_one_or_none()
+    # If today has no progress, start from yesterday
+    if check_date not in active_dates:
+        check_date = today - timedelta(days=1)
 
-        if not progress or (progress.total_sessions or 0) == 0:
-            # If today and no progress yet, check yesterday
-            if streak == 0 and check_date == today:
-                check_date = check_date - timedelta(days=1)
-                continue
-            break
-
+    while check_date in active_dates:
         streak += 1
-        check_date = check_date - timedelta(days=1)
+        check_date -= timedelta(days=1)
 
     return streak
 
