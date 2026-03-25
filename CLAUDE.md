@@ -1,7 +1,7 @@
 # Project: VoicePrep (보이스프렙)
 
 ## 구조
-- `app/` — Next.js 프론트엔드 + NextAuth 인증만
+- `frontend/` — Next.js 프론트엔드 + NextAuth 인증만
 - `backend/` — FastAPI 백엔드 (API, 서비스, 프롬프트, AI 로직 전부)
 - `db/` — DB 초기화 스크립트
 - `docker-compose.yml` — PostgreSQL, Redis (인프라만, Redis는 로컬 전용)
@@ -9,20 +9,20 @@
 
 ## 개발 규칙
 - 인프라(PostgreSQL, Redis)는 `docker compose up -d`로 띄움. Redis는 선택적 — 없으면 캐시 무시하고 동작.
-- Next.js dev 서버는 `cd app && PORT=3001 npm run dev`로 포트 3001에서 실행.
+- Next.js dev 서버는 `cd frontend && PORT=3001 npm run dev`로 포트 3001에서 실행.
 - FastAPI dev 서버는 `cd backend && uvicorn app.main:app --reload --port 8000`으로 실행.
-- prisma 명령 실행 시 `cd app && set -a && source .env && set +a` 후 실행.
+- prisma 명령 실행 시 `cd frontend && set -a && source .env && set +a` 후 실행.
 - `node.exe` 프로세스를 함부로 죽이지 말 것 (dev 서버가 꺼짐).
 
 ## 코드 규칙
 - placeholder/example 값 만들지 말 것. 실제 값이 없으면 비워두거나 물어볼 것.
 - 불필요한 파일 생성 금지. 기존 파일 수정 우선.
 - 데드코드, 미사용 import 남기지 말 것.
-- **API 로직은 backend/에 작성**. app/src/app/api/에는 auth만 존재.
+- **API 로직은 backend/에 작성**. frontend/src/app/api/에는 auth만 존재.
 
 ## 기술 스택
 
-### 프론트엔드 (`app/`)
+### 프론트엔드 (`frontend/`)
 - Next.js 15 (App Router) — UI + NextAuth 인증
 - TanStack Query (클라이언트 상태)
 - shadcn/ui (UI 컴포넌트)
@@ -30,7 +30,7 @@
   - 개발 모드: 가짜 세션 (`dev-user-00000000-0000-0000-0000`)
   - 프로덕션: Google 로그인 → PrismaAdapter가 User/Account 자동 생성
   - 미들웨어에서 세션 쿠키 체크 (`__Secure-authjs.session-token`)
-- Prisma — NextAuth PrismaAdapter용으로만 사용 (`app/src/lib/prisma.ts`, `app/src/lib/auth.ts`)
+- Prisma — NextAuth PrismaAdapter용으로만 사용 (`frontend/src/lib/prisma.ts`, `frontend/src/lib/auth.ts`)
 
 ### 백엔드 (`backend/`)
 - FastAPI (Python)
@@ -48,7 +48,7 @@
 - **이름**: 보이스프렙 (VoicePrep)
 - **태그라인**: 말하며 준비하는 개발자 면접
 - **포지셔닝**: 타이핑이 아니라 실제로 말하며 연습하는 AI 기술 면접 코치
-- **상수**: `app/src/lib/brand.ts` — BRAND 객체 (name, nameEn, tagline, description)
+- **상수**: `frontend/src/lib/brand.ts` — BRAND 객체 (name, nameEn, tagline, description)
 
 ## 주요 플로우
 - **면접 연습**: 이력서 선택(필수) → 채용공고 입력(선택) → 면접 모드 선택 → AI 자동 설계 → 마이크 확인 → 면접 시작
@@ -99,7 +99,7 @@
 - **402 응답**: `{ error: '...', code: 'INSUFFICIENT_CREDITS' }` → UI에서 크레딧 부족 다이얼로그/페이지 표시
 - **UI**: `components/credit/credit-badge.tsx` (헤더), `components/credit/insufficient-credits-dialog.tsx`, `/credits` 페이지
 - **Toss Payments 연동**:
-  - 상품: `app/src/lib/payment-products.ts` — 50/150/300 코인 (3,000/8,000/14,000원)
+  - 상품: `frontend/src/lib/payment-products.ts` — 50/150/300 코인 (3,000/8,000/14,000원)
   - 플로우: 상품 선택 → `POST /api/payments/orders` (주문 생성) → Toss SDK 결제창 → `POST /api/payments/confirm` (서버 확인 + 크레딧 부여)
   - 멱등성: `orderId`를 Toss `Idempotency-Key`로 전달
 
@@ -138,19 +138,19 @@
 - `BACKEND_URL` 환경변수로 FastAPI 주소 지정
 
 ## 음성 처리
-- **transcript 정규화**: `app/src/lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 + `countFillerWords()` (필러워드 카운트, 클라이언트용)
+- **transcript 정규화**: `frontend/src/lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 + `countFillerWords()` (필러워드 카운트, 클라이언트용)
 - **AI 교정**: `backend/app/lib/transcript_server.py` — 서버 측 transcript 교정
 - **음성인식 (하이브리드)**:
   - 실시간 표시: Web Speech API (`maxAlternatives=3` + confidence 기반 최적 대안 선택)
   - 최종 전사: Whisper API (선택적) — 답변 제출 시 녹음 데이터를 Whisper로 전사, 실패 시 Web Speech API 폴백
-  - 클라이언트 래퍼: `app/src/lib/whisper-client.ts`
-  - 녹음 훅: `app/src/hooks/useAudioRecorder.ts` (MediaRecorder API)
+  - 클라이언트 래퍼: `frontend/src/lib/whisper-client.ts`
+  - 녹음 훅: `frontend/src/hooks/useAudioRecorder.ts` (MediaRecorder API)
   - API: `POST /api/transcribe` (FastAPI)
 - **실시간 발화 분석**: `hooks/useSpeechAnalytics.ts` — 답변 중 실시간 비언어적 피드백
   - `SpeechMetrics`: wpm (음절/분), fillerCount, silenceSec, silenceRatio, elapsedSec
 
 ## 환경 변수
-- `app/.env` — DB, NextAuth, Google OAuth, Toss, BACKEND_URL
+- `frontend/.env` — DB, NextAuth, Google OAuth, Toss, BACKEND_URL
 - `backend/.env` — DB, Anthropic API 키, Tavily, OpenAI (Whisper)
 - Vercel 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `NEXT_PUBLIC_TOSS_CLIENT_KEY`, `BACKEND_URL`
 - Backend 필수: `DATABASE_URL`, `ANTHROPIC_API_KEY`

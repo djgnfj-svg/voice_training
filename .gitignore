@@ -37,7 +37,7 @@ redis_data/
 minio_data/
 
 # Prisma
-app/prisma/migrations/
+frontend/prisma/migrations/
 
 # Claude Code
 .claude/
@@ -59,7 +59,7 @@ backend/.env
 backend/node_modules/
 
 # API backup (migrated to FastAPI)
-app/_api_backup/
+frontend/_api_backup/
 
 # Misc
 *.tsbuildinfo
