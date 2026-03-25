@@ -1,7 +1,6 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['msedge-tts'],
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
