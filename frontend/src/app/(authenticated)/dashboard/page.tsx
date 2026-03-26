@@ -18,7 +18,7 @@ interface DashboardData {
     type: string;
     overallScore: number | null;
     createdAt: string;
-    categories: string[];
+    categories?: string[] | null;
   }[];
   resumeCount: number;
   creditBalance: number;
@@ -68,13 +68,12 @@ export default function DashboardPage() {
     );
   }
 
+  const scoredSessions = data.recentSessions.filter((s) => s.overallScore !== null);
   const avgScore =
-    data.recentSessions.length > 0
+    scoredSessions.length > 0
       ? Math.round(
-          data.recentSessions
-            .filter((s) => s.overallScore !== null)
-            .reduce((sum, s) => sum + (s.overallScore || 0), 0) /
-            data.recentSessions.filter((s) => s.overallScore !== null).length
+          scoredSessions.reduce((sum, s) => sum + (s.overallScore || 0), 0) /
+            scoredSessions.length
         )
       : 0;
 
@@ -196,7 +195,7 @@ export default function DashboardPage() {
                       {s.type === 'TECHNICAL' ? '기술면접' : s.type === 'BEHAVIORAL' ? '인성면접' : '혼합면접'}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {s.categories.join(', ')} | {new Date(s.createdAt).toLocaleDateString('ko-KR')}
+                      {(s.categories ?? []).join(', ')}{(s.categories ?? []).length > 0 && ' | '}{new Date(s.createdAt).toLocaleDateString('ko-KR')}
                     </p>
                   </div>
                   <div className="text-right">

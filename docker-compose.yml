@@ -1,35 +1,18 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
+  frontend:
+    build:
+      context: ./frontend
+      target: development
     ports:
-      - "5432:5432"
+      - "3001:3000"
+    env_file:
+      - ./frontend/.env
     environment:
-      - POSTGRES_USER=voice_training
-      - POSTGRES_PASSWORD=voice_training_dev
-      - POSTGRES_DB=voice_training
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voice_training"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
     restart: unless-stopped
 
   backend:
@@ -39,11 +22,4 @@ services:
       - "8000:8000"
     env_file:
       - ./backend/.env
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  postgres_data:
-  redis_data:

@@ -27,7 +27,7 @@ async def analyze_job_posting(
     from app.services.job_posting import analyze_job_posting as analyze
 
     try:
-        result = await analyze(db, user.id, body.rawText)
+        result = await analyze(db, user_id=user.id, raw_text=body.rawText)
         return result
     except Exception as e:
         logger.exception("Failed to analyze job posting")

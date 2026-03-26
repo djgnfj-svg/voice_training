@@ -6,6 +6,7 @@ import pymupdf
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -155,7 +156,14 @@ async def delete_resume(
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    await db.delete(resume)
-    await db.commit()
+    try:
+        await db.delete(resume)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="이 이력서와 연결된 면접 기록이 있어 삭제할 수 없습니다.",
+        )
 
     return {"success": True}

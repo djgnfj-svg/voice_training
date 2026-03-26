@@ -13,16 +13,13 @@ interface SessionItem {
   _kind: 'session';
   id: string;
   type: string;
-  categories: string[];
-  difficulty: string;
+  categories?: string[] | null;
   status: string;
   overallScore: number | null;
-  matchingScore: number | null;
   createdAt: string;
-  durationSeconds: number | null;
-  resume: { name: string } | null;
-  jobPosting: { parsedData: ParsedJobPosting } | null;
-  _count: { answers: number };
+  resumeName?: string | null;
+  jobPostingData?: ParsedJobPosting | null;
+  answerCount: number;
 }
 
 interface ActivityItem {
@@ -31,8 +28,8 @@ interface ActivityItem {
   type: 'MODEL_ANSWER';
   resumeId: string | null;
   createdAt: string;
-  resume: { name: string } | null;
-  _count: { items: number };
+  resumeName?: string | null;
+  itemCount: number;
 }
 
 type HistoryItem = SessionItem | ActivityItem;
@@ -128,12 +125,12 @@ function SessionCard({
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              {session.resume?.name && <>{session.resume.name} | </>}
-              {session.categories.join(', ')} | {session._count.answers}문제 | {formatDate(session.createdAt)}
+              {session.resumeName && <>{session.resumeName} | </>}
+              {(session.categories ?? []).join(', ')}{(session.categories ?? []).length > 0 && ' | '}{session.answerCount}문제 | {formatDate(session.createdAt)}
             </p>
-            {session.jobPosting?.parsedData && (
+            {session.jobPostingData && (
               <p className="text-xs text-muted-foreground">
-                {session.jobPosting.parsedData.company} - {session.jobPosting.parsedData.position}
+                {session.jobPostingData.company} - {session.jobPostingData.position}
               </p>
             )}
           </div>
@@ -141,9 +138,6 @@ function SessionCard({
             {session.overallScore !== null ? (
               <div>
                 <p className="text-2xl font-bold">{Math.round(session.overallScore)}점</p>
-                {session.matchingScore !== null && (
-                  <p className="text-xs text-muted-foreground">매칭도 {session.matchingScore}%</p>
-                )}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">-</p>
@@ -167,8 +161,8 @@ function ActivityCard({ activity }: { activity: ActivityItem }) {
               <Badge variant="outline">모범답안</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              {activity.resume?.name && <>{activity.resume.name} | </>}
-              {activity._count.items}개 질문 | {formatDate(activity.createdAt)}
+              {activity.resumeName && <>{activity.resumeName} | </>}
+              {activity.itemCount}개 질문 | {formatDate(activity.createdAt)}
             </p>
           </div>
           <div className="text-right">

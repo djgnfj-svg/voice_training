@@ -102,6 +102,8 @@ async def setup_interview(
             question_index=q.get("index", 0),
             question_text=q.get("text", ""),
             question_source=q.get("source", "general"),
+            category=q.get("category"),
+            difficulty=q.get("difficulty"),
         )
         db.add(answer)
 
@@ -201,6 +203,8 @@ async def get_questions(
             "index": a.question_index,
             "text": a.question_text,
             "source": a.question_source,
+            "category": a.category or (session.categories[0] if session.categories else "general"),
+            "difficulty": a.difficulty or session.difficulty or "INTERMEDIATE",
         }
         if a.answer_transcript is not None:
             q["answer"] = {

@@ -20,10 +20,24 @@ async def get_me(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Account.id).where(Account.user_id == user.id).limit(1)
+    # Check if user has credentials provider account OR hashedPassword
+    cred_result = await db.execute(
+        select(Account.id).where(
+            Account.user_id == user.id,
+            Account.provider == "credentials",
+        ).limit(1)
     )
-    has_credentials = result.scalar() is not None
+    has_credentials_account = cred_result.scalar() is not None
+
+    if not has_credentials_account:
+        user_result = await db.execute(
+            select(User.hashed_password).where(User.id == user.id)
+        )
+        hashed_pw = user_result.scalar()
+        has_credentials = hashed_pw is not None
+    else:
+        has_credentials = True
+
     return {"hasCredentials": has_credentials}
 
 

@@ -105,7 +105,7 @@ model InterviewSession {
   id              String          @id @default(uuid())
   userId          String
   jobPostingId    String?
-  resumeId        String
+  resumeId        String?
   type            InterviewType   @default(TECHNICAL)
   categories      String[]
   difficulty      Difficulty      @default(INTERMEDIATE)
@@ -123,7 +123,7 @@ model InterviewSession {
 
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobPosting JobPosting?       @relation(fields: [jobPostingId], references: [id])
-  resume     Resume            @relation(fields: [resumeId], references: [id])
+  resume     Resume?           @relation(fields: [resumeId], references: [id], onDelete: SetNull)
   answers    InterviewAnswer[]
 
   @@index([userId])
@@ -138,6 +138,8 @@ model InterviewAnswer {
   questionIndex    Int
   questionText     String   @db.Text
   questionSource   String   @default("general") // job_posting, resume_based, general
+  category         String?
+  difficulty       String?
   answerTranscript String?  @db.Text
   audioUrl         String?
   scores           Json?    // { accuracy, depth, clarity, completeness, practicality }
@@ -309,12 +311,12 @@ model CouponUsage {
 model AnswerAssistSession {
   id        String   @id @default(uuid())
   userId    String
-  resumeId  String
+  resumeId  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  resume Resume              @relation(fields: [resumeId], references: [id])
+  resume Resume?             @relation(fields: [resumeId], references: [id], onDelete: SetNull)
   items  AnswerAssistItem[]
 
   @@index([userId, createdAt])

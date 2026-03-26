@@ -304,12 +304,15 @@ async def get_user_job_postings(
 
 
 def _serialize_job_posting(jp: JobPosting) -> dict[str, Any]:
+    company_analysis = jp.company_analysis or {}
+    has_deep_research = bool(company_analysis.get("deepResearch"))
     return {
         "id": jp.id,
         "userId": jp.user_id,
         "rawText": jp.raw_text,
         "parsedData": jp.parsed_data,
-        "companyAnalysis": jp.company_analysis,
+        "companyAnalysis": company_analysis,
+        "deepResearchAvailable": not has_deep_research,
         "createdAt": jp.created_at.isoformat() if jp.created_at else None,
         "updatedAt": jp.updated_at.isoformat() if jp.updated_at else None,
     }

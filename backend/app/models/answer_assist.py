@@ -10,7 +10,7 @@ class AnswerAssistSession(Base):
 
     id = Column(String, primary_key=True)
     user_id = Column("userId", String, ForeignKey("users.id"), nullable=False)
-    resume_id = Column("resumeId", String, ForeignKey("resumes.id"), nullable=False)
+    resume_id = Column("resumeId", String, ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True)
     created_at = Column("createdAt", DateTime, server_default=func.now())
     updated_at = Column("updatedAt", DateTime, default=func.now(), onupdate=func.now())
 

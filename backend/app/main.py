@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import HTTPException
+from fastapi.responses import JSONResponse
 
 from app.database import engine
 
@@ -18,6 +20,17 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    """Flatten HTTPException detail so the response body matches
+    what the frontend expects: ``{"error": "msg", "code": "CODE"}``
+    instead of ``{"detail": {"error": "msg", "code": "CODE"}}``.
+    """
+    content = exc.detail if isinstance(exc.detail, dict) else {"error": exc.detail}
+    return JSONResponse(status_code=exc.status_code, content=content)
+
 
 # Routers
 from app.routers.health import router as health_router
