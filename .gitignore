@@ -61,6 +61,10 @@ backend/node_modules/
 # API backup (migrated to FastAPI)
 frontend/_api_backup/
 
+# Production env
+frontend/.env.production
+backend/.env.production
+
 # Misc
 *.tsbuildinfo
 next-env.d.ts
