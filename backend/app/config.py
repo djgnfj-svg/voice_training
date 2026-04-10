@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     NEXT_PUBLIC_TOSS_CLIENT_KEY: str | None = None
     ADMIN_EMAILS: str = ""
 
+    # Agent
+    AGENT_MODEL: str = "claude-haiku-4-5-20251001"
+
     @property
     def is_dev(self) -> bool:
         return self.ENVIRONMENT == "development"
