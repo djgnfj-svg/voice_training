@@ -101,7 +101,7 @@ export default function InterviewSetupPage() {
     setShowMicCheck(true);
   };
 
-  const confirmAndStartInterview = async () => {
+  const confirmAndStartInterview = async (textMode = false) => {
     if (!selectedResumeId) return;
 
     setLoading(true);
@@ -129,7 +129,7 @@ export default function InterviewSetupPage() {
       const data = await res.json();
       const { sessionId, plan, questions } = data;
 
-      sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ plan, questions, deepMode: interviewMode === 'deep' }));
+      sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ plan, questions, deepMode: interviewMode === 'deep', textMode }));
 
       router.push(`/interview/session/${sessionId}`);
     } catch (error: unknown) {
@@ -137,6 +137,11 @@ export default function InterviewSetupPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const startTextMode = async () => {
+    setShowMicCheck(false);
+    await confirmAndStartInterview(true);
   };
 
   return (
@@ -432,7 +437,8 @@ export default function InterviewSetupPage() {
       <MicCheckDialog
         open={showMicCheck}
         onOpenChange={setShowMicCheck}
-        onConfirm={confirmAndStartInterview}
+        onConfirm={() => confirmAndStartInterview(false)}
+        onTextMode={startTextMode}
         loading={loading}
       />
       <InsufficientCreditsDialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog} />

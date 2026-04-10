@@ -392,7 +392,7 @@ async def complete_interview(
     session.status = SessionStatus.COMPLETED
     await db.commit()
 
-    report = await generate_report(db, session_id, user.id)
+    report = await generate_report(db, session_id=session_id, user_id=user.id)
     return report
 
 
@@ -418,5 +418,5 @@ async def get_report(
     if session.report_data:
         return session.report_data
 
-    report = await generate_report(db, session_id, user.id)
+    report = await generate_report(db, session_id=session_id, user_id=user.id)
     return report

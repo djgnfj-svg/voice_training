@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
+from app.lib.anthropic_client import call_llm_json
 from app.models.resume import Resume
+from app.prompts.resume import RESUME_PARSING_PROMPT
 
 router = APIRouter()
 
@@ -89,11 +91,23 @@ async def upload_resume(
     # Strip .pdf extension for the display name
     name = file.filename.rsplit(".", 1)[0]
 
+    # AI 파싱: rawText → 구조화된 데이터 추출
+    parsed_data: dict = {"rawText": text}
+    try:
+        structured = await call_llm_json(
+            RESUME_PARSING_PROMPT.format(resumeText=text),
+            max_tokens=4096,
+        )
+        if isinstance(structured, dict):
+            parsed_data.update(structured)
+    except Exception:
+        pass  # 파싱 실패 시 rawText만 저장
+
     resume = Resume(
         id=str(uuid4()),
         user_id=user.id,
         name=name,
-        parsed_data={"rawText": text},
+        parsed_data=parsed_data,
     )
     db.add(resume)
     await db.commit()

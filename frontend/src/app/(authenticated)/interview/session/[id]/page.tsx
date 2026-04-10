@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { useInterviewSession } from '@/hooks/useInterviewSession';
 import { normalizeTranscript } from '@/lib/transcript';
-import { Mic, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Mic, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle, AlertTriangle, ArrowLeft, Keyboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { InterviewQuestion, InterviewType, AnswerEvaluation } from '@/types';
 
@@ -189,15 +189,17 @@ export default function InterviewSessionPage() {
     if (initialized && questions.length > 0 && interview.phase === 'idle' && !isResumed) {
       let interviewType: InterviewType | undefined;
       let deepMode = false;
+      let textMode = false;
       try {
         const stored = sessionStorage.getItem(`interview_${sessionId}`);
         if (stored) {
           const data = JSON.parse(stored);
           if (data.plan?.type) interviewType = data.plan.type;
           if (data.deepMode) deepMode = true;
+          if (data.textMode) textMode = true;
         }
       } catch {}
-      interview.startSession(sessionId, questions, interviewType, deepMode);
+      interview.startSession(sessionId, questions, interviewType, deepMode, textMode);
     }
   }, [initialized, questions, interview.phase, sessionId, isResumed]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -299,8 +301,8 @@ export default function InterviewSessionPage() {
       {/* Phase Indicator & Controls */}
       <Card>
         <CardContent className="py-6">
-          {/* Asking phase - TTS playing */}
-          {interview.phase === 'asking' && (
+          {/* Asking phase - TTS playing (skip in text mode) */}
+          {interview.phase === 'asking' && !interview.textMode && (
             <div className="flex flex-col items-center gap-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
                 <Volume2 className="h-8 w-8 animate-pulse text-primary" />
@@ -313,7 +315,7 @@ export default function InterviewSessionPage() {
             </div>
           )}
 
-          {/* Listening phase - Recording */}
+          {/* Listening phase - Recording or Text Input */}
           {interview.phase === 'listening' && (
             <div className="space-y-4">
               {/* Follow-up question display */}
@@ -331,57 +333,79 @@ export default function InterviewSessionPage() {
                 ) : null;
               })()}
 
-              <div className="flex flex-col items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 ring-4 ring-red-100/50 animate-pulse dark:bg-red-900/30 dark:ring-red-900/30">
-                  <Mic className="h-8 w-8 text-red-500 dark:text-red-400" />
-                </div>
-                <p className="text-sm font-medium text-red-500">녹음 중...</p>
-              </div>
-
-              {/* Live transcript */}
-              <div className="min-h-[100px] rounded-lg bg-muted/50 p-4">
-                <p className="text-sm text-muted-foreground">실시간 전사:</p>
-                <p className="mt-2">
-                  {normalizeTranscript(interview.speech.transcript)}
-                  <span className="text-muted-foreground">{interview.speech.interimTranscript}</span>
-                </p>
-              </div>
-
-              {/* Real-time speech metrics */}
-              {(() => {
-                const m = interview.speechAnalytics;
-                const wpmStatus = m.wpm < 200 ? { label: '느림', color: 'text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30' }
-                  : m.wpm > 350 ? { label: '빠름', color: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30' }
-                  : { label: '적정', color: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30' };
-                const fillerStatus = m.fillerCount <= 2 ? { label: '양호', color: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30' }
-                  : m.fillerCount <= 5 ? { label: '주의', color: 'text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30' }
-                  : { label: '많음', color: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30' };
-                return (
-                  <div className="grid grid-cols-3 gap-2 rounded-lg border p-3">
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">말 속도</p>
-                      <p className="text-lg font-bold">{m.wpm}</p>
-                      <Badge variant="outline" className={cn('text-[10px]', wpmStatus.color)}>
-                        {wpmStatus.label}
-                      </Badge>
+              {interview.textMode ? (
+                <>
+                  {/* Text input mode */}
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                      <Keyboard className="h-6 w-6 text-primary" />
                     </div>
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">침묵</p>
-                      <p className="text-lg font-bold">{m.silenceSec}초</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {Math.round(m.silenceRatio * 100)}%
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">필러워드</p>
-                      <p className="text-lg font-bold">{m.fillerCount}</p>
-                      <Badge variant="outline" className={cn('text-[10px]', fillerStatus.color)}>
-                        {fillerStatus.label}
-                      </Badge>
-                    </div>
+                    <p className="text-sm text-muted-foreground">텍스트 입력 모드</p>
                   </div>
-                );
-              })()}
+                  <textarea
+                    className="min-h-[120px] w-full rounded-lg border bg-muted/50 p-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="답변을 입력하세요..."
+                    value={interview.textInput}
+                    onChange={(e) => interview.setTextInput(e.target.value)}
+                    autoFocus
+                  />
+                </>
+              ) : (
+                <>
+                  {/* Voice mode */}
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 ring-4 ring-red-100/50 animate-pulse dark:bg-red-900/30 dark:ring-red-900/30">
+                      <Mic className="h-8 w-8 text-red-500 dark:text-red-400" />
+                    </div>
+                    <p className="text-sm font-medium text-red-500">녹음 중...</p>
+                  </div>
+
+                  {/* Live transcript */}
+                  <div className="min-h-[100px] rounded-lg bg-muted/50 p-4">
+                    <p className="text-sm text-muted-foreground">실시간 전사:</p>
+                    <p className="mt-2">
+                      {normalizeTranscript(interview.speech.transcript)}
+                      <span className="text-muted-foreground">{interview.speech.interimTranscript}</span>
+                    </p>
+                  </div>
+
+                  {/* Real-time speech metrics */}
+                  {(() => {
+                    const m = interview.speechAnalytics;
+                    const wpmStatus = m.wpm < 200 ? { label: '느림', color: 'text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30' }
+                      : m.wpm > 350 ? { label: '빠름', color: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30' }
+                      : { label: '적정', color: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30' };
+                    const fillerStatus = m.fillerCount <= 2 ? { label: '양호', color: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30' }
+                      : m.fillerCount <= 5 ? { label: '주의', color: 'text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30' }
+                      : { label: '많음', color: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30' };
+                    return (
+                      <div className="grid grid-cols-3 gap-2 rounded-lg border p-3">
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">말 속도</p>
+                          <p className="text-lg font-bold">{m.wpm}</p>
+                          <Badge variant="outline" className={cn('text-[10px]', wpmStatus.color)}>
+                            {wpmStatus.label}
+                          </Badge>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">침묵</p>
+                          <p className="text-lg font-bold">{m.silenceSec}초</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {Math.round(m.silenceRatio * 100)}%
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-muted-foreground">필러워드</p>
+                          <p className="text-lg font-bold">{m.fillerCount}</p>
+                          <Badge variant="outline" className={cn('text-[10px]', fillerStatus.color)}>
+                            {fillerStatus.label}
+                          </Badge>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
 
               <div className="flex items-center justify-center gap-3">
                 {interview.isFollowUp ? (
@@ -397,7 +421,7 @@ export default function InterviewSessionPage() {
                 )}
                 <Button
                   onClick={interview.isFollowUp ? interview.submitFollowUpAnswer : interview.submitAnswer}
-                  disabled={!interview.speech.transcript}
+                  disabled={interview.textMode ? !interview.textInput.trim() : !interview.speech.transcript}
                 >
                   <Send className="mr-2 h-4 w-4" />
                   답변 제출

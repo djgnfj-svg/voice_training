@@ -17,17 +17,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useMicrophoneCheck } from '@/hooks/useMicrophoneCheck';
-import { Loader2, Mic, MicOff, AlertCircle } from 'lucide-react';
+import { Loader2, Mic, MicOff, AlertCircle, Keyboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MicCheckDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
+  onTextMode?: () => void;
   loading: boolean;
 }
 
-export function MicCheckDialog({ open, onOpenChange, onConfirm, loading }: MicCheckDialogProps) {
+export function MicCheckDialog({ open, onOpenChange, onConfirm, onTextMode, loading }: MicCheckDialogProps) {
   const {
     status,
     level,
@@ -169,27 +170,41 @@ export function MicCheckDialog({ open, onOpenChange, onConfirm, loading }: MicCh
         </div>
 
         {/* Footer buttons */}
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={() => handleClose(false)} disabled={loading}>
-            취소
-          </Button>
-          <Button
-            className="flex-1"
-            disabled={!canStart}
-            onClick={onConfirm}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                AI가 면접을 설계하고 있습니다...
-              </>
-            ) : (
-              <>
-                <Mic className="mr-2 h-4 w-4" />
-                면접 시작
-              </>
-            )}
-          </Button>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => handleClose(false)} disabled={loading}>
+              취소
+            </Button>
+            <Button
+              className="flex-1"
+              disabled={!canStart}
+              onClick={onConfirm}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  AI가 면접을 설계하고 있습니다...
+                </>
+              ) : (
+                <>
+                  <Mic className="mr-2 h-4 w-4" />
+                  면접 시작
+                </>
+              )}
+            </Button>
+          </div>
+          {onTextMode && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={onTextMode}
+              disabled={loading}
+            >
+              <Keyboard className="mr-2 h-4 w-4" />
+              마이크 없이 텍스트로 답변하기
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

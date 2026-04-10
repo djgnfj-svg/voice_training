@@ -27,7 +27,7 @@ async def redeem_coupon(db: AsyncSession, user_id: str, code: str) -> dict:
     if not coupon or not coupon.is_active:
         raise CouponRedeemError("INVALID_COUPON")
 
-    if coupon.expires_at and coupon.expires_at < datetime.now(timezone.utc):
+    if coupon.expires_at and coupon.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise CouponRedeemError("EXPIRED_COUPON")
 
     if coupon.max_uses and coupon.used_count >= coupon.max_uses:
