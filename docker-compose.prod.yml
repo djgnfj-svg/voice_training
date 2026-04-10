@@ -3,13 +3,18 @@ services:
     build:
       context: ./nginx
     ports:
-      - "80:80"
+      - "81:80"
     depends_on:
       frontend:
         condition: service_healthy
       backend:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
     logging:
       driver: json-file
       options:
@@ -28,14 +33,20 @@ services:
       - ./frontend/.env.production
     environment:
       - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
       - BACKEND_URL=http://backend:8000
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      test: ["CMD", "wget", "--spider", "-q", "http://0.0.0.0:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
     logging:
       driver: json-file
       options:
@@ -58,6 +69,11 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1"
     logging:
       driver: json-file
       options:

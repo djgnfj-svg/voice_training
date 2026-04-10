@@ -46,6 +46,12 @@ export default function InterviewSessionPage() {
 
   const interview = useInterviewSession();
 
+  // Stable refs for interview functions to avoid effect re-triggers
+  const resumeSessionRef = useRef(interview.resumeSession);
+  resumeSessionRef.current = interview.resumeSession;
+  const startSessionRef = useRef(interview.startSession);
+  startSessionRef.current = interview.startSession;
+
   // Exit prevention: beforeunload
   useEffect(() => {
     const isActive = ['asking', 'listening', 'evaluating', 'feedback'].includes(interview.phase);
@@ -143,13 +149,14 @@ export default function InterviewSessionPage() {
           setInitialized(true);
 
           // Directly call resumeSession
-          interview.resumeSession(
+          resumeSessionRef.current(
             sessionId,
             mappedQuestions,
             previousAnswers,
             finalResumeIndex,
             data.interviewType as InterviewType,
-            data.deepMode
+            data.deepMode,
+            data.textMode
           );
           return;
         }
@@ -182,7 +189,7 @@ export default function InterviewSessionPage() {
     } else {
       loadSession();
     }
-  }, [sessionId, initialized]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionId, initialized]);
 
   // Start session when questions are loaded (only for fresh sessions, not resumed)
   useEffect(() => {
@@ -199,9 +206,9 @@ export default function InterviewSessionPage() {
           if (data.textMode) textMode = true;
         }
       } catch {}
-      interview.startSession(sessionId, questions, interviewType, deepMode, textMode);
+      startSessionRef.current(sessionId, questions, interviewType, deepMode, textMode);
     }
-  }, [initialized, questions, interview.phase, sessionId, isResumed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialized, questions, interview.phase, sessionId, isResumed]);
 
   // Navigate to report when completed
   useEffect(() => {

@@ -42,7 +42,6 @@ const nextAuth = NextAuth({
   },
   providers: [
     Google({
-      allowDangerousEmailAccountLinking: true,
       profile(profile) {
         return {
           id: profile.sub,

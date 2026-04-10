@@ -92,8 +92,8 @@ async def generate_model_answer(
             prompt, model=MODELS["QUESTION_GEN"], max_tokens=8192, temperature=0.7
         )
         questions = result.get("questions", [])
-    except Exception as e:
-        raise HTTPException(500, f"Generation failed: {e}")
+    except Exception:
+        raise HTTPException(500, "AI 생성에 실패했습니다")
 
     # Deduct credits
     using_free_trial = credit_check["usingFreeTrial"]
@@ -113,13 +113,19 @@ async def generate_model_answer(
                 {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"},
             )
     else:
-        # Mark free trial used
+        # Mark free trial used — 조건부 UPDATE로 동시 요청 방어
         from sqlalchemy import update as sql_update
         from app.models.user import User
 
-        await db.execute(
-            sql_update(User).where(User.id == user.id).values(free_trial_used=True)
+        result = await db.execute(
+            sql_update(User)
+            .where(User.id == user.id, User.free_trial_used == False)  # noqa: E712
+            .values(free_trial_used=True)
         )
+        if result.rowcount == 0:
+            raise HTTPException(
+                402, {"error": "FREE_TRIAL_ALREADY_USED", "code": "FREE_TRIAL_ALREADY_USED"}
+            )
         await db.commit()
 
     # Create activity log (non-blocking)

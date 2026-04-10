@@ -129,6 +129,16 @@ async def setup_interview(
         )
     except Exception:
         logger.exception("Credit deduction failed for session %s", session_id)
+        # 크레딧 차감 실패 시 세션 삭제 — 무료 이용 방지
+        await db.rollback()
+        await db.execute(
+            delete(InterviewAnswer).where(InterviewAnswer.session_id == session_id)
+        )
+        await db.execute(
+            delete(InterviewSession).where(InterviewSession.id == session_id)
+        )
+        await db.commit()
+        raise HTTPException(500, {"error": "CREDIT_DEDUCTION_FAILED"})
 
     return {"sessionId": session_id, "plan": plan, "questions": questions}
 
@@ -335,7 +345,7 @@ async def practice_evaluate(
     )
     from app.config import settings
 
-    # Check credits before AI call to prevent free evaluation abuse
+    # Check credits before AI call to fail fast
     if not settings.is_dev:
         info = await get_credit_info(db, user.id)
         if info["balance"] < CREDIT_COSTS["FOLLOW_UP"]:
@@ -343,21 +353,7 @@ async def practice_evaluate(
                 402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
             )
 
-    # Deduct follow-up credit before AI call
-    try:
-        await deduct_for_feature(
-            db,
-            user.id,
-            "",
-            "꼬리질문 평가",
-            CREDIT_COSTS["FOLLOW_UP"],
-            "FEATURE_DEBIT",
-        )
-    except InsufficientCreditsError:
-        raise HTTPException(
-            402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
-        )
-
+    # AI 호출 먼저 — 성공 후 크레딧 차감 (설계 원칙 준수)
     result = await evaluate_stateless(
         question_text=body.questionText,
         answer_transcript=body.answerTranscript,
@@ -366,6 +362,22 @@ async def practice_evaluate(
         related_key_points=body.relatedKeyPoints,
         previous_context=body.previousContext,
     )
+
+    # AI 성공 후 크레딧 차감
+    if not settings.is_dev:
+        try:
+            await deduct_for_feature(
+                db,
+                user.id,
+                "",
+                "꼬리질문 평가",
+                CREDIT_COSTS["FOLLOW_UP"],
+                "FEATURE_DEBIT",
+            )
+        except InsufficientCreditsError:
+            raise HTTPException(
+                402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
+            )
 
     return result
 

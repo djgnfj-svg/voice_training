@@ -27,6 +27,7 @@ export default function InterviewSetupPage() {
   const [showCreditsDialog, setShowCreditsDialog] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
+    rawText: string;
     parsedData: ParsedJobPosting;
     companyAnalysis: CompanyAnalysis;
     deepResearchAvailable: boolean;
@@ -64,6 +65,7 @@ export default function InterviewSetupPage() {
 
   const handleJobPostingAnalyzed = (data: {
     id: string;
+    rawText: string;
     parsedData: ParsedJobPosting;
     companyAnalysis: CompanyAnalysis;
     deepResearchAvailable: boolean;
@@ -80,8 +82,8 @@ export default function InterviewSetupPage() {
 
     // 모범답안 학습 모드 → 별도 페이지로 이동
     if (interviewMode === 'model-answer') {
-      if (jobPostingData) {
-        sessionStorage.setItem('model_answer_job_posting', jobPostingData.id);
+      if (jobPostingData?.rawText) {
+        sessionStorage.setItem('model_answer_job_posting', jobPostingData.rawText);
       } else {
         sessionStorage.removeItem('model_answer_job_posting');
       }

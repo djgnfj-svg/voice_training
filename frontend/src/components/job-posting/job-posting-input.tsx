@@ -12,7 +12,7 @@ import { Loader2, CheckCircle, Building2, Search, Coins, Newspaper, Package, Mes
 import type { ParsedJobPosting, CompanyAnalysis } from '@/types';
 
 interface JobPostingInputProps {
-  onAnalyzed: (data: { id: string; parsedData: ParsedJobPosting; companyAnalysis: CompanyAnalysis; deepResearchAvailable: boolean }) => void;
+  onAnalyzed: (data: { id: string; rawText: string; parsedData: ParsedJobPosting; companyAnalysis: CompanyAnalysis; deepResearchAvailable: boolean }) => void;
 }
 
 export function JobPostingInput({ onAnalyzed }: JobPostingInputProps) {
@@ -32,9 +32,10 @@ export function JobPostingInput({ onAnalyzed }: JobPostingInputProps) {
       }
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       onAnalyzed({
         id: data.id,
+        rawText: variables,
         parsedData: data.parsedData,
         companyAnalysis: data.companyAnalysis,
         deepResearchAvailable: data.deepResearchAvailable ?? false,

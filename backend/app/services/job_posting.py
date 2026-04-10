@@ -233,7 +233,11 @@ async def do_deep_research(
     if not jp:
         raise ValueError("NOT_FOUND")
 
-    # 2. Tavily availability check
+    # 2. Idempotency check — 이미 심층 분석 완료된 경우 재실행 방지
+    if jp.company_analysis and jp.company_analysis.get("deepResearch"):
+        return _serialize_job_posting(jp)
+
+    # 2b. Tavily availability check
     if not tavily_available:
         raise ValueError("TAVILY_NOT_AVAILABLE")
 
@@ -242,7 +246,10 @@ async def do_deep_research(
     position = parsed.get("position", "")
     tech_stack = parsed.get("techStack", [])
 
-    # 3. Deduct credit
+    # 3. Run deep research first (성공 후 크레딧 차감)
+    research_data = await deep_company_research(company, position, tech_stack)
+
+    # 4. Deduct credit after success
     try:
         await deduct_for_feature(
             db,
@@ -253,9 +260,6 @@ async def do_deep_research(
         )
     except InsufficientCreditsError:
         raise ValueError("INSUFFICIENT_CREDITS")
-
-    # 4. Run deep research
-    research_data = await deep_company_research(company, position, tech_stack)
 
     # 5. Merge into companyAnalysis and persist
     existing_analysis = jp.company_analysis or {}

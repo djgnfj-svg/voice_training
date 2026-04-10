@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pymupdf
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -24,6 +24,7 @@ MAX_PDF_SIZE = 10 * 1024 * 1024  # 10MB
 async def list_resumes(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    detail: bool = Query(False),
 ):
     result = await db.execute(
         select(Resume)
@@ -31,6 +32,18 @@ async def list_resumes(
         .order_by(Resume.created_at.desc())
     )
     resumes = result.scalars().all()
+
+    if detail:
+        return [
+            {
+                "id": r.id,
+                "name": r.name,
+                "parsedData": r.parsed_data,
+                "createdAt": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in resumes
+        ]
+
     return [
         {
             "id": r.id,

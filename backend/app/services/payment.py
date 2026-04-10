@@ -98,6 +98,20 @@ async def confirm_payment(
 
     toss_data = resp.json()
 
+    # Toss 응답 금액/주문 교차 검증
+    toss_amount = toss_data.get("totalAmount")
+    toss_order_id = toss_data.get("orderId")
+    if (toss_amount is not None and toss_amount != order.amount) or (toss_order_id and toss_order_id != order.order_id):
+        logger.error("Toss 응답 불일치 — 주문=%s, DB금액=%s, Toss금액=%s, TossOrderId=%s", order_id, order.amount, toss_amount, toss_order_id)
+        # 불일치 시 FAILED 마킹 (PENDING 유지 방지)
+        await db.execute(
+            update(PaymentOrder)
+            .where(PaymentOrder.id == order.id)
+            .values(status="FAILED", fail_reason=f"Toss 응답 불일치: amount={toss_amount}, orderId={toss_order_id}")
+        )
+        await db.commit()
+        raise ValueError("TOSS_RESPONSE_MISMATCH")
+
     # 원자적 처리: flush로 모아서 한 번의 commit으로 적용
     try:
         await _grant_credits(db, order, user_id, payment_key, toss_data)
@@ -186,6 +200,11 @@ async def _try_recover_failed_order(
 
     toss_data = resp.json()
     if toss_data.get("status") != "DONE":
+        return None
+
+    # Toss 응답의 orderId가 현재 주문과 일치하는지 교차 검증
+    if toss_data.get("orderId") != order.order_id:
+        logger.warning("FAILED 주문 복구 시 orderId 불일치 — DB=%s, Toss=%s", order.order_id, toss_data.get("orderId"))
         return None
 
     # Toss에서는 성공 — 크레딧 부여 복구

@@ -189,7 +189,7 @@ function ModelAnswerReview({ items }: { items: ActivityItem[] }) {
             </CardHeader>
             <CardContent>
               <p className="leading-relaxed whitespace-pre-wrap">
-                {item.extra?.modelAnswer}
+                {item.answer}
               </p>
             </CardContent>
           </Card>

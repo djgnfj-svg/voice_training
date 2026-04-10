@@ -14,9 +14,11 @@ from app.database import get_db
 
 async def _decrypt_nextauth_token(token: str, cookie_name: str) -> dict:
     """Decrypt NextAuth v5 JWE token by calling @auth/core via Node.js subprocess."""
+    stdin_data = json.dumps({"token": token, "secret": settings.NEXTAUTH_SECRET, "salt": cookie_name})
     result = await asyncio.to_thread(
         subprocess.run,
-        ["node", "decode_token.mjs", token, settings.NEXTAUTH_SECRET, cookie_name],
+        ["node", "decode_token.mjs"],
+        input=stdin_data,
         capture_output=True,
         text=True,
         timeout=5,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,17 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/useToast';
 import { Upload, FileText, CheckCircle, Loader2, Trash2, Pencil, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import type { ParsedResume } from '@/types';
 
 interface ResumeListItem {
@@ -22,32 +33,22 @@ export default function ProfilePage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const { data: resumes, isLoading } = useQuery<ResumeListItem[]>({
     queryKey: ['resumes-full'],
     queryFn: async () => {
-      const res = await fetch('/api/resume');
+      const res = await fetch('/api/resume?detail=true');
       if (!res.ok) throw new Error('Failed to fetch resumes');
-      // GET /api/resume returns ResumeItem[] (id, name, skills, createdAt)
-      // We need full data for the profile page, so we fetch each one
       const items = await res.json();
-      // Fetch full details for each
-      const details = await Promise.all(
-        items.map(async (item: any) => {
-          const detailRes = await fetch(`/api/resume/${item.id}`);
-          if (!detailRes.ok) return { ...item, parsedData: null };
-          const detail = await detailRes.json();
-          return {
-            id: detail.id,
-            name: detail.name,
-            parsedData: detail.parsedData as ParsedResume | null,
-            createdAt: detail.createdAt,
-          };
-        })
-      );
-      return details;
+      return items.map((item: ResumeListItem) => ({
+        id: item.id,
+        name: item.name,
+        parsedData: item.parsedData ?? null,
+        createdAt: item.createdAt,
+      }));
     },
   });
 
@@ -176,16 +177,18 @@ export default function ProfilePage() {
                 <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
                 <p className="mb-2 text-sm font-medium">PDF 파일을 드래그하거나 클릭하여 업로드</p>
                 <p className="text-xs text-muted-foreground">최대 10MB</p>
-                <Button variant="outline" className="mt-4" onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.accept = '.pdf';
-                  input.onchange = (e) => {
-                    const file = (e.target as HTMLInputElement).files?.[0];
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
                     if (file) handleFile(file);
-                  };
-                  input.click();
-                }}>
+                    e.target.value = '';
+                  }}
+                />
+                <Button variant="outline" className="mt-4" onClick={() => fileInputRef.current?.click()}>
                   파일 선택
                 </Button>
               </>
@@ -257,18 +260,31 @@ export default function ProfilePage() {
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          if (window.confirm('이력서를 삭제하시겠습니까?')) {
-                            deleteMutation.mutate(resume.id);
-                          }
-                        }}
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>이력서를 삭제하시겠습니까?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              삭제된 이력서는 복구할 수 없습니다.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>취소</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteMutation.mutate(resume.id)}>
+                              삭제
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                       <Button
                         size="sm"
                         variant="ghost"

@@ -112,17 +112,18 @@ async def plan_interview(
         return await _plan_deep_interview(parsed_resume)
 
     if job_posting_id:
-        return await _plan_with_job_posting(db, job_posting_id, parsed_resume)
+        return await _plan_with_job_posting(db, job_posting_id, parsed_resume, user_id)
 
     return await _plan_with_resume_only(parsed_resume)
 
 
 async def _plan_with_job_posting(
-    db: AsyncSession, job_posting_id: str, parsed_resume: dict | None
+    db: AsyncSession, job_posting_id: str, parsed_resume: dict | None, user_id: str | None = None
 ) -> dict[str, Any]:
-    result = await db.execute(
-        select(JobPosting).where(JobPosting.id == job_posting_id)
-    )
+    query = select(JobPosting).where(JobPosting.id == job_posting_id)
+    if user_id is not None:
+        query = query.where(JobPosting.user_id == user_id)
+    result = await db.execute(query)
     job_posting = result.scalar_one_or_none()
     if not job_posting:
         raise ValueError("Job posting not found")
@@ -240,6 +241,7 @@ async def generate_questions(
             total_questions=total_questions,
             job_posting_id=job_posting_id,
             parsed_resume=parsed_resume,
+            user_id=user_id,
         )
 
     if parsed_resume:
@@ -268,10 +270,12 @@ async def _generate_tailored_questions(
     total_questions: int,
     job_posting_id: str,
     parsed_resume: dict | None,
+    user_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    result = await db.execute(
-        select(JobPosting).where(JobPosting.id == job_posting_id)
-    )
+    query = select(JobPosting).where(JobPosting.id == job_posting_id)
+    if user_id is not None:
+        query = query.where(JobPosting.user_id == user_id)
+    result = await db.execute(query)
     job_posting = result.scalar_one_or_none()
     if not job_posting:
         raise ValueError("Job posting not found")

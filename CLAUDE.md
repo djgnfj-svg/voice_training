@@ -19,6 +19,13 @@
 - 불필요한 파일 생성 금지. 기존 파일 수정 우선.
 - 데드코드, 미사용 import 남기지 말 것.
 - **API 로직은 backend/에 작성**. frontend/src/app/api/에는 auth만 존재.
+- 크레딧 차감은 반드시 AI 호출 성공 **후** 수행. 선차감 금지 (실패 시 환불 누락 방지).
+- 무료 체험 차감은 `WHERE free_trial_used = False` 조건부 UPDATE로 원자적 처리 (동시 요청 방어).
+- DB 리소스 조회 시 반드시 `user_id` 소유권 검증 포함 (JobPosting, Resume 등).
+- 에러 응답에 내부 예외 메시지 노출 금지 — 고정 문자열 사용.
+- `eslint-disable` 대신 `useRef`로 stable function reference 유지.
+- 파일 업로드 UI는 `document.createElement('input')` 대신 hidden `<input ref={...}>` 사용.
+- 삭제 등 위험 액션은 `window.confirm` 대신 shadcn `AlertDialog` 사용.
 
 ## 기술 스택
 
@@ -29,6 +36,7 @@
 - NextAuth v5 + Google OAuth (인증)
   - Google 로그인 → PrismaAdapter가 User/Account 자동 생성
   - 미들웨어에서 세션 쿠키 체크 (`__Secure-authjs.session-token`)
+  - `allowDangerousEmailAccountLinking` 사용 금지 (계정 탈취 벡터)
 - Prisma — NextAuth PrismaAdapter용으로만 사용 (`frontend/src/lib/prisma.ts`, `frontend/src/lib/auth.ts`)
 
 ### 백엔드 (`backend/`)
@@ -87,8 +95,8 @@
 - **과금 모델**: 크레딧 충전제. 세션 1회 = 10코인, 꼬리질문 1코인 (면접/모범답안 동일)
 - **무료 체험**: 신규 유저 1회 무료 (질문 3개 제한). `User.freeTrialUsed` boolean으로 관리
 - **Dev 모드**: `ENVIRONMENT=development`면 크레딧 체크 스킵 (backend config)
-- **원자적 차감**: DB 트랜잭션으로 동시 요청 방지
-- **차감 시점**: AI 생성 성공 후 차감 (실패 시 미차감)
+- **원자적 차감**: `WHERE credit_balance >= cost` 조건부 UPDATE + rowcount 체크. 무료 체험도 `WHERE free_trial_used = False` 원자적 처리
+- **차감 시점**: AI 생성 성공 후 차감 (실패 시 미차감). 크레딧 차감 실패 시 세션 삭제 + 에러 반환
 - **API**: `GET /api/credits` (잔액), `GET /api/credits/transactions` (내역)
 - **쿠폰**: 프로모션 코드로 크레딧 지급
   - API: `POST /api/coupons/redeem`
@@ -100,6 +108,7 @@
   - 상품: `frontend/src/lib/payment-products.ts` — 50/150/300 코인 (3,000/8,000/14,000원)
   - 플로우: 상품 선택 → `POST /api/payments/orders` (주문 생성) → Toss SDK 결제창 → `POST /api/payments/confirm` (서버 확인 + 크레딧 부여)
   - 멱등성: `orderId`를 Toss `Idempotency-Key`로 전달
+  - Toss 응답 검증: `totalAmount`/`orderId` 이중 교차 검증. FAILED 주문 복구 시에도 orderId 교차 검증
 
 ## 멀티 종목 학습 시스템
 - **Subject** — 학습 종목 (시스템 7개 + 커스텀). 시스템: CS기초, JavaScript, React, Next.js, TypeScript심화, DB심화, DevOps
@@ -114,7 +123,7 @@
 ## DB 모델 (핵심)
 - `User` — 계정 (Google OAuth + 이메일/비밀번호 로그인, creditBalance, freeTrialUsed)
 - `Account` — OAuth 계정 (PrismaAdapter 관리)
-- `Resume` — 복수 이력서 (userId, name, parsedData, fileUrl은 optional)
+- `Resume` — 복수 이력서 (userId, name, parsedData, fileUrl은 optional). `GET /api/resume?detail=true`로 parsedData 포함 조회
 - `JobPosting` — 채용공고
 - `InterviewSession` — 면접 세션 (resumeId 필수, jobPostingId 선택, creditDeducted)
 - `InterviewAnswer` — 답변/평가 (audioUrl: 녹음 파일 경로)
@@ -131,9 +140,12 @@
 
 ## 배포
 - **프론트엔드**: Vercel, 리전: `icn1` (인천/서울) — `vercel.json`
-- **백엔드**: 별도 배포 (FastAPI)
+- **백엔드**: EC2 Docker Compose (`docker-compose.prod.yml`)
 - **프로덕션 도메인**: `reseeall.com`
 - `BACKEND_URL` 환경변수로 FastAPI 주소 지정
+- **CI/CD**: `deploy.yml`은 `ci.yml` 통과 후 배포 (`needs: ci`)
+- **리소스 제한**: nginx 128M, frontend 512M, backend 1G
+- **nginx**: `/api/auth` rate limit 5r/s, `/api/` rate limit 10r/s
 
 ## 음성 처리
 - **transcript 정규화**: `frontend/src/lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 + `countFillerWords()` (필러워드 카운트, 클라이언트용)
@@ -143,7 +155,7 @@
   - 최종 전사: Whisper API (선택적) — 답변 제출 시 녹음 데이터를 Whisper로 전사, 실패 시 Web Speech API 폴백
   - 클라이언트 래퍼: `frontend/src/lib/whisper-client.ts`
   - 녹음 훅: `frontend/src/hooks/useAudioRecorder.ts` (MediaRecorder API)
-  - API: `POST /api/transcribe` (FastAPI)
+  - API: `POST /api/transcribe` (FastAPI, 오디오 확장자 화이트리스트 검증: webm/wav/mp3/ogg/mp4/m4a)
 - **실시간 발화 분석**: `hooks/useSpeechAnalytics.ts` — 답변 중 실시간 비언어적 피드백
   - `SpeechMetrics`: wpm (음절/분), fillerCount, silenceSec, silenceRatio, elapsedSec
 

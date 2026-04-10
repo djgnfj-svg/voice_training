@@ -19,6 +19,7 @@ const TX_TYPE_LABELS: Record<string, string> = {
   ADMIN_GRANT: '관리자 지급',
   PURCHASE: '결제 충전',
   SESSION_DEBIT: '세션 사용',
+  FEATURE_DEBIT: '기능 사용',
   REFUND: '환불',
   COUPON: '쿠폰 사용',
 };
@@ -52,7 +53,7 @@ export default function CreditsPage() {
   const handlePurchase = async (productId: string) => {
     const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
     if (!clientKey) {
-      alert('결제 설정이 완료되지 않았습니다.');
+      toast({ title: '결제 설정이 완료되지 않았습니다.', variant: 'destructive' });
       return;
     }
 
@@ -91,6 +92,9 @@ export default function CreditsPage() {
       });
     } catch (err) {
       console.error('[Payment Error]', err);
+      if (err instanceof Error && !err.message.includes('USER_CANCEL')) {
+        toast({ title: '결제 중 오류가 발생했습니다', description: err.message, variant: 'destructive' });
+      }
     } finally {
       setLoadingProductId(null);
     }
@@ -188,14 +192,13 @@ export default function CreditsPage() {
       </Card>
 
       {/* Purchase Plans */}
-      <Card className="opacity-70">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
             크레딧 충전
-            <Badge variant="secondary" className="ml-2">준비중</Badge>
           </CardTitle>
-          <CardDescription>결제 시스템을 준비하고 있습니다. 곧 만나보실 수 있어요!</CardDescription>
+          <CardDescription>원하는 만큼 크레딧을 충전하세요</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">
@@ -203,20 +206,25 @@ export default function CreditsPage() {
               <div
                 key={product.id}
                 className={cn(
-                  'relative rounded-lg border p-4 opacity-50',
-                  product.id === 'credit_15' && 'border-primary ring-1 ring-primary/20'
+                  'relative rounded-lg border p-4 transition-colors hover:border-primary/50',
+                  product.id === 'credit_150' && 'border-primary ring-1 ring-primary/20'
                 )}
               >
-                {product.id === 'credit_15' && (
+                {product.id === 'credit_150' && (
                   <Badge className="absolute -top-2.5 left-4 bg-primary">추천</Badge>
                 )}
                 <p className="text-2xl font-bold">{product.label}</p>
                 <p className="mt-1 text-lg text-muted-foreground">{product.priceLabel}</p>
                 <Button
                   className="mt-3 w-full"
-                  disabled
+                  disabled={loadingProductId !== null}
+                  onClick={() => handlePurchase(product.id)}
                 >
-                  준비중
+                  {loadingProductId === product.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    '충전하기'
+                  )}
                 </Button>
               </div>
             ))}

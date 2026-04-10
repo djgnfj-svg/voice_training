@@ -1,16 +1,27 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useNightlyStudy } from '@/hooks/useNightlyStudy';
 import { ConversationView } from '@/components/nightly-study/conversation-view';
 import { StudySummaryCard } from '@/components/nightly-study/study-summary-card';
 import { Button } from '@/components/ui/button';
 import { Mic, MicOff, SkipForward, Square, Loader2, Moon, AlertCircle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function NightlyStudySessionPage() {
   const router = useRouter();
   const startedRef = useRef(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
 
   const {
     phase,
@@ -61,9 +72,7 @@ export default function NightlyStudySessionPage() {
 
     const handler = () => {
       window.history.pushState(null, '', window.location.href);
-      if (confirm('학습을 그만할까요?')) {
-        finishEarly();
-      }
+      setShowExitDialog(true);
     };
 
     window.history.pushState(null, '', window.location.href);
@@ -238,6 +247,20 @@ export default function NightlyStudySessionPage() {
           그만하기
         </Button>
       </div>
+      <AlertDialog open={showExitDialog} onOpenChange={setShowExitDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>학습을 그만할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              현재까지의 학습 내용은 저장됩니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>계속하기</AlertDialogCancel>
+            <AlertDialogAction onClick={finishEarly}>그만하기</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

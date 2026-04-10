@@ -18,6 +18,7 @@ ENV NEXT_PUBLIC_TOSS_CLIENT_KEY=$NEXT_PUBLIC_TOSS_CLIENT_KEY
 ENV SKIP_ENV_VALIDATION=1
 RUN npx prisma generate
 RUN npm run build
+RUN mkdir -p /app/public
 
 # Production stage
 FROM node:20-alpine AS production

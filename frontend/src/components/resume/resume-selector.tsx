@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type DragEvent } from 'react';
+import { useCallback, useRef, useState, type DragEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -60,16 +60,11 @@ export function ResumeSelector({ selectedId, onSelect }: ResumeSelectorProps) {
     uploadMutation.mutate(file);
   }, [uploadMutation, toast]);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleFileSelect = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.pdf';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) handleFile(file);
-    };
-    input.click();
-  }, [handleFile]);
+    fileInputRef.current?.click();
+  }, []);
 
   const handleDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -150,6 +145,17 @@ export function ResumeSelector({ selectedId, onSelect }: ResumeSelectorProps) {
           </div>
         ) : null}
 
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFile(file);
+            e.target.value = '';
+          }}
+        />
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
