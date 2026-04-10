@@ -14,7 +14,7 @@ export function respondToLearning(params: LearningRespondParams) {
   return createSSEFromPost(
     `/api/nightly-study/${params.sessionId}/respond`,
     {
-      answer: params.answer,
+      message: params.answer,
       credit_confirmed: params.creditConfirmed ?? false,
     }
   );

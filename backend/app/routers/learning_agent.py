@@ -19,6 +19,7 @@ from app.agent import learning_nodes
 from app.agent.learning_state import LearningState
 from app.models.learning_agent import LearningAgentSession, LearningAgentMessage
 from app.models.activity import ActivityLog, ActivityItem
+from app.models.enums import ActivityType
 from app.models.user import User
 from app.services.credit import CREDIT_COSTS, deduct_for_feature
 from app.services import daily_progress as daily_progress_service
@@ -41,6 +42,7 @@ def _get_kst_midnight() -> datetime:
 
 class RespondRequest(BaseModel):
     message: str = Field(min_length=1, max_length=10000)
+    credit_confirmed: bool = False
 
 
 # ---------- POST /api/nightly-study/start ----------
@@ -113,16 +115,7 @@ async def start_learning_session(
         try:
             state = initial_state.copy()
 
-            # Load profile
-            state = await learning_nodes.load_profile(state, db)
-            for ev in state.get("pending_events", []):
-                yield {"event": ev["event"], "data": json.dumps(ev["data"])}
-            state["pending_events"] = []
-
-            # Greet
-            state = await learning_nodes.greet(state, db)
-
-            # Send session info first
+            # Send session info first (before any other events)
             yield {
                 "event": "session",
                 "data": json.dumps({
@@ -131,6 +124,14 @@ async def start_learning_session(
                 }),
             }
 
+            # Load profile
+            state = await learning_nodes.load_profile(state, db)
+            for ev in state.get("pending_events", []):
+                yield {"event": ev["event"], "data": json.dumps(ev["data"])}
+            state["pending_events"] = []
+
+            # Greet
+            state = await learning_nodes.greet(state, db)
             for ev in state.get("pending_events", []):
                 yield {"event": ev["event"], "data": json.dumps(ev["data"])}
             state["pending_events"] = []
@@ -211,7 +212,7 @@ async def respond_to_session(
         "conversation_history": conversation_history,
         "current_phase": current_phase,
         "llm_call_count": session.llm_call_count or 0,
-        "credit_activated": session.credit_deducted or False,
+        "credit_activated": session.credit_deducted or body.credit_confirmed or False,
         "is_free_session": session.is_free_session or False,
         "pending_events": [],
     }
@@ -261,15 +262,50 @@ async def respond_to_session(
                 state = await learning_nodes.wrap_up(state, db)
                 for ev in state.get("pending_events", []):
                     yield {"event": ev["event"], "data": json.dumps(ev["data"])}
+
+                # Extract summary before clearing pending_events
+                summary = None
+                for ev_data in state.get("pending_events", []):
+                    if ev_data.get("event") == "complete":
+                        summary = ev_data.get("data", {}).get("summary")
                 state["pending_events"] = []
 
                 session.status = "completed"
+
+                # Deduct credits for paid sessions
+                if state.get("credit_activated") and not session.credit_deducted:
+                    try:
+                        await deduct_for_feature(
+                            db, user.id, session_id,
+                            "학습 에이전트 세션", CREDIT_COSTS["SESSION"],
+                            tx_type="LEARNING_DEBIT",
+                        )
+                        session.credit_deducted = True
+                    except Exception:
+                        logger.exception("Credit deduction failed in respond wrap_up")
+                        session.status = "abandoned"
+                        await db.commit()
+                        yield {"event": "error", "data": json.dumps({"error": "크레딧 차감에 실패했습니다"})}
+                        return
+
+                # Save activity log
+                await _save_activity(db, user.id, session, state.get("conversation_history", []), summary)
             else:
                 # Check credit limit for free sessions
                 state = await learning_nodes.check_credit(state, db)
+                has_credit_prompt = any(
+                    ev.get("event") == "credit_prompt"
+                    for ev in state.get("pending_events", [])
+                )
                 for ev in state.get("pending_events", []):
                     yield {"event": ev["event"], "data": json.dumps(ev["data"])}
                 state["pending_events"] = []
+
+                # If credit prompt was sent, stop here (wait for user response)
+                if has_credit_prompt:
+                    session.llm_call_count = state.get("llm_call_count", 0)
+                    await db.commit()
+                    return
 
                 # Teach
                 state = await learning_nodes.teach(state, db)
@@ -377,6 +413,13 @@ async def end_learning_session(
 
             # Wrap up
             state = await learning_nodes.wrap_up(state, db)
+
+            # Extract summary BEFORE clearing pending_events
+            summary = None
+            for ev_data in state.get("pending_events", []):
+                if ev_data.get("event") == "complete":
+                    summary = ev_data.get("data", {}).get("summary")
+
             for ev in state.get("pending_events", []):
                 yield {"event": ev["event"], "data": json.dumps(ev["data"])}
             state["pending_events"] = []
@@ -385,67 +428,23 @@ async def end_learning_session(
             session.status = "completed"
 
             # Deduct credits for paid sessions (after AI success)
-            if not session.is_free_session and not session.credit_deducted:
+            if state.get("credit_activated") and not session.credit_deducted:
                 try:
                     await deduct_for_feature(
-                        db,
-                        user.id,
-                        session_id,
-                        "학습 에이전트 세션",
-                        CREDIT_COSTS["SESSION"],
+                        db, user.id, session_id,
+                        "학습 에이전트 세션", CREDIT_COSTS["SESSION"],
                         tx_type="LEARNING_DEBIT",
                     )
                     session.credit_deducted = True
                 except Exception:
                     logger.exception("Failed to deduct credits for learning session")
+                    session.status = "abandoned"
+                    await db.commit()
+                    yield {"event": "error", "data": json.dumps({"error": "크레딧 차감에 실패했습니다"})}
+                    return
 
             # Save activity log
-            summary = None
-            for ev_data in state.get("pending_events", []):
-                if ev_data.get("event") == "complete":
-                    summary = ev_data.get("data", {}).get("summary")
-
-            activity_log = ActivityLog(
-                id=str(uuid4()),
-                user_id=user.id,
-                type="LEARNING_AGENT",
-                metadata_={"topic": topic, "summary": summary},
-            )
-            db.add(activity_log)
-            await db.flush()
-
-            # Save activity items from conversation
-            user_messages = [
-                entry for entry in conversation_history
-                if entry.get("role") == "user"
-            ]
-            for idx, entry in enumerate(user_messages):
-                item = ActivityItem(
-                    id=str(uuid4()),
-                    activity_log_id=activity_log.id,
-                    index=idx,
-                    question=topic or "학습 대화",
-                    answer=entry.get("content", ""),
-                    extra={"phase": entry.get("phase", ""), "assessment": entry.get("assessment")},
-                )
-                db.add(item)
-
-            # Record daily progress
-            try:
-                await daily_progress_service.record_progress(
-                    db,
-                    user_id=user.id,
-                    session_data={
-                        "subjectId": "learning-agent",
-                        "totalQuestions": len(user_messages),
-                        "correctCount": len(user_messages),
-                        "durationSeconds": 0,
-                        "topicsStudied": [topic] if topic else [],
-                    },
-                )
-            except Exception:
-                logger.exception("Failed to record daily progress")
-
+            await _save_activity(db, user.id, session, state.get("conversation_history", []), summary)
             await db.commit()
 
         except Exception:
@@ -453,6 +452,55 @@ async def end_learning_session(
             yield {"event": "error", "data": json.dumps({"error": "세션 종료에 실패했습니다"})}
 
     return EventSourceResponse(event_generator())
+
+
+# ---------- Helpers ----------
+
+async def _save_activity(
+    db: AsyncSession,
+    user_id: str,
+    session: LearningAgentSession,
+    conversation_history: list[dict],
+    summary: dict | None,
+) -> None:
+    """Save ActivityLog + ActivityItems + DailyProgress."""
+    topic = session.topic or ""
+
+    activity_log = ActivityLog(
+        id=str(uuid4()),
+        user_id=user_id,
+        type=ActivityType.LEARNING_AGENT,
+        metadata_={"topic": topic, "summary": summary},
+    )
+    db.add(activity_log)
+    await db.flush()
+
+    user_messages = [e for e in conversation_history if e.get("role") == "user"]
+    for idx, entry in enumerate(user_messages):
+        item = ActivityItem(
+            id=str(uuid4()),
+            activity_log_id=activity_log.id,
+            index=idx,
+            question=topic or "학습 대화",
+            answer=entry.get("content", ""),
+            extra={"phase": entry.get("phase", ""), "assessment": entry.get("assessment")},
+        )
+        db.add(item)
+
+    try:
+        await daily_progress_service.record_progress(
+            db,
+            user_id=user_id,
+            session_data={
+                "subjectId": "learning-agent",
+                "totalQuestions": len(user_messages),
+                "correctCount": len(user_messages),
+                "durationSeconds": 0,
+                "topicsStudied": [topic] if topic else [],
+            },
+        )
+    except Exception:
+        logger.exception("Failed to record daily progress")
 
 
 # ---------- GET /api/nightly-study/status ----------
