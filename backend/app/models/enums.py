@@ -18,7 +18,6 @@ class Difficulty(str, enum.Enum):
 class SessionStatus(str, enum.Enum):
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
-    ABANDONED = "ABANDONED"
 
 
 class PaymentStatus(str, enum.Enum):
@@ -31,7 +30,7 @@ class PaymentStatus(str, enum.Enum):
 class ActivityType(str, enum.Enum):
     MODEL_ANSWER = "MODEL_ANSWER"
     NIGHTLY_STUDY = "NIGHTLY_STUDY"
-    LEARNING_SESSION = "LEARNING_SESSION"
+    LEARNING_AGENT = "LEARNING_AGENT"
 
 
 class CreditTxType(str, enum.Enum):
@@ -42,7 +41,6 @@ class CreditTxType(str, enum.Enum):
     FEATURE_DEBIT = "FEATURE_DEBIT"
     REFUND = "REFUND"
     COUPON = "COUPON"
-    LEARNING_DEBIT = "LEARNING_DEBIT"
 
 
 # SQLAlchemy ENUM types mapped to existing PostgreSQL enums (created by Prisma)
