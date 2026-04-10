@@ -29,26 +29,9 @@ export async function getAgentSession(sessionId: string) {
   return res.json();
 }
 
-export async function getProfile() {
-  const res = await fetch("/api/profile", { credentials: "include" });
-  if (!res.ok) throw new Error("프로필을 불러올 수 없습니다");
-  return res.json();
-}
-
-export async function addProfileContext(content: string) {
-  const res = await fetch("/api/profile/context", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ content }),
-  });
-  if (!res.ok) throw new Error("프로필 저장에 실패했습니다");
-  return res.json();
-}
-
 // Helper: POST-based SSE using fetch + ReadableStream
 // Returns an object with addEventListener/close, similar to EventSource
-export function createSSEFromPost(url: string, body: Record<string, unknown>) {
+export function createSSEFromPost(url: string, body: object) {
   const controller = new AbortController();
   const listeners: Record<string, ((e: MessageEvent) => void)[]> = {};
 
