@@ -1,0 +1,6 @@
+__pycache__
+.git
+*.md
+.env*
+!.env.production.example
+.pytest_cache

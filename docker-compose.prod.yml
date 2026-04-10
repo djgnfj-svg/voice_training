@@ -6,9 +6,9 @@ services:
       - "80:80"
     depends_on:
       frontend:
-        condition: service_started
+        condition: service_healthy
       backend:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
@@ -20,6 +20,8 @@ services:
     build:
       context: ./frontend
       target: production
+      args:
+        - NEXT_PUBLIC_TOSS_CLIENT_KEY=${NEXT_PUBLIC_TOSS_CLIENT_KEY}
     expose:
       - "3000"
     env_file:
@@ -27,6 +29,12 @@ services:
     environment:
       - NODE_ENV=production
       - BACKEND_URL=http://backend:8000
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
     logging:
       driver: json-file
@@ -43,6 +51,12 @@ services:
       - ./backend/.env.production
     environment:
       - ENVIRONMENT=production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     logging:
       driver: json-file
