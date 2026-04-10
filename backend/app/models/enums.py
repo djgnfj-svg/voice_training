@@ -32,6 +32,7 @@ class ActivityType(str, enum.Enum):
     MODEL_ANSWER = "MODEL_ANSWER"
     NIGHTLY_STUDY = "NIGHTLY_STUDY"
     LEARNING_SESSION = "LEARNING_SESSION"
+    LEARNING_AGENT = "LEARNING_AGENT"
 
 
 class CreditTxType(str, enum.Enum):

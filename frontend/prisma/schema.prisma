@@ -32,6 +32,7 @@ model User {
   answerAssistSessions AnswerAssistSession[]
   userKnowledge      UserKnowledge[]
   dailyProgress      DailyProgress[]
+  learningAgentSessions LearningAgentSession[]
 
   @@map("users")
 }
@@ -279,6 +280,7 @@ enum ActivityType {
   MODEL_ANSWER
   NIGHTLY_STUDY
   LEARNING_SESSION
+  LEARNING_AGENT
 }
 
 model Coupon {
@@ -426,4 +428,44 @@ model DailyProgress {
   @@unique([userId, date])
   @@index([userId, date])
   @@map("daily_progress")
+}
+
+// ========================
+// Learning Agent Models
+// ========================
+
+model LearningAgentSession {
+  id             String   @id @default(uuid())
+  userId         String
+  topic          String?
+  status         String   @default("active")
+  llmCallCount   Int      @default(0)
+  creditDeducted Boolean  @default(false)
+  isFreeSession  Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user     User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages LearningAgentMessage[]
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@map("learning_agent_sessions")
+}
+
+model LearningAgentMessage {
+  id           String   @id @default(uuid())
+  sessionId    String
+  messageIndex Int
+  role         String
+  content      String   @db.Text
+  phase        String?
+  assessment   Json?
+  createdAt    DateTime @default(now())
+
+  session LearningAgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, messageIndex])
+  @@index([sessionId])
+  @@map("learning_agent_messages")
 }
