@@ -58,9 +58,9 @@ async def deep_research(
     except ValueError as e:
         code = str(e)
         if code == "NOT_FOUND":
-            raise HTTPException(404, code)
+            raise HTTPException(404, {"error": code})
         if code == "INSUFFICIENT_CREDITS":
             raise HTTPException(402, {"error": code, "code": code})
         if code == "TAVILY_NOT_AVAILABLE":
-            raise HTTPException(503, code)
-        raise HTTPException(400, code)
+            raise HTTPException(503, {"error": code})
+        raise HTTPException(400, {"error": code})

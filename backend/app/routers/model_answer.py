@@ -31,8 +31,10 @@ async def generate_model_answer(
     from app.services.credit import (
         can_start_session,
         deduct_for_feature,
+        mark_free_trial_used,
         CREDIT_COSTS,
         InsufficientCreditsError,
+        FreeTrialAlreadyUsedError,
     )
     from app.services.question import plan_interview
     from app.lib.anthropic_client import call_llm_json, MODELS
@@ -116,20 +118,12 @@ async def generate_model_answer(
                 {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"},
             )
     else:
-        # Mark free trial used — 조건부 UPDATE로 동시 요청 방어
-        from sqlalchemy import update as sql_update
-        from app.models.user import User
-
-        result = await db.execute(
-            sql_update(User)
-            .where(User.id == user.id, User.free_trial_used == False)  # noqa: E712
-            .values(free_trial_used=True)
-        )
-        if result.rowcount == 0:
+        try:
+            await mark_free_trial_used(db, user.id)
+        except FreeTrialAlreadyUsedError:
             raise HTTPException(
                 402, {"error": "FREE_TRIAL_ALREADY_USED", "code": "FREE_TRIAL_ALREADY_USED"}
             )
-        await db.commit()
 
     # Create activity log (non-blocking)
     activity_log_id = None

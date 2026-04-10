@@ -30,7 +30,10 @@ async def create_payment_order(
     try:
         return await create_order(db, user.id, body.productId)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail={"error": str(e), "code": str(e)})
+        code = str(e)
+        if code == "INVALID_PRODUCT":
+            raise HTTPException(status_code=400, detail={"error": code, "code": code})
+        raise HTTPException(status_code=400, detail={"error": "주문 생성에 실패했습니다.", "code": "ORDER_CREATE_FAILED"})
 
 
 @router.post("/api/payments/confirm")

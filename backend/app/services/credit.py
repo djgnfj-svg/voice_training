@@ -21,7 +21,7 @@ class FreeTrialAlreadyUsedError(Exception):
 CREDIT_COSTS = {
     "SESSION": 10,
     "MODEL_ANSWER": 10,
-    "DEEP_RESEARCH": 10,
+    "DEEP_RESEARCH": 1,
     "FOLLOW_UP": 1,
 }
 
@@ -91,14 +91,7 @@ async def deduct_for_session(
     For paid: decrements balance with optimistic lock (balance >= cost).
     """
     if using_free_trial:
-        # Atomic conditional update — only succeeds if freeTrialUsed is still False
-        result = await db.execute(
-            update(User)
-            .where(User.id == user_id, User.free_trial_used == False)  # noqa: E712
-            .values(free_trial_used=True)
-        )
-        if result.rowcount == 0:
-            raise FreeTrialAlreadyUsedError("FREE_TRIAL_ALREADY_USED")
+        await mark_free_trial_used(db, user_id)
 
         await db.execute(
             update(InterviewSession)
@@ -148,6 +141,18 @@ async def deduct_for_session(
         reference_id=session_id,
     )
     db.add(tx)
+    await db.commit()
+
+
+async def mark_free_trial_used(db: AsyncSession, user_id: str) -> None:
+    """Atomically mark free trial as used. Raises FreeTrialAlreadyUsedError on race."""
+    result = await db.execute(
+        update(User)
+        .where(User.id == user_id, User.free_trial_used == False)  # noqa: E712
+        .values(free_trial_used=True)
+    )
+    if result.rowcount == 0:
+        raise FreeTrialAlreadyUsedError("FREE_TRIAL_ALREADY_USED")
     await db.commit()
 
 

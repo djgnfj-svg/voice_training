@@ -4,13 +4,14 @@
 - `frontend/` — Next.js 프론트엔드 + NextAuth 인증만
 - `backend/` — FastAPI 백엔드 (API, 서비스, 프롬프트, AI 로직 전부)
 - `db/` — DB 초기화 스크립트
-- `docker-compose.yml` — 로컬 개발용 (frontend + backend 서비스). 인프라(PostgreSQL)는 Supabase 사용
-- Next.js rewrite로 `/api/*` (auth 제외) → FastAPI 프록시 (`next.config.ts`)
+- `docker-compose.yml` — 로컬 개발용 (nginx + frontend + backend). 인프라(PostgreSQL)는 Supabase 사용
+- `docker-compose.prod.yml` — 프로덕션 (EC2)
+- `nginx/` — nginx 리버스 프록시 (`/api/auth` → frontend, `/api/*` → backend, 나머지 → frontend)
 
 ## 개발 규칙
-- 개발 환경은 `docker compose up -d`로 띄움 (frontend + backend). DB는 Supabase 호스팅.
-- Next.js dev 서버는 `cd frontend && PORT=3001 npm run dev`로 포트 3001에서 실행.
-- FastAPI dev 서버는 `cd backend && uvicorn app.main:app --reload --port 8000`으로 실행.
+- 개발 환경은 `docker compose up -d`로 띄움 (nginx:81 + frontend:3000 + backend:8000). DB는 Supabase 호스팅.
+- 접속: `http://localhost:81` (nginx 경유). frontend/backend는 외부 포트 노출 없이 Docker 내부 네트워크만 사용.
+- 로컬 직접 실행 시: `cd frontend && PORT=3001 npm run dev` / `cd backend && uvicorn app.main:app --reload --port 8000`
 - prisma 명령 실행 시 `cd frontend && set -a && source .env && set +a` 후 실행.
 - `node.exe` 프로세스를 함부로 죽이지 말 것 (dev 서버가 꺼짐).
 
@@ -23,6 +24,8 @@
 - 무료 체험 차감은 `WHERE free_trial_used = False` 조건부 UPDATE로 원자적 처리 (동시 요청 방어).
 - DB 리소스 조회 시 반드시 `user_id` 소유권 검증 포함 (JobPosting, Resume 등).
 - 에러 응답에 내부 예외 메시지 노출 금지 — 고정 문자열 사용.
+- HTTPException detail은 `{"error": "메시지"}` 딕셔너리 형태로 통일 (프론트에서 `data.error`로 읽음).
+- 무료 체험 마킹은 `credit.py`의 `mark_free_trial_used()` 헬퍼 사용 (중복 구현 금지).
 - `eslint-disable` 대신 `useRef`로 stable function reference 유지.
 - 파일 업로드 UI는 `document.createElement('input')` 대신 hidden `<input ref={...}>` 사용.
 - 삭제 등 위험 액션은 `window.confirm` 대신 shadcn `AlertDialog` 사용.
@@ -49,7 +52,8 @@
 - Whisper API (선택적 — 음성인식, 없으면 Web Speech API만 사용)
 
 ### 프론트↔백엔드 통신
-- 프론트엔드는 `/api/*` 호출 → Next.js rewrite가 FastAPI(`BACKEND_URL`)로 프록시
+- **Docker (dev/prod)**: nginx가 `/api/auth` → frontend, `/api/*` → backend로 라우팅
+- **Vercel 배포**: Next.js rewrite (`next.config.ts`)가 `/api/*` (auth 제외) → FastAPI(`BACKEND_URL`)로 프록시
 - 유일한 Next.js API route: `/api/auth/[...nextauth]`
 
 ## 브랜드

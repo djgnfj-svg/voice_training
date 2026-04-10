@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
+import { useQuery } from '@tanstack/react-query';
 import { User, Menu, LogOut, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,16 +21,18 @@ import { useMobileSidebar } from '@/hooks/useMobileSidebar';
 export function Header() {
   const { data: session } = useSession();
   const openSidebar = useMobileSidebar((s) => s.open);
-  const [hasCredentials, setHasCredentials] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
-  useEffect(() => {
-    if (!session?.user) return;
-    fetch('/api/user/me')
-      .then((r) => r.json())
-      .then((d) => setHasCredentials(d.hasCredentials ?? false))
-      .catch(() => {});
-  }, [session?.user]);
+  const { data: meData } = useQuery({
+    queryKey: ['user-me'],
+    queryFn: async () => {
+      const res = await fetch('/api/user/me');
+      if (!res.ok) return { hasCredentials: false };
+      return res.json();
+    },
+    enabled: !!session?.user,
+  });
+  const hasCredentials = meData?.hasCredentials ?? false;
 
   return (
     <>

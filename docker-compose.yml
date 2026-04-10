@@ -1,10 +1,20 @@
 services:
+  nginx:
+    build:
+      context: ./nginx
+    ports:
+      - "81:80"
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
       target: development
-    ports:
-      - "3001:3000"
+    expose:
+      - "3000"
     env_file:
       - ./frontend/.env
     environment:
@@ -16,8 +26,8 @@ services:
   backend:
     build:
       context: ./backend
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     env_file:
       - ./backend/.env
     restart: unless-stopped

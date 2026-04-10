@@ -49,13 +49,15 @@ export default function CunningModePage() {
     silenceDelay,
   });
 
+  const startRef = useRef(cunning.start);
+  startRef.current = cunning.start;
+
   // Auto-start voice on mount
   useEffect(() => {
     if (inputMode === 'voice' && cunning.isSupported && cunning.phase === 'idle') {
-      cunning.start();
+      startRef.current();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cunning.isSupported, inputMode]);
+  }, [cunning.isSupported, cunning.phase, inputMode]);
 
   // Get combined QA history for display
   const qaHistory = inputMode === 'voice' ? cunning.qaHistory : textQaHistory;

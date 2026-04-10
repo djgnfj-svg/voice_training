@@ -40,6 +40,9 @@ export default function NightlyStudySessionPage() {
     finishEarly,
   } = useNightlyStudy();
 
+  const startSessionRef = useRef(startSession);
+  startSessionRef.current = startSession;
+
   // Start session from sessionStorage config
   useEffect(() => {
     if (startedRef.current) return;
@@ -51,8 +54,7 @@ export default function NightlyStudySessionPage() {
     startedRef.current = true;
     const config = JSON.parse(configStr);
     sessionStorage.removeItem('nightly_study_config');
-    startSession(config.categories, config.mode, config.resumeId);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- startSession ref-stable via startedRef guard
+    startSessionRef.current(config.categories, config.mode, config.resumeId);
   }, [router]);
 
   // Prevent accidental tab close / refresh

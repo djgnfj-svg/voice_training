@@ -58,7 +58,7 @@ async def change_password(
         raise HTTPException(status_code=404, detail="User not found")
 
     if not db_user.hashed_password:
-        raise HTTPException(status_code=400, detail="비밀번호가 설정되지 않은 계정입니다.")
+        raise HTTPException(status_code=400, detail={"error": "비밀번호가 설정되지 않은 계정입니다."})
 
     password_valid = await asyncio.to_thread(
         bcrypt.checkpw,
@@ -66,7 +66,7 @@ async def change_password(
         db_user.hashed_password.encode("utf-8"),
     )
     if not password_valid:
-        raise HTTPException(status_code=400, detail="현재 비밀번호가 일치하지 않습니다.")
+        raise HTTPException(status_code=400, detail={"error": "현재 비밀번호가 일치하지 않습니다."})
 
     salt = await asyncio.to_thread(bcrypt.gensalt, 12)
     new_hash = (
