@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
 import { useToast } from '@/hooks/useToast';
-import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical, PlayCircle, AlertTriangle, BookOpen } from 'lucide-react';
+import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical, PlayCircle, AlertTriangle, BookOpen, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 import { MicCheckDialog } from '@/components/interview/mic-check-dialog';
@@ -23,7 +23,7 @@ export default function InterviewSetupPage() {
   const [step, setStep] = useState<Step>('resume');
 
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [interviewMode, setInterviewMode] = useState<'standard' | 'deep' | 'model-answer'>('standard');
+  const [interviewMode, setInterviewMode] = useState<'standard' | 'deep' | 'model-answer' | 'ai-coach'>('standard');
   const [showCreditsDialog, setShowCreditsDialog] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
@@ -77,6 +77,18 @@ export default function InterviewSetupPage() {
   const startInterview = () => {
     if (!selectedResumeId) {
       toast({ title: '이력서를 선택해주세요', variant: 'destructive' });
+      return;
+    }
+
+    // AI 코치 모드 → 에이전트 면접 세션으로 이동
+    if (interviewMode === 'ai-coach') {
+      const params = new URLSearchParams({
+        resumeId: selectedResumeId,
+        ...(jobPostingData?.id ? { jobPostingId: jobPostingData.id } : {}),
+        maxQuestions: '7',
+        textMode: 'true',
+      });
+      router.push(`/agent-interview/session/new?${params}`);
       return;
     }
 
@@ -333,7 +345,7 @@ export default function InterviewSetupPage() {
               <CardDescription>면접 유형을 선택하세요</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-4">
                 {/* 일반 모드 */}
                 <button
                   type="button"
@@ -387,6 +399,24 @@ export default function InterviewSetupPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">모범답안 보며 학습</p>
                 </button>
+
+                {/* AI 코치 모드 */}
+                <button
+                  type="button"
+                  className={cn(
+                    'rounded-lg border p-4 text-left transition-all',
+                    interviewMode === 'ai-coach'
+                      ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50 dark:bg-blue-950/30'
+                      : 'hover:border-muted-foreground/50'
+                  )}
+                  onClick={() => setInterviewMode('ai-coach')}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Bot className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm font-semibold">AI 코치</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">맞춤형 동적 면접</p>
+                </button>
               </div>
 
               {interviewMode === 'deep' && (
@@ -408,6 +438,16 @@ export default function InterviewSetupPage() {
                   </ul>
                 </div>
               )}
+
+              {interviewMode === 'ai-coach' && (
+                <div className="mt-3 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
+                  <ul className="space-y-1 text-sm text-blue-700 dark:text-blue-300">
+                    <li>- AI가 당신의 강점/약점을 기억하고 맞춤 질문</li>
+                    <li>- 답변 깊이에 따라 꼬리질문 자동 생성</li>
+                    <li>- 면접할수록 더 정확한 피드백 (텍스트 모드)</li>
+                  </ul>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -421,6 +461,11 @@ export default function InterviewSetupPage() {
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 AI가 면접을 설계하고 있습니다...
+              </>
+            ) : interviewMode === 'ai-coach' ? (
+              <>
+                <Bot className="mr-2 h-4 w-4" />
+                AI 코치 면접 시작
               </>
             ) : interviewMode === 'model-answer' ? (
               <>

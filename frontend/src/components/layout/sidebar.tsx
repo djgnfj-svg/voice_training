@@ -17,7 +17,6 @@ import {
   Moon,
   Sun,
   Monitor,
-  Bot,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -27,7 +26,6 @@ import { useMobileSidebar } from '@/hooks/useMobileSidebar';
 const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { href: '/interview/setup', label: '면접 연습', icon: Mic },
-  { href: '/agent-interview/setup', label: 'AI 코치 면접', icon: Bot },
   { href: '/nightly-study', label: '오늘의 학습', icon: Moon },
   { href: '/profile', label: '이력서 관리', icon: FileText },
   { href: '/history', label: '면접 기록', icon: History },
@@ -145,7 +143,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 
 export function Sidebar() {
   const pathname = usePathname();
-  if (pathname.startsWith('/interview/session/') || pathname === '/nightly-study/session') return null;
+  if (pathname.startsWith('/interview/session/') || pathname.startsWith('/agent-interview/session/') || pathname === '/nightly-study/session') return null;
 
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 border-r bg-card md:block">
@@ -158,7 +156,7 @@ export function MobileSidebar() {
   const pathname = usePathname();
   const { isOpen, close } = useMobileSidebar();
 
-  if (pathname.startsWith('/interview/session/') || pathname === '/nightly-study/session') return null;
+  if (pathname.startsWith('/interview/session/') || pathname.startsWith('/agent-interview/session/') || pathname === '/nightly-study/session') return null;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && close()}>
