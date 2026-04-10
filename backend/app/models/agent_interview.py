@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, String, DateTime, Integer, Float, Boolean, JSON, Text, ForeignKey, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -11,7 +12,7 @@ from app.database import Base
 class UserProfileEmbedding(Base):
     __tablename__ = "user_profile_embeddings"
 
-    id = Column(String, primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True)
     user_id = Column("userId", String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     category = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
@@ -47,7 +48,7 @@ class AgentInterviewMessage(Base):
         UniqueConstraint("sessionId", "messageIndex", name="agent_messages_session_index_key"),
     )
 
-    id = Column(String, primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True)
     session_id = Column("sessionId", String, ForeignKey("agent_interview_sessions.id", ondelete="CASCADE"), nullable=False)
     message_index = Column("messageIndex", Integer, nullable=False)
     role = Column(String(20), nullable=False)

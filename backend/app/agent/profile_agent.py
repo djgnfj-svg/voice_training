@@ -31,10 +31,10 @@ async def search_profile(
     result = await db.execute(
         text("""
             SELECT id, category, content, metadata,
-                   1 - (embedding <=> :embedding::vector) AS similarity
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
             FROM user_profile_embeddings
             WHERE "userId" = :user_id
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :top_k
         """),
         {"user_id": user_id, "embedding": embedding_str, "top_k": top_k},
@@ -66,10 +66,10 @@ async def update_profile(
     # Check for similar existing entry
     result = await db.execute(
         text("""
-            SELECT id, 1 - (embedding <=> :embedding::vector) AS similarity
+            SELECT id, 1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
             FROM user_profile_embeddings
             WHERE "userId" = :user_id AND category = :category
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT 1
         """),
         {"user_id": user_id, "embedding": embedding_str, "category": category},
@@ -81,7 +81,7 @@ async def update_profile(
         await db.execute(
             text("""
                 UPDATE user_profile_embeddings
-                SET content = :content, embedding = :embedding::vector,
+                SET content = :content, embedding = CAST(:embedding AS vector),
                     metadata = :metadata, "updatedAt" = NOW()
                 WHERE id = :id
             """),
@@ -100,7 +100,7 @@ async def update_profile(
         await db.execute(
             text("""
                 INSERT INTO user_profile_embeddings (id, "userId", category, content, embedding, metadata)
-                VALUES (:id, :user_id, :category, :content, :embedding::vector, :metadata)
+                VALUES (:id, :user_id, :category, :content, CAST(:embedding AS vector), :metadata)
             """),
             {
                 "id": new_id,

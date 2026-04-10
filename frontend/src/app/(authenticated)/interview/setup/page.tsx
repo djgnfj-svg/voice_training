@@ -4,27 +4,30 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
 import { useToast } from '@/hooks/useToast';
-import { Loader2, Mic, Sparkles, ArrowRight, SkipForward, FlaskConical, PlayCircle, AlertTriangle, BookOpen, Bot } from 'lucide-react';
+import { Sparkles, ArrowRight, SkipForward, PlayCircle, BookOpen, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 import { MicCheckDialog } from '@/components/interview/mic-check-dialog';
-import { isSpeechRecognitionSupported } from '@/lib/utils';
 import type { ParsedJobPosting, CompanyAnalysis } from '@/types';
 
 type Step = 'resume' | 'job-posting' | 'start';
+type InterviewMode = 'ai-coach' | 'model-answer';
 
 export default function InterviewSetupPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<Step>('resume');
 
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [interviewMode, setInterviewMode] = useState<'standard' | 'deep' | 'model-answer' | 'ai-coach'>('standard');
+  const [interviewMode, setInterviewMode] = useState<InterviewMode>('ai-coach');
+  const [maxQuestions, setMaxQuestions] = useState('7');
   const [showCreditsDialog, setShowCreditsDialog] = useState(false);
+  const [showMicCheck, setShowMicCheck] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
     rawText: string;
@@ -32,8 +35,6 @@ export default function InterviewSetupPage() {
     companyAnalysis: CompanyAnalysis;
     deepResearchAvailable: boolean;
   } | null>(null);
-  const [showMicCheck, setShowMicCheck] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
   const [inProgressSession, setInProgressSession] = useState<{
     id: string;
     type: string;
@@ -42,7 +43,6 @@ export default function InterviewSetupPage() {
   } | null>(null);
 
   useEffect(() => {
-    setSpeechSupported(isSpeechRecognitionSupported());
     fetch('/api/interview/in-progress')
       .then((res) => res.json())
       .then((data) => {
@@ -80,19 +80,11 @@ export default function InterviewSetupPage() {
       return;
     }
 
-    // AI 코치 모드 → 에이전트 면접 세션으로 이동
     if (interviewMode === 'ai-coach') {
-      const params = new URLSearchParams({
-        resumeId: selectedResumeId,
-        ...(jobPostingData?.id ? { jobPostingId: jobPostingData.id } : {}),
-        maxQuestions: '7',
-        textMode: 'true',
-      });
-      router.push(`/agent-interview/session/new?${params}`);
+      setShowMicCheck(true);
       return;
     }
 
-    // 모범답안 학습 모드 → 별도 페이지로 이동
     if (interviewMode === 'model-answer') {
       if (jobPostingData?.rawText) {
         sessionStorage.setItem('model_answer_job_posting', jobPostingData.rawText);
@@ -102,61 +94,6 @@ export default function InterviewSetupPage() {
       router.push(`/interview/model-answer/${selectedResumeId}`);
       return;
     }
-
-    if (!isSpeechRecognitionSupported()) {
-      toast({
-        title: '음성 인식을 지원하지 않는 브라우저입니다',
-        description: 'Chrome 또는 Edge를 사용해주세요.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setShowMicCheck(true);
-  };
-
-  const confirmAndStartInterview = async (textMode = false) => {
-    if (!selectedResumeId) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch('/api/interview/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resumeId: selectedResumeId,
-          jobPostingId: jobPostingData?.id,
-          mode: interviewMode,
-          textMode,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        if (res.status === 402) {
-          setShowMicCheck(false);
-          setShowCreditsDialog(true);
-          return;
-        }
-        throw new Error(data.error || 'Setup failed');
-      }
-
-      const data = await res.json();
-      const { sessionId, plan, questions } = data;
-
-      sessionStorage.setItem(`interview_${sessionId}`, JSON.stringify({ plan, questions, deepMode: interviewMode === 'deep', textMode }));
-
-      router.push(`/interview/session/${sessionId}`);
-    } catch (error: unknown) {
-      toast({ title: '면접 설정 실패', description: error instanceof Error ? error.message : '알 수 없는 오류', variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const startTextMode = async () => {
-    setShowMicCheck(false);
-    await confirmAndStartInterview(true);
   };
 
   return (
@@ -164,24 +101,9 @@ export default function InterviewSetupPage() {
       <div>
         <h1 className="text-2xl font-bold md:text-3xl">면접 시작</h1>
         <p className="text-muted-foreground">
-          이력서를 선택하고, 선택적으로 채용 공고를 입력하면 AI가 맞춤 면접을 설계합니다. 음성으로 답변하며 실전 감각을 키우세요.
+          이력서를 선택하고, 선택적으로 채용 공고를 입력하면 AI가 맞춤 면접을 진행합니다.
         </p>
       </div>
-
-      {/* Browser compatibility warning */}
-      {!speechSupported && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <div>
-            <p className="font-medium text-amber-800 dark:text-amber-200">
-              이 브라우저는 음성 인식을 지원하지 않습니다
-            </p>
-            <p className="text-sm text-amber-700 dark:text-amber-300">
-              Chrome 또는 Edge 브라우저를 사용해주세요. 음성 면접을 진행하려면 음성 인식이 필요합니다.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* In-progress session banner */}
       {inProgressSession && (
@@ -191,8 +113,6 @@ export default function InterviewSetupPage() {
               진행 중인 면접이 있습니다
             </p>
             <p className="text-sm text-amber-700 dark:text-amber-300">
-              {inProgressSession.type === 'TECHNICAL' ? '기술' : inProgressSession.type === 'BEHAVIORAL' ? '인성' : '종합'} 면접
-              {' · '}
               {inProgressSession.answeredCount}/{inProgressSession.totalQuestions}문항 답변 완료
             </p>
           </div>
@@ -309,77 +229,28 @@ export default function InterviewSetupPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5" />
-                AI 면접 설계
-              </CardTitle>
-              <CardDescription>
-                {jobPostingData
-                  ? '채용 공고와 이력서를 기반으로 AI가 면접 유형, 카테고리, 난이도, 질문 수를 자동으로 결정합니다'
-                  : '이력서를 기반으로 AI가 면접 유형, 카테고리, 난이도, 질문 수를 자동으로 결정합니다'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                {jobPostingData ? (
-                  <>
-                    <li>- 공고의 요구 기술과 이력서 스킬을 비교하여 카테고리 선택</li>
-                    <li>- 경력 수준에 맞는 난이도 자동 조절</li>
-                    <li>- 강점 검증 + 약점 보완 질문을 균형 있게 배치</li>
-                  </>
-                ) : (
-                  <>
-                    <li>- 이력서의 기술스택과 프로젝트 경험을 분석하여 카테고리 선택</li>
-                    <li>- 경력 수준에 맞는 난이도 자동 조절</li>
-                    <li>- 프로젝트 심층 + 기술 역량 + 성장 관련 질문을 균형 있게 배치</li>
-                  </>
-                )}
-              </ul>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FlaskConical className="h-5 w-5" />
                 면접 모드
               </CardTitle>
               <CardDescription>면접 유형을 선택하세요</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 sm:grid-cols-4">
-                {/* 일반 모드 */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/* AI 코치 모드 */}
                 <button
                   type="button"
                   className={cn(
                     'rounded-lg border p-4 text-left transition-all',
-                    interviewMode === 'standard'
-                      ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
+                    interviewMode === 'ai-coach'
+                      ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50 dark:bg-blue-950/30'
                       : 'hover:border-muted-foreground/50'
                   )}
-                  onClick={() => setInterviewMode('standard')}
+                  onClick={() => setInterviewMode('ai-coach')}
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <Mic className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">시험 모드</span>
+                    <Bot className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm font-semibold">AI 코치 면접</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">5~10 질문, 전반적 커버리지</p>
-                </button>
-
-                {/* 심화 모드 */}
-                <button
-                  type="button"
-                  className={cn(
-                    'rounded-lg border p-4 text-left transition-all',
-                    interviewMode === 'deep'
-                      ? 'border-violet-500 ring-2 ring-violet-500/20 bg-violet-50 dark:bg-violet-950/30'
-                      : 'hover:border-muted-foreground/50'
-                  )}
-                  onClick={() => setInterviewMode('deep')}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <FlaskConical className="h-4 w-4 text-violet-500" />
-                    <span className="text-sm font-semibold">심화 모드</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">3~5 질문, 기술 깊이 집중</p>
+                  <p className="text-xs text-muted-foreground">맞춤형 동적 질문, 꼬리질문, 프로필 기억</p>
                 </button>
 
                 {/* 모범답안 학습 모드 */}
@@ -395,38 +266,37 @@ export default function InterviewSetupPage() {
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <BookOpen className="h-4 w-4 text-emerald-500" />
-                    <span className="text-sm font-semibold">학습 모드</span>
+                    <span className="text-sm font-semibold">모범답안 학습</span>
                   </div>
                   <p className="text-xs text-muted-foreground">모범답안 보며 학습</p>
                 </button>
-
-                {/* AI 코치 모드 */}
-                <button
-                  type="button"
-                  className={cn(
-                    'rounded-lg border p-4 text-left transition-all',
-                    interviewMode === 'ai-coach'
-                      ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50 dark:bg-blue-950/30'
-                      : 'hover:border-muted-foreground/50'
-                  )}
-                  onClick={() => setInterviewMode('ai-coach')}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Bot className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm font-semibold">AI 코치</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">맞춤형 동적 면접</p>
-                </button>
               </div>
 
-              {interviewMode === 'deep' && (
-                <div className="mt-3 rounded-lg bg-violet-50 p-3 dark:bg-violet-950/30">
-                  <ul className="space-y-1 text-sm text-violet-700 dark:text-violet-300">
-                    <li>- 이력서의 프로젝트/기술을 직접 언급하는 질문</li>
-                    <li>- INTERMEDIATE 이상 난이도, 점진적 깊이 증가</li>
-                    <li>- 매 질문 후 꼬리질문으로 더 깊이 파고듦</li>
-                  </ul>
-                </div>
+              {interviewMode === 'ai-coach' && (
+                <>
+                  <div className="mt-3 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
+                    <ul className="space-y-1 text-sm text-blue-700 dark:text-blue-300">
+                      <li>- AI가 당신의 강점/약점을 기억하고 맞춤 질문</li>
+                      <li>- 답변 깊이에 따라 꼬리질문 자동 생성 (최대 2회)</li>
+                      <li>- 면접할수록 더 정확한 피드백</li>
+                    </ul>
+                  </div>
+                  <div className="mt-3 space-y-1.5">
+                    <Label className="text-sm">질문 수</Label>
+                    <Select value={maxQuestions} onValueChange={setMaxQuestions}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 3, 5, 7, 10].map((n) => (
+                          <SelectItem key={n} value={String(n)}>
+                            {n}개{n === 1 ? ' (테스트)' : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
               )}
 
               {interviewMode === 'model-answer' && (
@@ -438,16 +308,6 @@ export default function InterviewSetupPage() {
                   </ul>
                 </div>
               )}
-
-              {interviewMode === 'ai-coach' && (
-                <div className="mt-3 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
-                  <ul className="space-y-1 text-sm text-blue-700 dark:text-blue-300">
-                    <li>- AI가 당신의 강점/약점을 기억하고 맞춤 질문</li>
-                    <li>- 답변 깊이에 따라 꼬리질문 자동 생성</li>
-                    <li>- 면접할수록 더 정확한 피드백 (텍스트 모드)</li>
-                  </ul>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -455,27 +315,16 @@ export default function InterviewSetupPage() {
             size="lg"
             className="w-full"
             onClick={startInterview}
-            disabled={loading}
           >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                AI가 면접을 설계하고 있습니다...
-              </>
-            ) : interviewMode === 'ai-coach' ? (
+            {interviewMode === 'ai-coach' ? (
               <>
                 <Bot className="mr-2 h-4 w-4" />
                 AI 코치 면접 시작
               </>
-            ) : interviewMode === 'model-answer' ? (
+            ) : (
               <>
                 <BookOpen className="mr-2 h-4 w-4" />
                 모범답안 학습 시작
-              </>
-            ) : (
-              <>
-                <Mic className="mr-2 h-4 w-4" />
-                면접 시작하기
               </>
             )}
           </Button>
@@ -485,9 +334,16 @@ export default function InterviewSetupPage() {
       <MicCheckDialog
         open={showMicCheck}
         onOpenChange={setShowMicCheck}
-        onConfirm={() => confirmAndStartInterview(false)}
-        onTextMode={startTextMode}
-        loading={loading}
+        onConfirm={() => {
+          setShowMicCheck(false);
+          const params = new URLSearchParams({
+            resumeId: selectedResumeId!,
+            ...(jobPostingData?.id ? { jobPostingId: jobPostingData.id } : {}),
+            maxQuestions,
+          });
+          router.push(`/agent-interview/session/new?${params}`);
+        }}
+        loading={false}
       />
       <InsufficientCreditsDialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog} />
     </div>

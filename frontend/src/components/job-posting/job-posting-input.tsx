@@ -189,7 +189,7 @@ export function JobPostingResult({
             <div className="rounded-lg bg-muted/50 p-4">
               <h4 className="mb-2 text-sm font-medium">면접 스타일 분석</h4>
               <p className="text-sm">{companyAnalysis.interviewStyle}</p>
-              {companyAnalysis.pastQuestionTrends.length > 0 && (
+              {companyAnalysis.pastQuestionTrends?.length > 0 && (
                 <div className="mt-2">
                   <p className="text-xs text-muted-foreground">자주 나오는 주제:</p>
                   <div className="mt-1 flex flex-wrap gap-1">

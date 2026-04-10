@@ -47,6 +47,8 @@
 - SQLAlchemy / Prisma 호환 PostgreSQL (Supabase)
 - NextAuth JWE 토큰 복호화: `joserfc` + HKDF (Python 네이티브, Node.js 서브프로세스 불필요)
 - Anthropic Claude API — ANALYSIS / EVALUATION / QUESTION_GEN: claude-haiku-4-5
+- **LangGraph** — 에이전트 면접 오케스트레이션 (상태 머신)
+- **pgvector** — 사용자 프로필 RAG (OpenAI text-embedding-3-small)
 - Edge TTS (`msedge-tts`) — 음성: `ko-KR-HyunsuNeural`
 - Tavily (선택적 — 심층 기업 분석용 웹 검색)
 - Whisper API (선택적 — 음성인식, 없으면 Web Speech API만 사용)
@@ -67,11 +69,22 @@
     - 훅: `hooks/useMicrophoneCheck.ts` (getUserMedia + AudioContext + AnalyserNode)
     - UI: `components/interview/mic-check-dialog.tsx` (shadcn Dialog)
 - **면접 모드 2종** (셋업에서 카드 선택):
-  - **일반 모드**: 5-10 질문, 전반적 커버리지
-  - **심화 모드**: 3-5 질문, 기술 깊이 집중. 질문 뱅크 매칭 → 이력서 프로젝트/기술 직접 언급
-    - 질문 뱅크: `backend/app/data/questions/*.json`
-    - `questionSource: 'deep_technical'`로 심화 세션 식별
-- **멀티라운드 꼬리질문**: 메인 답변 → 꼬리질문 최대 2회 연쇄
+  - **AI 코치 모드**: 에이전트 기반 동적 면접. 프로필 RAG로 사용자 기억, 완전 동적 질문 생성, 꼬리질문 자동
+  - **모범답안 학습 모드**: AI가 질문+모범답안 생성 → 음성 연습 → 모범답안 공개
+- **AI 코치 면접 (에이전트 시스템)**:
+  - 3개 에이전트: 프로필(RAG) + 면접관(질문생성/흐름결정) + 평가(답변평가/리포트)
+  - 오케스트레이터: LangGraph 상태 머신 (규칙 기반 분기, LLM 호출 없음)
+  - 프로필 RAG: pgvector + OpenAI Embeddings, 강점/약점/패턴/맥락 카테고리
+  - 완전 동적 질문: 미리 생성하지 않고 대화 흐름에 따라 1개씩 생성
+  - 꼬리질문: depth < 80이면 자동 생성 (최대 2회)
+  - SSE 스트림: 프론트에 실시간 질문/평가 전달
+  - 세션 종료 시 프로필 자동 업데이트 (인사이트 추출 → RAG 저장)
+  - 코드: `backend/app/agent/` (state, nodes, graph, profile_agent, interviewer_agent, evaluator_agent, embeddings)
+  - 프롬프트: `backend/app/prompts/agent.py`
+  - API: `/api/agent-interview/{start,answer,skip,end,{id}}`, `/api/profile`, `/api/profile/context`
+  - UI: `frontend/src/components/agent-interview/`, `frontend/src/app/(authenticated)/agent-interview/`
+- **기존 면접 (레거시, 코드 유지)**: 일반/심화 모드는 UI에서 제거됨. 백엔드 API는 그대로 남아있음
+- **멀티라운드 꼬리질문** (기존): 메인 답변 → 꼬리질문 최대 2회 연쇄
   - 깊이 사다리: what → why → tradeoffs/alternatives
   - depth < 80이면 followUpQuestion 필수 생성
   - `followUpRound` (0=메인, 1=1차, 2=2차), `followUpEvaluations: AnswerEvaluation[]`
@@ -142,6 +155,9 @@
 - `LearningSession` — 학습 세션 (subjectId, mode, correctCount)
 - `LearningItem` — 학습 문제 (topicId, evaluation JSON, isCorrect)
 - `DailyProgress` — 일별 진도 (userId+date unique)
+- `AgentInterviewSession` — 에이전트 면접 세션 (resumeId, jobPostingId, maxQuestions, status, reportData)
+- `AgentInterviewMessage` — 에이전트 면접 메시지 (sessionId, messageIndex, role, content, evaluation JSON)
+- `UserProfileEmbedding` — 사용자 프로필 벡터 (userId, category, content, embedding VECTOR(1536), metadata)
 
 ## 배포
 - **프론트엔드**: Vercel, 리전: `icn1` (인천/서울) — `vercel.json`

@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   startAgentInterview,
   submitAgentAnswer,
+  skipAgentQuestion,
   endAgentInterview,
   type AgentStartParams,
 } from "@/lib/agent-interview-api";
@@ -146,6 +147,15 @@ export function useAgentInterview() {
     [sessionId, cleanup, attachListeners],
   );
 
+  const skip = useCallback(() => {
+    if (!sessionId) return;
+    cleanup();
+    setPhase("generating_question");
+
+    const source = skipAgentQuestion(sessionId);
+    attachListeners(source);
+  }, [sessionId, cleanup, attachListeners]);
+
   const endEarly = useCallback(async () => {
     if (!sessionId) return;
     cleanup();
@@ -163,6 +173,7 @@ export function useAgentInterview() {
     error,
     start,
     submitAnswer,
+    skip,
     endEarly,
   };
 }

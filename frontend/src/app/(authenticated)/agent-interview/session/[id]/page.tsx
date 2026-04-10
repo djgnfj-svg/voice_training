@@ -1,9 +1,17 @@
-"use client";
+'use client';
 
-import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { AgentInterviewPanel } from "@/components/agent-interview/agent-interview-panel";
-import { getAgentSession } from "@/lib/agent-interview-api";
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, ArrowLeft, CheckCircle, TrendingUp, AlertCircle, Target, Sparkles } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { getGrade } from '@/lib/utils';
+import { AgentInterviewPanel } from '@/components/agent-interview/agent-interview-panel';
+import { getAgentSession } from '@/lib/agent-interview-api';
 
 export default function AgentInterviewSessionPage() {
   const params = useParams();
@@ -11,98 +19,375 @@ export default function AgentInterviewSessionPage() {
   const router = useRouter();
 
   const sessionId = params.id as string;
-  const isNewSession = sessionId === "new";
+  const isNewSession = sessionId === 'new';
 
-  const resumeId = searchParams.get("resumeId") || "";
-  const jobPostingId = searchParams.get("jobPostingId") || undefined;
-  const maxQuestions = Number(searchParams.get("maxQuestions")) || 7;
-  const textMode = searchParams.get("textMode") === "true";
+  const resumeId = searchParams.get('resumeId') || '';
+  const jobPostingId = searchParams.get('jobPostingId') || undefined;
+  const maxQuestions = Number(searchParams.get('maxQuestions')) || 7;
 
-  // For existing sessions, fetch data
-  const { data: session } = useQuery({
-    queryKey: ["agent-session", sessionId],
+  const { data: session, isLoading } = useQuery({
+    queryKey: ['agent-session', sessionId],
     queryFn: () => getAgentSession(sessionId),
     enabled: !isNewSession,
   });
 
   // New session requires resumeId
   if (isNewSession && !resumeId) {
-    router.replace("/agent-interview/setup");
+    router.replace('/interview/setup');
     return null;
   }
 
   // New session — show interview panel
   if (isNewSession) {
     return (
-      <div className="h-[calc(100vh-4rem)]">
-        <AgentInterviewPanel
-          resumeId={resumeId}
-          jobPostingId={jobPostingId}
-          maxQuestions={maxQuestions}
-          textMode={textMode}
-          onComplete={(sid) => {
-            router.push(`/agent-interview/session/${sid}`);
-          }}
-        />
+      <AgentInterviewPanel
+        resumeId={resumeId}
+        jobPostingId={jobPostingId}
+        maxQuestions={maxQuestions}
+        onComplete={(sid) => {
+          router.push(`/agent-interview/session/${sid}`);
+        }}
+      />
+    );
+  }
+
+  // Loading
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+          <p className="mt-4 text-muted-foreground">리포트를 불러오는 중...</p>
+        </div>
       </div>
     );
   }
 
-  // Existing session — show report/history
   if (!session) {
-    return <div className="flex items-center justify-center h-64">로딩 중...</div>;
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="py-8 text-center">
+            <AlertCircle className="mx-auto h-10 w-10 text-destructive" />
+            <p className="mt-4 text-destructive">세션을 불러올 수 없습니다</p>
+            <Link href="/interview/setup">
+              <Button className="mt-4">면접 설정으로 돌아가기</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
+  const report = session.reportData;
+  const messages = session.messages || [];
+  const overallScore = session.overallScore || report?.overallScore || 0;
+  const grade = getGrade(overallScore);
+
+  // Extract question-answer pairs from messages
+  const qaPairs: { question: string; answer: string; evaluation: Record<string, unknown> | null; questionNumber: number; followUpRound: number }[] = [];
+  let currentQ = '';
+  let currentQNum = 0;
+  let currentFU = 0;
+  for (const msg of messages) {
+    if (msg.role === 'agent_question' || msg.role === 'agent_followup') {
+      currentQ = msg.content;
+      currentQNum = msg.questionNumber || 0;
+      currentFU = msg.followUpRound || 0;
+    } else if (msg.role === 'user_answer') {
+      qaPairs.push({
+        question: currentQ,
+        answer: msg.content,
+        evaluation: msg.evaluation || null,
+        questionNumber: currentQNum,
+        followUpRound: currentFU,
+      });
+    }
+  }
+
+  // Calculate average scores across all evaluations
+  const allEvals = qaPairs.filter(qa => qa.evaluation && qa.answer !== '(건너뜀)').map(qa => qa.evaluation!);
+  const avgScores: Record<string, number> = {};
+  if (allEvals.length > 0) {
+    const scoreKeys = ['clarity', 'accuracy', 'practicality', 'depth', 'completeness'];
+    for (const key of scoreKeys) {
+      const values = allEvals
+        .map(e => (e.scores as Record<string, number>)?.[key])
+        .filter((v): v is number => v != null);
+      if (values.length > 0) {
+        avgScores[key] = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+      }
+    }
+  }
+
+  const scoreLabels: Record<string, string> = {
+    clarity: '전달력',
+    accuracy: '정확성',
+    practicality: '실무력',
+    depth: '깊이',
+    completeness: '완성도',
+  };
+
   return (
-    <div className="container max-w-3xl py-8 space-y-6">
-      <h1 className="text-2xl font-bold">면접 결과</h1>
-      {session.reportData && (
-        <div className="space-y-4">
-          <div className="text-4xl font-bold">{session.overallScore}점</div>
-          <p>{session.reportData.summary}</p>
-          {session.reportData.strengths && (
-            <div>
-              <h3 className="font-semibold mb-2">강점</h3>
-              <ul className="list-disc pl-5 space-y-1">
-                {session.reportData.strengths.map((s: string, i: number) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {session.reportData.improvements && (
-            <div>
-              <h3 className="font-semibold mb-2">개선 필요</h3>
-              <ul className="list-disc pl-5 space-y-1">
-                {session.reportData.improvements.map((s: string, i: number) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {session.reportData.recommendations && (
-            <div>
-              <h3 className="font-semibold mb-2">추천</h3>
-              <ul className="list-disc pl-5 space-y-1">
-                {session.reportData.recommendations.map((s: string, i: number) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+    <div className="mx-auto max-w-4xl space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Link href="/history" className="mb-2 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" /> 기록으로 돌아가기
+          </Link>
+          <h1 className="text-2xl font-bold md:text-3xl">AI 코치 면접 리포트</h1>
         </div>
-      )}
-      <div className="space-y-3">
-        <h3 className="font-semibold">대화 기록</h3>
-        {session.messages?.map((m: { id: string; role: string; content: string; evaluation?: Record<string, unknown> }, i: number) => (
-          <div key={m.id || i} className={`p-3 rounded-lg ${m.role === "user_answer" ? "bg-primary/10 ml-8" : "bg-muted mr-8"}`}>
-            <p className="text-sm">{m.content}</p>
-            {m.evaluation && (
-              <p className="text-xs text-muted-foreground mt-1">점수: {String((m.evaluation as Record<string, number>).overallScore)}</p>
-            )}
-          </div>
-        ))}
+        <Link href="/interview/setup">
+          <Button>새 면접 시작</Button>
+        </Link>
       </div>
+
+      {/* Overall Score */}
+      <Card>
+        <CardContent className="py-8">
+          <div className="flex flex-col items-center justify-center gap-6 sm:flex-row sm:gap-12">
+            <div className="text-center">
+              <div className="bg-gradient-to-br from-primary to-blue-400 bg-clip-text text-5xl font-bold text-transparent sm:text-6xl">
+                {overallScore}
+              </div>
+              <div className="mt-1 text-xl font-semibold sm:text-2xl">{grade}</div>
+              <p className="text-sm text-muted-foreground">종합 점수</p>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-blue-500 sm:text-4xl">
+                {qaPairs.filter(qa => qa.answer !== '(건너뜀)').length}
+              </div>
+              <p className="text-sm text-muted-foreground">답변한 질문</p>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-emerald-500 sm:text-4xl">
+                {qaPairs.filter(qa => qa.followUpRound > 0).length}
+              </div>
+              <p className="text-sm text-muted-foreground">꼬리질문</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabs */}
+      <Tabs defaultValue="overview">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="overview">종합 분석</TabsTrigger>
+          <TabsTrigger value="questions">질문별 상세</TabsTrigger>
+          <TabsTrigger value="improvement">개선점</TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-4">
+          {/* Summary */}
+          {report?.summary && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5" />
+                  종합 평가
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed">{report.summary}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Average Scores */}
+          {Object.keys(avgScores).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>역량별 평균 점수</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4 sm:grid-cols-5">
+                  {Object.entries(avgScores).map(([key, value]) => (
+                    <div key={key} className="text-center">
+                      <div className={cn(
+                        'text-2xl font-bold',
+                        value >= 80 ? 'text-green-600 dark:text-green-400' :
+                        value >= 60 ? 'text-blue-600 dark:text-blue-400' :
+                        value >= 40 ? 'text-amber-600 dark:text-amber-400' :
+                        'text-red-600 dark:text-red-400'
+                      )}>
+                        {value}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{scoreLabels[key] || key}</div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Strengths */}
+          {report?.strengths?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  강점
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {report.strengths.map((s: string, i: number) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        {i + 1}
+                      </span>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Growth Notes */}
+          {report?.growthNotes && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-blue-500" />
+                  성장 노트
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm">{report.growthNotes}</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Questions Detail Tab */}
+        <TabsContent value="questions" className="space-y-4">
+          {qaPairs.map((qa, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="text-base">
+                    Q{qa.questionNumber}.
+                    {qa.followUpRound > 0 && (
+                      <Badge variant="outline" className="ml-2 text-xs">꼬리질문 {qa.followUpRound}</Badge>
+                    )}
+                  </CardTitle>
+                  {qa.evaluation && (
+                    <Badge
+                      variant={
+                        (qa.evaluation.overallScore as number) >= 70 ? 'default' :
+                        (qa.evaluation.overallScore as number) >= 50 ? 'secondary' : 'destructive'
+                      }
+                    >
+                      {qa.evaluation.overallScore as number}점
+                    </Badge>
+                  )}
+                </div>
+                <CardDescription className="mt-1">{qa.question}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Answer */}
+                <div>
+                  <p className="mb-1 text-sm font-medium text-muted-foreground">내 답변</p>
+                  <div className="rounded-lg bg-muted/50 p-3 text-sm">
+                    {qa.answer === '(건너뜀)' ? (
+                      <span className="text-muted-foreground italic">건너뜀</span>
+                    ) : qa.answer}
+                  </div>
+                </div>
+
+                {qa.evaluation && qa.answer !== '(건너뜀)' && (
+                  <>
+                    {/* Scores */}
+                    {(qa.evaluation.scores as Record<string, number>) && (
+                      <div>
+                        <p className="mb-2 text-sm font-medium text-muted-foreground">점수 상세</p>
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                          {Object.entries(qa.evaluation.scores as Record<string, number>).map(([key, value]) => (
+                            <div key={key} className="text-center">
+                              <div className="text-lg font-bold">{value}</div>
+                              <div className="text-xs text-muted-foreground">{scoreLabels[key] || key}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Feedback */}
+                    {(qa.evaluation.detailedFeedback as string) && (
+                      <div>
+                        <p className="mb-1 text-sm font-medium text-muted-foreground">피드백</p>
+                        <p className="text-sm">{qa.evaluation.detailedFeedback as string}</p>
+                      </div>
+                    )}
+
+                    {/* Model answer */}
+                    {(qa.evaluation.modelAnswer as string) && (
+                      <div>
+                        <p className="mb-1 text-sm font-medium text-muted-foreground">모범 답안</p>
+                        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm dark:border-green-900 dark:bg-green-950">
+                          {qa.evaluation.modelAnswer as string}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </TabsContent>
+
+        {/* Improvement Tab */}
+        <TabsContent value="improvement" className="space-y-4">
+          {report?.improvements?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-orange-500" />
+                  개선점
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {report.improvements.map((item: string, i: number) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                        {i + 1}
+                      </span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {report?.recommendations?.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-blue-500" />
+                  추천 학습
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {report.recommendations.map((item: string, i: number) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                        {i + 1}
+                      </span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

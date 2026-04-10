@@ -5,15 +5,28 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 interface TextToSpeechHook {
   isSpeaking: boolean;
   isSupported: boolean;
+  volume: number;
+  setVolume: (v: number) => void;
   speak: (text: string) => Promise<void>;
   stop: () => void;
 }
 
 export function useTextToSpeech(): TextToSpeechHook {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [volume, setVolume] = useState(0.7);
+  const volumeRef = useRef(0.7);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const rejectRef = useRef<((reason?: unknown) => void) | null>(null);
+
+  const handleSetVolume = useCallback((v: number) => {
+    const clamped = Math.max(0, Math.min(1, v));
+    setVolume(clamped);
+    volumeRef.current = clamped;
+    if (audioRef.current) {
+      audioRef.current.volume = clamped;
+    }
+  }, []);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -67,6 +80,7 @@ export function useTextToSpeech(): TextToSpeechHook {
         await new Promise<void>((resolve, reject) => {
           rejectRef.current = reject;
           const audio = new Audio(url);
+          audio.volume = volumeRef.current;
           audioRef.current = audio;
 
           audio.onplay = () => setIsSpeaking(true);
@@ -112,5 +126,5 @@ export function useTextToSpeech(): TextToSpeechHook {
     };
   }, []);
 
-  return { isSpeaking, isSupported: true, speak, stop };
+  return { isSpeaking, isSupported: true, volume, setVolume: handleSetVolume, speak, stop };
 }

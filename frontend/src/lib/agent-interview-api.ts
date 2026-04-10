@@ -131,3 +131,7 @@ export function submitAgentAnswer(params: AgentAnswerParams) {
     answer: params.answer,
   });
 }
+
+export function skipAgentQuestion(sessionId: string) {
+  return createSSEFromPost(`/api/agent-interview/${sessionId}/skip`, {});
+}
