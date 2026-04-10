@@ -27,6 +27,7 @@ class SetupRequest(BaseModel):
     jobPostingId: str | None = None
     deepMode: bool = False
     mode: str | None = None  # 'standard' or 'deep'
+    textMode: bool = False
 
 
 @router.post("/api/interview/setup")
@@ -91,6 +92,7 @@ async def setup_interview(
         difficulty=plan.get("difficulty", "INTERMEDIATE"),
         total_questions=len(questions),
         status="IN_PROGRESS",
+        text_mode=body.textMode,
     )
     db.add(session)
 
@@ -235,6 +237,7 @@ async def get_questions(
         "sessionStatus": session.status,
         "interviewType": session.type,
         "deepMode": deep_mode,
+        "textMode": session.text_mode or False,
     }
 
 
@@ -312,9 +315,10 @@ async def evaluate_answer(
         )
         return result
     except ValueError as e:
+        logger.warning(f"Evaluate answer validation error: {e}")
         if "not found" in str(e).lower():
-            raise HTTPException(404, str(e))
-        raise HTTPException(400, str(e))
+            raise HTTPException(404, "요청한 리소스를 찾을 수 없습니다.")
+        raise HTTPException(400, "잘못된 요청입니다.")
     except Exception as e:
         logger.exception("Failed to evaluate answer")
         raise HTTPException(500, "Internal server error")

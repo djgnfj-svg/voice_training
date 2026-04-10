@@ -10,12 +10,14 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScoreRadarChart } from '@/components/report/radar-chart';
 import { Loader2, ArrowLeft, Target, TrendingUp, AlertCircle, CheckCircle, Clock, RotateCcw, Play } from 'lucide-react';
+import { useRef } from 'react';
 import { getGrade } from '@/lib/utils';
 import type { InterviewReport } from '@/types';
 
 export default function ReportPage() {
   const params = useParams();
   const sessionId = params.id as string;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const { data: report, isLoading, error } = useQuery<InterviewReport>({
     queryKey: ['report', sessionId],
@@ -212,7 +214,12 @@ export default function ReportPage() {
                       <button
                         className="flex items-center gap-1 text-xs text-primary hover:underline"
                         onClick={() => {
-                          const audio = new Audio(answer.audioUrl);
+                          if (audioRef.current) {
+                            audioRef.current.pause();
+                          }
+                          const audio = new Audio(answer.audioUrl!);
+                          audioRef.current = audio;
+                          audio.onended = () => { audioRef.current = null; };
                           audio.play();
                         }}
                       >

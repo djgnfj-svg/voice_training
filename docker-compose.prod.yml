@@ -62,6 +62,8 @@ services:
       - ./backend/.env.production
     environment:
       - ENVIRONMENT=production
+    volumes:
+      - audio-storage:/app/.audio-storage
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
@@ -79,3 +81,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  audio-storage:

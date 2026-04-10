@@ -6,9 +6,9 @@ import { Footer } from '@/components/layout/footer';
 
 export function AuthenticatedContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isInterviewSession = pathname.startsWith('/interview/session/');
+  const isFullscreenSession = pathname.startsWith('/interview/session/') || pathname === '/nightly-study/session';
 
-  if (isInterviewSession) {
+  if (isFullscreenSession) {
     return (
       <main className="min-h-screen">{children}</main>
     );

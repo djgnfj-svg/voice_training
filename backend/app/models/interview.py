@@ -40,6 +40,7 @@ class InterviewSession(Base):
     duration_seconds = Column("durationSeconds", Integer, nullable=True)
     total_questions = Column("totalQuestions", Integer, default=5)
     credit_deducted = Column("creditDeducted", Boolean, default=False)
+    text_mode = Column("textMode", Boolean, default=False)
     created_at = Column("createdAt", DateTime, server_default=func.now())
     updated_at = Column("updatedAt", DateTime, default=func.now(), onupdate=func.now())
 

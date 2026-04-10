@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Ping Supabase
         run: |
-          curl -sf "${{ secrets.SUPABASE_HEALTH_URL }}" > /dev/null
+          curl -sf "$SUPABASE_HEALTH_URL" > /dev/null
           echo "Supabase pinged at $(date)"
         env:
           SUPABASE_HEALTH_URL: ${{ secrets.SUPABASE_HEALTH_URL }}

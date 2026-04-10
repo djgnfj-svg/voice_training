@@ -24,6 +24,7 @@ const INITIAL_METRICS: SpeechMetrics = {
 
 export function useSpeechAnalytics() {
   const [metrics, setMetrics] = useState<SpeechMetrics>(INITIAL_METRICS);
+  const metricsRef = useRef<SpeechMetrics>(INITIAL_METRICS);
 
   const startTimeRef = useRef<number>(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -65,13 +66,15 @@ export function useSpeechAnalytics() {
 
     const fillerCount = countFillerWords(rawTranscript);
 
-    setMetrics({
+    const updated = {
       wpm,
       fillerCount,
       silenceSec,
       silenceRatio: Math.round(silenceRatio * 100) / 100,
       elapsedSec: Math.round(elapsedSec),
-    });
+    };
+    metricsRef.current = updated;
+    setMetrics(updated);
   }, []);
 
   const start = useCallback((rawTranscript: string) => {
@@ -100,8 +103,8 @@ export function useSpeechAnalytics() {
     cleanup();
     // Final update
     update(lastTranscriptRef.current);
-    return { ...metrics, elapsedSec: Math.round((Date.now() - startTimeRef.current) / 1000) };
-  }, [cleanup, update, metrics]);
+    return { ...metricsRef.current, elapsedSec: Math.round((Date.now() - startTimeRef.current) / 1000) };
+  }, [cleanup, update]);
 
   const reset = useCallback(() => {
     cleanup();

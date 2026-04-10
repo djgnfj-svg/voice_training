@@ -4,11 +4,11 @@
 - `frontend/` — Next.js 프론트엔드 + NextAuth 인증만
 - `backend/` — FastAPI 백엔드 (API, 서비스, 프롬프트, AI 로직 전부)
 - `db/` — DB 초기화 스크립트
-- `docker-compose.yml` — PostgreSQL, Redis (인프라만, Redis는 로컬 전용)
+- `docker-compose.yml` — 로컬 개발용 (frontend + backend 서비스). 인프라(PostgreSQL)는 Supabase 사용
 - Next.js rewrite로 `/api/*` (auth 제외) → FastAPI 프록시 (`next.config.ts`)
 
 ## 개발 규칙
-- 인프라(PostgreSQL, Redis)는 `docker compose up -d`로 띄움. Redis는 선택적 — 없으면 캐시 무시하고 동작.
+- 개발 환경은 `docker compose up -d`로 띄움 (frontend + backend). DB는 Supabase 호스팅.
 - Next.js dev 서버는 `cd frontend && PORT=3001 npm run dev`로 포트 3001에서 실행.
 - FastAPI dev 서버는 `cd backend && uvicorn app.main:app --reload --port 8000`으로 실행.
 - prisma 명령 실행 시 `cd frontend && set -a && source .env && set +a` 후 실행.
@@ -42,6 +42,7 @@
 ### 백엔드 (`backend/`)
 - FastAPI (Python)
 - SQLAlchemy / Prisma 호환 PostgreSQL (Supabase)
+- NextAuth JWE 토큰 복호화: `joserfc` + HKDF (Python 네이티브, Node.js 서브프로세스 불필요)
 - Anthropic Claude API — ANALYSIS / EVALUATION / QUESTION_GEN: claude-haiku-4-5
 - Edge TTS (`msedge-tts`) — 음성: `ko-KR-HyunsuNeural`
 - Tavily (선택적 — 심층 기업 분석용 웹 검색)
@@ -125,7 +126,7 @@
 - `Account` — OAuth 계정 (PrismaAdapter 관리)
 - `Resume` — 복수 이력서 (userId, name, parsedData, fileUrl은 optional). `GET /api/resume?detail=true`로 parsedData 포함 조회
 - `JobPosting` — 채용공고
-- `InterviewSession` — 면접 세션 (resumeId 필수, jobPostingId 선택, creditDeducted)
+- `InterviewSession` — 면접 세션 (resumeId 필수, jobPostingId 선택, creditDeducted, textMode)
 - `InterviewAnswer` — 답변/평가 (audioUrl: 녹음 파일 경로)
 - `CreditTransaction` — 크레딧 거래 내역 (amount, balance, type: CreditTxType, referenceId)
 - `PaymentOrder` — Toss 결제 주문 (orderId, paymentKey, amount, credits, status: PENDING/DONE/FAILED)
@@ -143,9 +144,10 @@
 - **백엔드**: EC2 Docker Compose (`docker-compose.prod.yml`)
 - **프로덕션 도메인**: `reseeall.com`
 - `BACKEND_URL` 환경변수로 FastAPI 주소 지정
-- **CI/CD**: `deploy.yml`은 `ci.yml` 통과 후 배포 (`needs: ci`)
+- **CI/CD**: `deploy.yml`은 `ci.yml` 통과 후 배포 (`needs: ci`). CI는 프론트엔드 lint/typecheck/build + 백엔드 import smoke test
 - **리소스 제한**: nginx 128M, frontend 512M, backend 1G
 - **nginx**: `/api/auth` rate limit 5r/s, `/api/` rate limit 10r/s
+- **음성 파일**: Docker named volume (`audio-storage`) → 재배포 시 유지
 
 ## 음성 처리
 - **transcript 정규화**: `frontend/src/lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 + `countFillerWords()` (필러워드 카운트, 클라이언트용)

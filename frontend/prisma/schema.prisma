@@ -120,6 +120,7 @@ model InterviewSession {
   updatedAt       DateTime        @updatedAt
 
   creditDeducted Boolean         @default(false)
+  textMode       Boolean         @default(false)
 
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobPosting JobPosting?       @relation(fields: [jobPostingId], references: [id])

@@ -174,7 +174,7 @@ async def _search_company_info(
     for query in queries:
         try:
             # Tavily client is sync; run in executor
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda q=query: client.search(

@@ -44,3 +44,14 @@ jobs:
           AUTH_GOOGLE_SECRET: dummy-secret
           NEXT_PUBLIC_TOSS_CLIENT_KEY: test_ck_dummy
           TOSS_SECRET_KEY: test_sk_dummy
+
+      # Backend validation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend dependencies
+        run: cd backend && pip install --no-cache-dir .
+
+      - name: Backend smoke test
+        run: cd backend && python -c "from app.main import app; print('Backend import OK')"

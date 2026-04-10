@@ -1,33 +1,37 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-import subprocess
 from dataclasses import dataclass
 
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives import hashes
 from fastapi import Depends, HTTPException, Request
+from joserfc.jwe import decrypt_compact
+from joserfc.jwk import OctKey
 
 from app.config import settings
 from app.database import get_db
 
 
-async def _decrypt_nextauth_token(token: str, cookie_name: str) -> dict:
-    """Decrypt NextAuth v5 JWE token by calling @auth/core via Node.js subprocess."""
-    stdin_data = json.dumps({"token": token, "secret": settings.NEXTAUTH_SECRET, "salt": cookie_name})
-    result = await asyncio.to_thread(
-        subprocess.run,
-        ["node", "decode_token.mjs"],
-        input=stdin_data,
-        capture_output=True,
-        text=True,
-        timeout=5,
+def _derive_key(secret: str, salt: str) -> bytes:
+    """Derive 64-byte encryption key using HKDF-SHA256 (NextAuth v5 compatible)."""
+    info = f"Auth.js Generated Encryption Key ({salt})".encode()
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=64,
+        salt=salt.encode(),
+        info=info,
     )
-    if result.returncode != 0:
-        error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-        raise ValueError(f"Token decode failed: {error_msg}")
+    return hkdf.derive(secret.encode())
 
-    return json.loads(result.stdout.strip())
+
+def _decrypt_nextauth_token(token: str, cookie_name: str) -> dict:
+    """Decrypt NextAuth v5 JWE token using joserfc (no subprocess)."""
+    key_bytes = _derive_key(settings.NEXTAUTH_SECRET, cookie_name)
+    key = OctKey.import_key(key_bytes)
+    result = decrypt_compact(token, key, algorithms=["dir", "A256CBC-HS512"])
+    return json.loads(result.plaintext)
 
 
 @dataclass
@@ -51,7 +55,7 @@ async def get_current_user(request: Request) -> AuthUser:
 
     if token and cookie_name:
         try:
-            payload = await _decrypt_nextauth_token(token, cookie_name)
+            payload = _decrypt_nextauth_token(token, cookie_name)
             user_id = payload.get("sub")
             if user_id:
                 return AuthUser(

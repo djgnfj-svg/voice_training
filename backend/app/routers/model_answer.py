@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
 from app.models.resume import Resume
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -152,6 +155,6 @@ async def generate_model_answer(
         await db.commit()
         activity_log_id = log_id
     except Exception:
-        pass
+        logger.warning("Failed to create activity log for model answer", exc_info=True)
 
     return {"plan": plan, "questions": questions, "activityLogId": activity_log_id}

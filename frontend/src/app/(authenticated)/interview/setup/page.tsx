@@ -115,6 +115,7 @@ export default function InterviewSetupPage() {
           resumeId: selectedResumeId,
           jobPostingId: jobPostingData?.id,
           mode: interviewMode,
+          textMode,
         }),
       });
 

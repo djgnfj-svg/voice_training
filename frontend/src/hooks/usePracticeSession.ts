@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSpeechRecognition } from './useSpeechRecognition';
 import { useTextToSpeech } from './useTextToSpeech';
@@ -59,9 +59,11 @@ export function usePracticeSession(sessionId: string) {
   });
 
   // Transition to select once data loaded
-  if (data && phase === 'loading' && !isLoading) {
-    setPhase('select');
-  }
+  useEffect(() => {
+    if (data && phase === 'loading' && !isLoading) {
+      setPhase('select');
+    }
+  }, [data, phase, isLoading]);
 
   const answers = data?.answers ?? [];
   const currentAnswer = answers[currentIndex] ?? null;

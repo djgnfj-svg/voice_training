@@ -31,6 +31,12 @@ export function useCunningMode({
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevTranscriptRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
+  const qaHistoryRef = useRef<CunningQA[]>([]);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    qaHistoryRef.current = qaHistory;
+  }, [qaHistory]);
 
   const clearSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -49,7 +55,7 @@ export function useCunningMode({
       abortRef.current = new AbortController();
 
       try {
-        const historyForApi = qaHistory.slice(-3).map((qa) => ({
+        const historyForApi = qaHistoryRef.current.slice(-3).map((qa) => ({
           question: qa.question,
           answer: qa.answer,
         }));
@@ -135,7 +141,7 @@ export function useCunningMode({
         setPhase('listening');
       }
     },
-    [resumeId, jobPostingText, qaHistory]
+    [resumeId, jobPostingText]
   );
 
   const submitQuestion = useCallback(

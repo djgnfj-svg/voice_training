@@ -55,6 +55,9 @@ export function useAnswerAssist(sessionId: string) {
       setStreamingText('');
       abortRef.current = new AbortController();
 
+      // Save previous cache for rollback
+      const previousData = queryClient.getQueryData<AnswerAssistSessionDetail>(['answer-assist', sessionId]);
+
       // Optimistically add user message
       queryClient.setQueryData<AnswerAssistSessionDetail>(
         ['answer-assist', sessionId],
@@ -143,6 +146,10 @@ export function useAnswerAssist(sessionId: string) {
         );
       } catch (error: unknown) {
         if (error instanceof Error && error.name === 'AbortError') return;
+        // Rollback optimistic update on failure
+        if (previousData) {
+          queryClient.setQueryData(['answer-assist', sessionId], previousData);
+        }
         console.error('Answer assist chat error:', error);
       } finally {
         setIsStreaming(false);
