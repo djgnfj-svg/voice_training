@@ -178,7 +178,7 @@ export function useInterviewSession() {
       setState((prev) => ({ ...prev, phase: 'evaluating' }));
     } else {
       speech.stopListening();
-      const audioBlob = recorder.stopRecording();
+      const audioBlob = await recorder.stopRecording();
       finalMetrics = analytics.stop();
       const webSpeechTranscript = normalizeTranscript(speech.transcript);
 
@@ -374,7 +374,7 @@ export function useInterviewSession() {
       setState((prev) => ({ ...prev, phase: 'evaluating' }));
     } else {
       speech.stopListening();
-      const audioBlob = recorder.stopRecording();
+      const audioBlob = await recorder.stopRecording();
       analytics.stop();
       const webSpeechTranscript = normalizeTranscript(speech.transcript);
 
@@ -431,6 +431,7 @@ export function useInterviewSession() {
           ...(state.deepMode ? { deepMode: true } : {}),
           ...(state.deepMode && currentQ?.relatedKeyPoints ? { relatedKeyPoints: currentQ.relatedKeyPoints } : {}),
           previousContext,
+          sessionId: state.sessionId,
         }),
       });
 
@@ -450,7 +451,7 @@ export function useInterviewSession() {
         phase: 'feedback',
       }));
     }
-  }, [state.answers, state.currentQuestionIndex, state.interviewType, state.deepMode, state.textMode, state.textInput, state.questions, state.followUpRound, state.followUpEvaluations, speech, recorder, analytics]);
+  }, [state.answers, state.currentQuestionIndex, state.interviewType, state.deepMode, state.textMode, state.textInput, state.questions, state.followUpRound, state.followUpEvaluations, state.sessionId, speech, recorder, analytics]);
 
   // Determine if more follow-ups are available
   const latestFollowUpEval = state.followUpEvaluations.length > 0

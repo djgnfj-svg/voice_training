@@ -58,7 +58,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https://lh3.googleusercontent.com",
               "font-src 'self'",
-              "connect-src 'self' https://api.tosspayments.com https://*.anthropic.com https://www.google-analytics.com https://*.supabase.co",
+              "connect-src 'self' https://api.tosspayments.com https://www.google-analytics.com https://*.supabase.co",
               "frame-src https://js.tosspayments.com",
               "media-src 'self' blob: https://*.supabase.co",
             ].join('; '),

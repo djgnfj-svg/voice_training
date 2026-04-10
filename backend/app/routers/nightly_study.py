@@ -14,6 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.user import User
+
 from app.config import settings
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
@@ -297,6 +299,11 @@ async def start_nightly_study(
     if body.mode not in ("deep", "light"):
         raise HTTPException(400, "mode must be 'deep' or 'light'")
 
+    # Lock user row to serialize concurrent start requests
+    await db.execute(
+        select(User).where(User.id == user.id).with_for_update()
+    )
+
     # Daily limit check (skip in dev)
     if not settings.is_dev:
         kst_midnight = _get_kst_midnight()
@@ -410,7 +417,12 @@ async def complete_nightly_study(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Daily limit check to prevent race condition (duplicate complete requests)
+    # Lock user row to serialize concurrent complete requests
+    await db.execute(
+        select(User).where(User.id == user.id).with_for_update()
+    )
+
+    # Daily limit check (now safe under row lock)
     if not settings.is_dev:
         kst_midnight = _get_kst_midnight()
         stmt = select(ActivityLog).where(

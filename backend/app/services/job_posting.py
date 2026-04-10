@@ -284,13 +284,14 @@ async def do_deep_research(
 # ---------------------------------------------------------------------------
 
 async def get_job_posting(
-    db: AsyncSession, *, job_posting_id: str, user_id: str | None = None
+    db: AsyncSession, *, job_posting_id: str, user_id: str
 ) -> dict[str, Any] | None:
-    conditions = [JobPosting.id == job_posting_id]
-    if user_id:
-        conditions.append(JobPosting.user_id == user_id)
-
-    result = await db.execute(select(JobPosting).where(*conditions))
+    result = await db.execute(
+        select(JobPosting).where(
+            JobPosting.id == job_posting_id,
+            JobPosting.user_id == user_id,
+        )
+    )
     jp = result.scalar_one_or_none()
     return _serialize_job_posting(jp) if jp else None
 

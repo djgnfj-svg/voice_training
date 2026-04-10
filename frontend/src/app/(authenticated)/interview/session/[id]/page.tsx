@@ -72,16 +72,22 @@ export default function InterviewSessionPage() {
     // Push a dummy state so back button triggers popstate instead of leaving
     window.history.pushState({ interviewGuard: true }, '');
 
-    const handler = (e: PopStateEvent) => {
-      // Re-push to prevent actual navigation
+    const handler = () => {
+      // Re-push to keep blocking
       window.history.pushState({ interviewGuard: true }, '');
       setShowExitDialog(true);
       exitTargetRef.current = null; // back button: go to setup
     };
 
     window.addEventListener('popstate', handler);
-    return () => window.removeEventListener('popstate', handler);
-  }, [interview.phase]);
+    return () => {
+      window.removeEventListener('popstate', handler);
+      // Clean up the dummy history entry
+      if (window.history.state?.interviewGuard) {
+        window.history.back();
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleExitConfirm = useCallback(() => {
     interview.tts.stop();

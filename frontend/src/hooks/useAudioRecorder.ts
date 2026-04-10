@@ -6,7 +6,7 @@ export interface AudioRecorderHook {
   isRecording: boolean;
   isSupported: boolean;
   startRecording: () => void;
-  stopRecording: () => Blob | null;
+  stopRecording: () => Promise<Blob | null>;
   resetRecording: () => void;
 }
 
@@ -43,12 +43,6 @@ export function useAudioRecorder(): AudioRecorderHook {
         }
       };
 
-      recorder.onstop = () => {
-        if (chunksRef.current.length > 0) {
-          blobRef.current = new Blob(chunksRef.current, { type: mimeType });
-        }
-      };
-
       mediaRecorderRef.current = recorder;
       recorder.start(1000); // collect in 1s chunks
       setIsRecording(true);
@@ -57,23 +51,25 @@ export function useAudioRecorder(): AudioRecorderHook {
     }
   }, [isSupported]);
 
-  const stopRecording = useCallback((): Blob | null => {
+  const stopRecording = useCallback((): Promise<Blob | null> => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
       setIsRecording(false);
-      return null;
+      return Promise.resolve(null);
     }
 
-    // Synchronously stop and build blob from current chunks
-    mediaRecorderRef.current.stop();
-    setIsRecording(false);
+    const recorder = mediaRecorderRef.current;
 
-    // Build blob from collected chunks (ondataavailable fires during recording)
-    if (chunksRef.current.length > 0) {
-      const mimeType = mediaRecorderRef.current.mimeType;
-      blobRef.current = new Blob(chunksRef.current, { type: mimeType });
-    }
+    return new Promise<Blob | null>((resolve) => {
+      recorder.onstop = () => {
+        if (chunksRef.current.length > 0) {
+          blobRef.current = new Blob(chunksRef.current, { type: recorder.mimeType });
+        }
+        resolve(blobRef.current);
+      };
 
-    return blobRef.current;
+      recorder.stop();
+      setIsRecording(false);
+    });
   }, []);
 
   const releaseStream = useCallback(() => {

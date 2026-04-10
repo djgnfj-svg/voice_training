@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { TopicSelector } from '@/components/nightly-study/topic-selector';
@@ -46,7 +46,6 @@ export default function NightlyStudyPage() {
   const [selectedMode, setSelectedMode] = useState<'deep' | 'light'>('deep');
   const [resumeId, setResumeId] = useState<string | null>(null);
   const [showMicCheck, setShowMicCheck] = useState(false);
-  const [dailyLimitReached, setDailyLimitReached] = useState(false);
 
   const { data: history } = useQuery<HistoryData>({
     queryKey: ['nightly-study-history'],
@@ -57,22 +56,16 @@ export default function NightlyStudyPage() {
     },
   });
 
-  useEffect(() => {
-    async function checkLimit() {
-      try {
-        const res = await fetch('/api/nightly-study/status');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.dailyLimitReached) {
-            setDailyLimitReached(true);
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-    checkLimit();
-  }, []);
+  const { data: statusData } = useQuery<{ dailyLimitReached: boolean }>({
+    queryKey: ['nightly-study-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/nightly-study/status');
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+  });
+
+  const dailyLimitReached = statusData?.dailyLimitReached ?? false;
 
   const handleTopicSelect = (categories: string[], mode: 'deep' | 'light') => {
     setSelectedCategories(categories);

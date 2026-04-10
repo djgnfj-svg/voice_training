@@ -63,16 +63,12 @@ async def redeem_coupon(db: AsyncSession, user_id: str, code: str) -> dict:
     usage = CouponUsage(id=str(uuid4()), coupon_id=coupon.id, user_id=user_id)
     db.add(usage)
 
-    # Increment user balance
-    await db.execute(
+    # Increment user balance and get new balance atomically
+    bal_result = await db.execute(
         update(User)
         .where(User.id == user_id)
         .values(credit_balance=User.credit_balance + coupon.credits)
-    )
-
-    # Get new balance
-    bal_result = await db.execute(
-        select(User.credit_balance).where(User.id == user_id)
+        .returning(User.credit_balance)
     )
     new_balance = bal_result.scalar() or 0
 

@@ -96,7 +96,7 @@ function WhisperPanel() {
   const [error, setError] = useState('');
 
   const handleStop = useCallback(async () => {
-    const blob = stopRecording();
+    const blob = await stopRecording();
     if (!blob) {
       setError('녹음 데이터가 없습니다.');
       return;
@@ -203,7 +203,7 @@ function ComparePanel() {
 
   const handleStop = useCallback(async () => {
     stopListening();
-    const blob = stopRecording();
+    const blob = await stopRecording();
     if (!blob) return;
 
     setIsTranscribing(true);

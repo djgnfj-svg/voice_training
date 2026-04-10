@@ -151,7 +151,7 @@ async def get_in_progress(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff = datetime.utcnow() - timedelta(hours=24)
     result = await db.execute(
         select(InterviewSession)
         .where(
@@ -332,6 +332,7 @@ class PracticeEvaluateRequest(BaseModel):
     deepMode: bool = False
     relatedKeyPoints: list[str] | None = None
     previousContext: dict | None = None
+    sessionId: str | None = None
 
 
 @router.post("/api/interview/practice-evaluate")
@@ -373,7 +374,7 @@ async def practice_evaluate(
             await deduct_for_feature(
                 db,
                 user.id,
-                "",
+                body.sessionId or "",
                 "꼬리질문 평가",
                 CREDIT_COSTS["FOLLOW_UP"],
                 "FEATURE_DEBIT",

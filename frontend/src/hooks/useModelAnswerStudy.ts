@@ -31,8 +31,12 @@ export function useModelAnswerStudy(resumeId: string) {
   const [userNotes, setUserNotes] = useState<Map<number, string>>(new Map());
   const [errorMessage, setErrorMessage] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
     const fetchData = async () => {
       abortRef.current = new AbortController();
 

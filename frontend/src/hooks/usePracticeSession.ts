@@ -83,7 +83,7 @@ export function usePracticeSession(sessionId: string) {
 
   const submitPractice = useCallback(async () => {
     speech.stopListening();
-    const audioBlob = recorder.stopRecording();
+    const audioBlob = await recorder.stopRecording();
     const webSpeechTranscript = normalizeTranscript(speech.transcript);
 
     // Whisper 하이브리드

@@ -11,7 +11,6 @@ class Settings(BaseSettings):
 
     # Optional
     ENVIRONMENT: str = "development"
-    REDIS_URL: str | None = None
     TAVILY_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
     TOSS_SECRET_KEY: str | None = None

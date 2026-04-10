@@ -148,14 +148,12 @@ async def _grant_credits(
     )
     await db.flush()
 
-    await db.execute(
+    bal_result = await db.execute(
         update(User)
         .where(User.id == user_id)
         .values(credit_balance=User.credit_balance + order.credits)
+        .returning(User.credit_balance)
     )
-    await db.flush()
-
-    bal_result = await db.execute(select(User.credit_balance).where(User.id == user_id))
     new_balance = bal_result.scalar() or 0
 
     tx = CreditTransaction(

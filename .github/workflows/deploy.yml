@@ -28,9 +28,14 @@ jobs:
             # 최신 코드 pull
             git pull origin main
 
-            # 이미지 빌드 + 무중단 재시작
+            # 이미지 빌드
             docker compose -f docker-compose.prod.yml build
-            docker compose -f docker-compose.prod.yml up -d
+
+            # 순차 재시작 (다운타임 최소화)
+            docker compose -f docker-compose.prod.yml up -d --no-deps backend
+            docker compose -f docker-compose.prod.yml up -d --no-deps frontend
+            sleep 10
+            docker compose -f docker-compose.prod.yml up -d --no-deps nginx
 
             # 미사용 이미지 정리
             docker image prune -f

@@ -72,15 +72,21 @@ export default function NightlyStudySessionPage() {
   useEffect(() => {
     if (phase === 'summary' || phase === 'setup' || phase === 'error' || phase === 'daily-limit' || phase === 'loading') return;
 
+    window.history.pushState({ nightlyGuard: true }, '');
+
     const handler = () => {
-      window.history.pushState(null, '', window.location.href);
+      window.history.pushState({ nightlyGuard: true }, '');
       setShowExitDialog(true);
     };
 
-    window.history.pushState(null, '', window.location.href);
     window.addEventListener('popstate', handler);
-    return () => window.removeEventListener('popstate', handler);
-  }, [phase, finishEarly]);
+    return () => {
+      window.removeEventListener('popstate', handler);
+      if (window.history.state?.nightlyGuard) {
+        window.history.back();
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Loading state
   if (phase === 'loading') {
