@@ -1,3 +1,14 @@
+"""
+LangGraph graph definitions for the agent interview system.
+
+NOTE: These graphs define the state machine structure for documentation purposes.
+The actual node execution happens in the router (agent_interview.py) which calls
+nodes.py functions directly, because LangGraph nodes don't natively support
+passing the async DB session parameter.
+
+When migrating to full LangGraph execution (e.g., with dependency injection),
+replace the lambda placeholders with actual node functions.
+"""
 # backend/app/agent/graph.py
 from __future__ import annotations
 

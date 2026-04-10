@@ -86,6 +86,8 @@ async def start_interview(
     db.add(session)
     await db.commit()
 
+    # TODO(v2): 크레딧 차감 — 기존 credit.py의 deduct_credits() 연동
+
     # Build initial state
     initial_state: InterviewState = {
         "session_id": session_id,
@@ -109,8 +111,8 @@ async def start_interview(
         try:
             state = initial_state.copy()
 
-            state["pending_events"] = [{"event": "status", "data": {"phase": "loading_profile"}}]
             yield {"event": "status", "data": json.dumps({"phase": "loading_profile"})}
+            state["pending_events"] = []
 
             state = await nodes.load_profile(state, db)
             for ev in state.get("pending_events", []):
@@ -182,7 +184,12 @@ async def submit_answer(
     # Load job posting
     job_posting_data = None
     if session.job_posting_id:
-        jp_result = await db.execute(select(JobPosting).where(JobPosting.id == session.job_posting_id))
+        jp_result = await db.execute(
+            select(JobPosting).where(
+                JobPosting.id == session.job_posting_id,
+                JobPosting.user_id == user.id,
+            )
+        )
         jp = jp_result.scalar_one_or_none()
         if jp:
             job_posting_data = jp.parsed_data
@@ -428,6 +435,7 @@ async def get_profile(
 
     profiles = await search_profile(db, user.id, "면접 역량 종합", top_k=20)
 
+    CATEGORY_KEY = {"strength": "strengths", "weakness": "weaknesses", "pattern": "patterns", "context": "context"}
     organized: dict[str, list[str]] = {
         "strengths": [],
         "weaknesses": [],
@@ -436,8 +444,8 @@ async def get_profile(
     }
     for p in profiles:
         cat = p["category"]
-        key = cat + "s" if cat in ("strength", "weakness") else cat + "s"
-        if key in organized:
+        key = CATEGORY_KEY.get(cat)
+        if key and key in organized:
             organized[key].append(p["content"])
 
     return organized

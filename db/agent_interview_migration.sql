@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- 2. 사용자 프로필 임베딩 테이블
 CREATE TABLE user_profile_embeddings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    "userId" TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
+    "userId" TEXT NOT NULL REFERENCES "users"(id) ON DELETE CASCADE,
     category VARCHAR(20) NOT NULL CHECK (category IN ('strength', 'weakness', 'pattern', 'context')),
     content TEXT NOT NULL,
     embedding VECTOR(1536) NOT NULL,
@@ -20,7 +20,7 @@ CREATE INDEX idx_user_profile_embeddings_vector ON user_profile_embeddings
 -- 3. 에이전트 면접 세션 테이블
 CREATE TABLE agent_interview_sessions (
     id TEXT PRIMARY KEY,
-    "userId" TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
+    "userId" TEXT NOT NULL REFERENCES "users"(id) ON DELETE CASCADE,
     "resumeId" TEXT REFERENCES resumes(id) ON DELETE SET NULL,
     "jobPostingId" TEXT REFERENCES job_postings(id) ON DELETE SET NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'abandoned')),

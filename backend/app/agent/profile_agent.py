@@ -139,6 +139,7 @@ async def load_user_profile(
 
     profiles = await search_profile(db, user_id, query)
 
+    CATEGORY_KEY = {"strength": "strengths", "weakness": "weaknesses", "pattern": "patterns", "context": "context"}
     organized: dict[str, list[str]] = {
         "strengths": [],
         "weaknesses": [],
@@ -147,8 +148,8 @@ async def load_user_profile(
     }
     for p in profiles:
         cat = p["category"]
-        key = cat + "s" if cat in ("strength", "weakness") else cat + "s"
-        if key in organized:
+        key = CATEGORY_KEY.get(cat)
+        if key and key in organized:
             organized[key].append(p["content"])
 
     return organized
