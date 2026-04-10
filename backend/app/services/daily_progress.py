@@ -73,21 +73,6 @@ async def record_progress(
     await db.flush()
 
 
-async def get_daily_progress(
-    db: AsyncSession,
-    *,
-    user_id: str,
-    target_date: date | None = None,
-) -> DailyProgress | None:
-    d = _date_only(target_date)
-    stmt = select(DailyProgress).where(
-        DailyProgress.user_id == user_id,
-        DailyProgress.date == d,
-    )
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
-
-
 async def get_streak(
     db: AsyncSession,
     *,
@@ -126,43 +111,6 @@ async def get_streak(
         check_date -= timedelta(days=1)
 
     return streak
-
-
-async def get_weekly_overview(
-    db: AsyncSession,
-    *,
-    user_id: str,
-) -> list[dict]:
-    """Return last 7 days of progress."""
-    today = _date_only()
-    week_ago = today - timedelta(days=7)
-
-    stmt = (
-        select(DailyProgress)
-        .where(
-            DailyProgress.user_id == user_id,
-            DailyProgress.date >= week_ago,
-            DailyProgress.date <= today,
-        )
-        .order_by(DailyProgress.date.asc())
-    )
-    result = await db.execute(stmt)
-    rows = {str(r.date): r for r in result.scalars().all()}
-
-    days = []
-    for i in range(6, -1, -1):
-        d = today - timedelta(days=i)
-        d_str = str(d)
-        found = rows.get(d_str)
-        days.append({
-            "date": d_str,
-            "totalSessions": found.total_sessions if found else 0,
-            "totalQuestions": found.total_questions if found else 0,
-            "totalCorrect": found.total_correct if found else 0,
-            "totalMinutes": found.total_minutes if found else 0,
-        })
-
-    return days
 
 
 async def _calculate_streak_day(

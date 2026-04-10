@@ -11,7 +11,6 @@ from joserfc.jwe import decrypt_compact
 from joserfc.jwk import OctKey
 
 from app.config import settings
-from app.database import get_db
 
 
 def _derive_key(secret: str, salt: str) -> bytes:
@@ -75,9 +74,3 @@ async def get_admin_user(user: AuthUser = Depends(get_current_user)) -> AuthUser
     if user.email and user.email.lower() in settings.admin_email_list:
         return user
     raise HTTPException(status_code=403, detail="Forbidden")
-
-
-# Type aliases for cleaner route signatures
-CurrentUser = Depends(get_current_user)
-AdminUser = Depends(get_admin_user)
-DbSession = Depends(get_db)

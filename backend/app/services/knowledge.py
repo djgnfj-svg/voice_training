@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,54 +27,6 @@ async def get_user_knowledge(
     if subject_id:
         stmt = stmt.join(Topic).where(Topic.subject_id == subject_id)
 
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
-
-
-async def get_weak_topics(
-    db: AsyncSession,
-    *,
-    user_id: str,
-    subject_id: str,
-    limit: int = 5,
-) -> list[UserKnowledge]:
-    """Return topics with proficiency < 60, ordered by lowest first."""
-    stmt = (
-        select(UserKnowledge)
-        .options(selectinload(UserKnowledge.topic))
-        .join(Topic)
-        .where(
-            UserKnowledge.user_id == user_id,
-            Topic.subject_id == subject_id,
-            UserKnowledge.proficiency < 60,
-        )
-        .order_by(UserKnowledge.proficiency.asc())
-        .limit(limit)
-    )
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
-
-
-async def get_due_for_review(
-    db: AsyncSession,
-    *,
-    user_id: str,
-    limit: int = 10,
-) -> list[UserKnowledge]:
-    """Return topics due for review (nextReviewAt <= now)."""
-    now = datetime.now(timezone.utc)
-    stmt = (
-        select(UserKnowledge)
-        .options(
-            selectinload(UserKnowledge.topic).selectinload(Topic.subject)
-        )
-        .where(
-            UserKnowledge.user_id == user_id,
-            UserKnowledge.next_review_at <= now,
-        )
-        .order_by(UserKnowledge.next_review_at.asc())
-        .limit(limit)
-    )
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
@@ -145,23 +97,3 @@ async def update_knowledge(
 
     await db.flush()
     return existing
-
-
-async def get_subject_proficiency(
-    db: AsyncSession,
-    *,
-    user_id: str,
-    subject_id: str,
-) -> int:
-    """Average proficiency for all topics in a subject."""
-    stmt = (
-        select(func.avg(UserKnowledge.proficiency))
-        .join(Topic)
-        .where(
-            UserKnowledge.user_id == user_id,
-            Topic.subject_id == subject_id,
-        )
-    )
-    result = await db.execute(stmt)
-    avg = result.scalar()
-    return round(avg) if avg is not None else 0

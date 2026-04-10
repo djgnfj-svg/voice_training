@@ -1,25 +1,11 @@
 from __future__ import annotations
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, String, DateTime, Integer, Float, Boolean, JSON, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
-
-
-class UserProfileEmbedding(Base):
-    __tablename__ = "user_profile_embeddings"
-
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    user_id = Column("userId", String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    category = Column(String(20), nullable=False)
-    content = Column(Text, nullable=False)
-    embedding = Column(Vector(1536), nullable=False)
-    metadata_ = Column("metadata", JSON, default={})
-    created_at = Column("createdAt", DateTime, server_default=func.now())
-    updated_at = Column("updatedAt", DateTime, default=func.now(), onupdate=func.now())
 
 
 class AgentInterviewSession(Base):

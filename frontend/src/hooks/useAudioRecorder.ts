@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-export interface AudioRecorderHook {
+interface AudioRecorderHook {
   isRecording: boolean;
   isSupported: boolean;
   startRecording: () => void;

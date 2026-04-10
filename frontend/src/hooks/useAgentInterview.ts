@@ -88,13 +88,6 @@ export function useAgentInterview() {
         ]);
       });
 
-      source.addEventListener("action", (e: MessageEvent) => {
-        const data = JSON.parse(e.data);
-        if (data.action === "end") {
-          // Report will come via "complete" event
-        }
-      });
-
       source.addEventListener("complete", (e: MessageEvent) => {
         const data = JSON.parse(e.data);
         setReport(data.report);

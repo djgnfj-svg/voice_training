@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 
-export interface ModelAnswerQuestion {
+interface ModelAnswerQuestion {
   text: string;
   source: string;
   category: string;
@@ -12,7 +12,7 @@ export interface ModelAnswerQuestion {
   keyPoints: string[];
 }
 
-export interface InterviewPlan {
+interface InterviewPlan {
   type: string;
   categories: string[];
   difficulty: string;
@@ -20,7 +20,7 @@ export interface InterviewPlan {
   reasoning: string;
 }
 
-export type StudyPhase = 'loading' | 'studying' | 'error' | 'insufficient_credits';
+type StudyPhase = 'loading' | 'studying' | 'error' | 'insufficient_credits';
 
 export function useModelAnswerStudy(resumeId: string) {
   const [phase, setPhase] = useState<StudyPhase>('loading');

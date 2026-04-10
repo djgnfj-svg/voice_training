@@ -11,7 +11,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScoreRadarChart } from '@/components/report/radar-chart';
 import { Loader2, ArrowLeft, Target, TrendingUp, AlertCircle, CheckCircle, Clock, RotateCcw, Play } from 'lucide-react';
 import { useRef, useEffect } from 'react';
-import { getGrade } from '@/lib/utils';
 import type { InterviewReport } from '@/types';
 
 export default function ReportPage() {

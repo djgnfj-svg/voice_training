@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-export type MicStatus = 'idle' | 'requesting' | 'active' | 'denied' | 'error';
+type MicStatus = 'idle' | 'requesting' | 'active' | 'denied' | 'error';
 
 interface MicrophoneCheckState {
   status: MicStatus;

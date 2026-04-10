@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
     TOSS_SECRET_KEY: str | None = None
-    NEXT_PUBLIC_TOSS_CLIENT_KEY: str | None = None
     ADMIN_EMAILS: str = ""
 
     # Agent

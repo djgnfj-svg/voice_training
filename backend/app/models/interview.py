@@ -75,15 +75,3 @@ class InterviewAnswer(Base):
     created_at = Column("createdAt", DateTime, server_default=func.now())
 
     session = relationship("InterviewSession", back_populates="answers")
-
-
-class QuestionBank(Base):
-    __tablename__ = "question_bank"
-
-    id = Column(String, primary_key=True)
-    category = Column(String, nullable=False)
-    subcategory = Column(String, nullable=False)
-    difficulty = Column(PgDifficulty, nullable=False, default=Difficulty.INTERMEDIATE)
-    question_text = Column("questionText", Text, nullable=False)
-    key_points = Column("keyPoints", ARRAY(String), nullable=True)
-    created_at = Column("createdAt", DateTime, server_default=func.now())
