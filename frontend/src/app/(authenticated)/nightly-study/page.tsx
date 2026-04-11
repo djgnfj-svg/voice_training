@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Moon, Clock, Loader2 } from 'lucide-react';
+import type { LearningSession } from '@/lib/learning-agent-api';
 
 export default function NightlyStudyPage() {
   const router = useRouter();
@@ -84,30 +85,7 @@ export default function NightlyStudyPage() {
       )}
 
       {sessions.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">이전 세션</h2>
-          {sessions.map((session) => (
-            <Card key={session.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium">
-                    {new Date(session.createdAt).toLocaleDateString('ko-KR', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      weekday: 'short',
-                    })}
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-sm text-muted-foreground">
-                  {session.topic ?? '학습 세션'}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <LearningHistorySection sessions={sessions} />
       )}
 
       <MicCheckDialog
@@ -116,6 +94,45 @@ export default function NightlyStudyPage() {
         onConfirm={handleMicConfirm}
         loading={false}
       />
+    </div>
+  );
+}
+
+const HISTORY_PREVIEW_COUNT = 5;
+
+function LearningHistorySection({ sessions }: { sessions: LearningSession[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sessions : sessions.slice(0, HISTORY_PREVIEW_COUNT);
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold">이전 세션</h2>
+      {visible.map((session) => (
+        <Card key={session.id}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium">
+                {new Date(session.createdAt).toLocaleDateString('ko-KR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short',
+                })}
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="text-sm text-muted-foreground">
+              {session.topic ?? '학습 세션'}
+            </p>
+          </CardContent>
+        </Card>
+      ))}
+      {!showAll && sessions.length > HISTORY_PREVIEW_COUNT && (
+        <Button variant="outline" className="w-full" onClick={() => setShowAll(true)}>
+          더보기 ({sessions.length - HISTORY_PREVIEW_COUNT}건)
+        </Button>
+      )}
     </div>
   );
 }

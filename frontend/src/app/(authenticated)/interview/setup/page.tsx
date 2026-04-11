@@ -440,16 +440,7 @@ function InterviewTab() {
 
       {/* Interview History (inline) */}
       {historyItems && historyItems.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">면접 기록</h2>
-          {historyItems.map((item) =>
-            item._kind === 'session' ? (
-              <SessionCard key={`s-${item.id}`} session={item} typeLabels={typeLabels} statusLabels={statusLabels} />
-            ) : (
-              <ActivityCard key={`a-${item.id}`} activity={item} />
-            )
-          )}
-        </div>
+        <InterviewHistorySection items={historyItems} typeLabels={typeLabels} statusLabels={statusLabels} />
       )}
 
       <MicCheckDialog
@@ -542,6 +533,41 @@ function ActivityCard({ activity }: { activity: ActivityItem }) {
         </CardContent>
       </Link>
     </Card>
+  );
+}
+
+// ── Interview History Section ──
+
+const HISTORY_PREVIEW_COUNT = 5;
+
+function InterviewHistorySection({
+  items,
+  typeLabels,
+  statusLabels,
+}: {
+  items: HistoryItem[];
+  typeLabels: Record<string, string>;
+  statusLabels: Record<string, string>;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? items : items.slice(0, HISTORY_PREVIEW_COUNT);
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold">면접 기록</h2>
+      {visible.map((item) =>
+        item._kind === 'session' ? (
+          <SessionCard key={`s-${item.id}`} session={item} typeLabels={typeLabels} statusLabels={statusLabels} />
+        ) : (
+          <ActivityCard key={`a-${item.id}`} activity={item} />
+        )
+      )}
+      {!showAll && items.length > HISTORY_PREVIEW_COUNT && (
+        <Button variant="outline" className="w-full" onClick={() => setShowAll(true)}>
+          더보기 ({items.length - HISTORY_PREVIEW_COUNT}건)
+        </Button>
+      )}
+    </div>
   );
 }
 

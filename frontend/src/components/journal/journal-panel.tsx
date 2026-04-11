@@ -329,33 +329,49 @@ function JournalLanding({
 
       {/* 히스토리 인라인 */}
       {sessions.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">지난 기록</h2>
-          {sessions.map((session) => (
-            <Card key={session.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium">
-                    {new Date(session.createdAt).toLocaleDateString("ko-KR", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                      weekday: "short",
-                    })}
-                  </CardTitle>
-                  <span className="text-xs text-muted-foreground">
-                    {session.messageCount}개 메시지
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2">
-                  {session.summary}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <HistorySection sessions={sessions} />
+      )}
+    </div>
+  );
+}
+
+const HISTORY_PREVIEW_COUNT = 5;
+
+function HistorySection({ sessions }: { sessions: { id: string; summary: string | null; messageCount: number; createdAt: string }[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? sessions : sessions.slice(0, HISTORY_PREVIEW_COUNT);
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold">지난 기록</h2>
+      {visible.map((session) => (
+        <Card key={session.id}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium">
+                {new Date(session.createdAt).toLocaleDateString("ko-KR", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                  weekday: "short",
+                })}
+              </CardTitle>
+              <span className="text-xs text-muted-foreground">
+                {session.messageCount}개 메시지
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2">
+              {session.summary}
+            </p>
+          </CardContent>
+        </Card>
+      ))}
+      {!showAll && sessions.length > HISTORY_PREVIEW_COUNT && (
+        <Button variant="outline" className="w-full" onClick={() => setShowAll(true)}>
+          더보기 ({sessions.length - HISTORY_PREVIEW_COUNT}건)
+        </Button>
       )}
     </div>
   );
