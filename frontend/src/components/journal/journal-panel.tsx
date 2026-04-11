@@ -1,21 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useJournalSession } from "@/hooks/useJournalSession";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { useInactivityTimer } from "@/hooks/useInactivityTimer";
 import { useToast } from "@/hooks/useToast";
 import { normalizeTranscript } from "@/lib/transcript";
+import { getJournalHistory } from "@/lib/journal-api";
 import { JournalMessage } from "@/components/journal/journal-message";
 import { ModeIndicator } from "@/components/journal/mode-indicator";
 import { SessionSummaryCard } from "@/components/journal/session-summary-card";
 import { VoiceInputBar } from "@/components/journal/voice-input-bar";
 import { MicCheckDialog } from "@/components/interview/mic-check-dialog";
-import { Loader2, Square, BookOpen, History } from "lucide-react";
+import { Loader2, Square, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SILENCE_TIMEOUT_MS = 2000;
@@ -179,76 +180,11 @@ export function JournalPanel() {
     );
   }
 
-  // ── 랜딩 화면 (idle) ──
-  if (journal.phase === "idle") {
-    return (
-      <div className="mx-auto max-w-lg space-y-6 p-6">
-        <div className="text-center">
-          <BookOpen className="mx-auto h-12 w-12 text-primary" />
-          <h1 className="mt-4 text-2xl font-bold">하루의 정리</h1>
-          <p className="mt-2 text-muted-foreground">
-            오늘 하루를 음성으로 되돌아보세요
-          </p>
-        </div>
-
-        <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-8">
-            <p className="text-sm text-muted-foreground text-center">
-              AI와 대화하며 오늘 하루를 정리하고 기록해보세요
-            </p>
-            <Button size="lg" className="w-full max-w-xs gap-2" onClick={journal.begin}>
-              <BookOpen className="h-5 w-5" />
-              시작하기
-            </Button>
-          </CardContent>
-        </Card>
-
-        <div className="text-center">
-          <Link href="/journal/history" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <History className="h-4 w-4" />
-            지난 기록 보기
-          </Link>
-        </div>
-      </div>
-    );
+  // ── 랜딩 화면 (idle / completed) ──
+  if (journal.phase === "idle" || (journal.phase === "completed" && journal.summary)) {
+    return <JournalLanding journal={journal} voiceStateRef={{ setVoiceState }} lastAiMessageRef={lastAiMessageRef} />;
   }
 
-  // ── 완료 화면 ──
-  if (journal.phase === "completed" && journal.summary) {
-    return (
-      <div className="mx-auto max-w-lg space-y-6 p-6">
-        <div className="text-center">
-          <BookOpen className="mx-auto h-12 w-12 text-primary" />
-          <h1 className="mt-4 text-2xl font-bold">하루의 정리</h1>
-          <p className="mt-2 text-muted-foreground">
-            오늘의 기록이 저장되었습니다
-          </p>
-        </div>
-
-        <SessionSummaryCard summary={journal.summary} />
-
-        <div className="flex gap-3 justify-center">
-          <Button
-            size="lg"
-            onClick={() => {
-              lastAiMessageRef.current = "";
-              setVoiceState("pending");
-              journal.begin();
-            }}
-          >
-            새 대화 시작
-          </Button>
-        </div>
-
-        <div className="text-center">
-          <Link href="/journal/history" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <History className="h-4 w-4" />
-            지난 기록 보기
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   // ── 메인 대화 화면 ──
   return (
@@ -337,6 +273,90 @@ export function JournalPanel() {
           isProcessing={journal.phase === "responding"}
         />
       </div>
+    </div>
+  );
+}
+
+// ── 랜딩 화면 (idle + completed 공용) ──
+function JournalLanding({
+  journal,
+  voiceStateRef,
+  lastAiMessageRef,
+}: {
+  journal: ReturnType<typeof useJournalSession>;
+  voiceStateRef: { setVoiceState: (v: "pending" | "mic_check" | "ready") => void };
+  lastAiMessageRef: React.MutableRefObject<string>;
+}) {
+  const { data: history } = useQuery({
+    queryKey: ["journal-history"],
+    queryFn: getJournalHistory,
+  });
+
+  const sessions = (history || []).filter((s) => s.summary);
+
+  const handleStart = () => {
+    lastAiMessageRef.current = "";
+    voiceStateRef.setVoiceState("pending");
+    journal.begin();
+  };
+
+  return (
+    <div className="mx-auto max-w-lg space-y-6 p-6">
+      <div className="text-center">
+        <BookOpen className="mx-auto h-12 w-12 text-primary" />
+        <h1 className="mt-4 text-2xl font-bold">하루의 정리</h1>
+        <p className="mt-2 text-muted-foreground">
+          오늘 하루를 음성으로 되돌아보세요
+        </p>
+      </div>
+
+      {/* 완료 직후 → 요약 카드 */}
+      {journal.phase === "completed" && journal.summary && (
+        <SessionSummaryCard summary={journal.summary} />
+      )}
+
+      <Card>
+        <CardContent className="flex flex-col items-center gap-4 py-8">
+          <p className="text-sm text-muted-foreground text-center">
+            AI와 대화하며 오늘 하루를 정리하고 기록해보세요
+          </p>
+          <Button size="lg" className="w-full max-w-xs gap-2" onClick={handleStart}>
+            <BookOpen className="h-5 w-5" />
+            {journal.phase === "completed" ? "새 대화 시작" : "시작하기"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* 히스토리 인라인 */}
+      {sessions.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">지난 기록</h2>
+          {sessions.map((session) => (
+            <Card key={session.id}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium">
+                    {new Date(session.createdAt).toLocaleDateString("ko-KR", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                      weekday: "short",
+                    })}
+                  </CardTitle>
+                  <span className="text-xs text-muted-foreground">
+                    {session.messageCount}개 메시지
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2">
+                  {session.summary}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
