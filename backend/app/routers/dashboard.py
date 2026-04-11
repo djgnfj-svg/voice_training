@@ -7,16 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
 from app.models.user import User
-from app.models.resume import Resume
-from app.models.interview import InterviewSession
+from app.models.agent_interview import AgentInterviewSession
+from app.models.journal import JournalSession
+from app.models.learning_agent import LearningAgentSession
 from app.models.activity import ActivityLog, ActivityItem
-from app.models.enums import SessionStatus
-from app.services.analytics import (
-    get_growth_data,
-    get_category_performance,
-    get_session_history,
-    get_activity_history,
-)
+from app.services.analytics import get_session_history, get_activity_history
 
 router = APIRouter()
 
@@ -28,54 +23,122 @@ async def dashboard(
 ):
     # User info
     user_result = await db.execute(
-        select(User.credit_balance, User.free_trial_used, User.name)
+        select(User.name, User.free_trial_used)
         .where(User.id == user.id)
     )
     user_row = user_result.one_or_none()
 
-    # Session count
-    session_count_result = await db.execute(
-        select(func.count()).where(InterviewSession.user_id == user.id)
-    )
-    session_count = session_count_result.scalar() or 0
+    # ── Stats ──
 
-    # Resume count
-    resume_count_result = await db.execute(
-        select(func.count()).where(Resume.user_id == user.id)
+    # Agent interview count
+    interview_count_result = await db.execute(
+        select(func.count()).where(
+            AgentInterviewSession.user_id == user.id,
+            AgentInterviewSession.status == "completed",
+        )
     )
-    resume_count = resume_count_result.scalar() or 0
+    interview_count = interview_count_result.scalar() or 0
 
-    # Recent sessions (last 5)
-    recent_result = await db.execute(
-        select(InterviewSession)
-        .where(InterviewSession.user_id == user.id)
-        .order_by(InterviewSession.created_at.desc())
+    # Journal count
+    journal_count_result = await db.execute(
+        select(func.count()).where(
+            JournalSession.user_id == user.id,
+            JournalSession.status.in_(["completed", "timeout"]),
+        )
+    )
+    journal_count = journal_count_result.scalar() or 0
+
+    # Learning count
+    learning_count_result = await db.execute(
+        select(func.count()).where(
+            LearningAgentSession.user_id == user.id,
+            LearningAgentSession.status.in_(["completed", "timeout"]),
+        )
+    )
+    learning_count = learning_count_result.scalar() or 0
+
+    # ── Recent activity (unified timeline, last 10) ──
+
+    # Agent interviews
+    interview_result = await db.execute(
+        select(AgentInterviewSession)
+        .where(
+            AgentInterviewSession.user_id == user.id,
+            AgentInterviewSession.status.in_(["completed", "in_progress"]),
+        )
+        .order_by(AgentInterviewSession.created_at.desc())
         .limit(5)
     )
-    recent_sessions = [
+    interview_items = [
         {
+            "kind": "interview",
             "id": s.id,
-            "type": s.type,
-            "overallScore": s.overall_score,
+            "title": "AI 코치 면접",
+            "subtitle": f"{s.total_questions}문제" + (f" · {round(s.overall_score)}점" if s.overall_score else ""),
+            "status": s.status,
             "createdAt": s.created_at.isoformat() if s.created_at else None,
-            "categories": s.categories,
         }
-        for s in recent_result.scalars().all()
+        for s in interview_result.scalars().all()
     ]
 
-    # Growth & performance
-    growth_data = await get_growth_data(db, user.id)
-    category_performance = await get_category_performance(db, user.id)
+    # Journal sessions
+    journal_result = await db.execute(
+        select(JournalSession)
+        .where(
+            JournalSession.user_id == user.id,
+            JournalSession.status.in_(["completed", "timeout"]),
+        )
+        .order_by(JournalSession.created_at.desc())
+        .limit(5)
+    )
+    journal_items = [
+        {
+            "kind": "journal",
+            "id": s.id,
+            "title": "하루의 정리",
+            "subtitle": s.summary[:50] + "..." if s.summary and len(s.summary) > 50 else (s.summary or ""),
+            "status": s.status,
+            "createdAt": s.created_at.isoformat() if s.created_at else None,
+        }
+        for s in journal_result.scalars().all()
+    ]
+
+    # Learning sessions
+    learning_result = await db.execute(
+        select(LearningAgentSession)
+        .where(
+            LearningAgentSession.user_id == user.id,
+            LearningAgentSession.status.in_(["completed", "timeout"]),
+        )
+        .order_by(LearningAgentSession.created_at.desc())
+        .limit(5)
+    )
+    learning_items = [
+        {
+            "kind": "learning",
+            "id": s.id,
+            "title": "오늘의 학습",
+            "subtitle": s.topic or "학습 세션",
+            "status": s.status,
+            "createdAt": s.created_at.isoformat() if s.created_at else None,
+        }
+        for s in learning_result.scalars().all()
+    ]
+
+    # Merge and sort
+    recent_activity = interview_items + journal_items + learning_items
+    recent_activity.sort(key=lambda x: x.get("createdAt") or "", reverse=True)
+    recent_activity = recent_activity[:10]
 
     return {
-        "sessionCount": session_count,
-        "recentSessions": recent_sessions,
-        "resumeCount": resume_count,
-        "creditBalance": user_row.credit_balance if user_row else 0,
-        "freeTrialUsed": user_row.free_trial_used if user_row else False,
         "userName": user_row.name if user_row else None,
-        "growthData": growth_data,
-        "categoryPerformance": category_performance,
+        "freeTrialUsed": user_row.free_trial_used if user_row else False,
+        "stats": {
+            "interviewCount": interview_count,
+            "journalCount": journal_count,
+            "learningCount": learning_count,
+        },
+        "recentActivity": recent_activity,
     }
 
 

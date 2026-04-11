@@ -126,20 +126,6 @@ interface SpeechAnalysis {
   averageSilenceRatio?: number;
 }
 
-// Analytics
-export interface GrowthData {
-  date: string;
-  score: number;
-  sessionId: string;
-  type: InterviewType;
-}
-
-export interface CategoryPerformance {
-  category: string;
-  averageScore: number;
-  totalQuestions: number;
-}
-
 // Resume list item
 export interface ResumeItem {
   id: string;
