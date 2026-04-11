@@ -250,6 +250,9 @@ async def submit_answer(
         "next_action": "",
         "conversation_history": conversation_history,
         "overall_report": None,
+        "profile_context": [],
+        "loop_count": 0,
+        "actions_taken": [],
         "pending_events": [],
     }
 
@@ -271,26 +274,21 @@ async def submit_answer(
             db.add(answer_msg)
             next_message_index += 1
 
-            # Evaluate
-            state = await nodes.evaluate_answer(state, db)
+            # Agent loop: plan → action → plan → ... → decide
+            state = await nodes.agent_loop(state, db)
+
+            # Flush all pending events
             for ev in state.get("pending_events", []):
                 yield {"event": ev["event"], "data": json.dumps(ev["data"])}
             state["pending_events"] = []
 
             # Update answer message with evaluation
             answer_msg.evaluation = state["current_evaluation"]
-            await db.commit()
 
-            # Decide next action
-            state = await nodes.decide_next(state, db)
+            # Handle post-decide state
             action = state.get("next_action", "end")
 
             if action == "follow_up":
-                state = await nodes.generate_followup(state, db)
-                for ev in state.get("pending_events", []):
-                    yield {"event": ev["event"], "data": json.dumps(ev["data"])}
-                state["pending_events"] = []
-
                 fq_msg = AgentInterviewMessage(
                     id=uuid4(),
                     session_id=session_id,
@@ -304,11 +302,6 @@ async def submit_answer(
                 next_message_index += 1
 
             elif action == "next_question":
-                state = await nodes.generate_question(state, db)
-                for ev in state.get("pending_events", []):
-                    yield {"event": ev["event"], "data": json.dumps(ev["data"])}
-                state["pending_events"] = []
-
                 q_msg = AgentInterviewMessage(
                     id=uuid4(),
                     session_id=session_id,
@@ -322,12 +315,6 @@ async def submit_answer(
                 next_message_index += 1
 
             else:  # end
-                state = await nodes.update_profile(state, db)
-                state = await nodes.generate_report(state, db)
-                for ev in state.get("pending_events", []):
-                    yield {"event": ev["event"], "data": json.dumps(ev["data"])}
-                state["pending_events"] = []
-
                 session.status = "completed"
                 session.total_questions = state["question_count"]
                 session.report_data = state.get("overall_report")

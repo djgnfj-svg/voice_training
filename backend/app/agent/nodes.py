@@ -6,9 +6,99 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.state import InterviewState
-from app.agent import profile_agent, interviewer_agent, evaluator_agent
+from app.agent import profile_agent, interviewer_agent, evaluator_agent, interview_planner
 
 logger = logging.getLogger(__name__)
+
+MAX_ACTIONS = 3
+
+
+# ── 에이전트 루프 ──────────────────────────────────────────
+
+async def agent_loop(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """Main agent loop for answer processing: plan → action → plan → ... → decide."""
+    state = {
+        **state,
+        "loop_count": 0,
+        "actions_taken": list(state.get("actions_taken", [])),
+        "profile_context": list(state.get("profile_context", [])),
+    }
+
+    while state.get("loop_count", 0) < MAX_ACTIONS:
+        plan_result = await interview_planner.plan_next_action(
+            current_question=state.get("current_question", ""),
+            current_answer=state.get("current_answer", ""),
+            question_count=state.get("question_count", 0),
+            max_questions=state.get("max_questions", 7),
+            follow_up_round=state.get("follow_up_round", 0),
+            profile_context=state.get("profile_context", []),
+            evaluation=state.get("current_evaluation") or None,
+            actions_taken=state.get("actions_taken", []),
+        )
+
+        action = plan_result["action"]
+        state["loop_count"] = state.get("loop_count", 0) + 1
+
+        if action == "search_profile":
+            state = await search_profile_node(state, db, plan_result.get("search_query", ""))
+        elif action == "evaluate":
+            state = await evaluate_answer(state, db)
+        elif action == "decide":
+            state = await decide_next(state, db)
+            # decide 이후 질문 생성/종료 처리
+            next_action = state.get("next_action", "end")
+            if next_action == "follow_up":
+                state = await generate_followup(state, db)
+            elif next_action == "next_question":
+                state = await generate_question(state, db)
+            else:  # end
+                state = await update_profile(state, db)
+                state = await generate_report(state, db)
+            break
+    else:
+        # 루프 초과 → 강제 evaluate + decide
+        logger.warning("Interview agent loop exceeded MAX_ACTIONS (%d)", MAX_ACTIONS)
+        if not state.get("current_evaluation"):
+            state = await evaluate_answer(state, db)
+        state = await decide_next(state, db)
+        next_action = state.get("next_action", "end")
+        if next_action == "follow_up":
+            state = await generate_followup(state, db)
+        elif next_action == "next_question":
+            state = await generate_question(state, db)
+        else:
+            state = await update_profile(state, db)
+            state = await generate_report(state, db)
+
+    return state
+
+
+async def search_profile_node(
+    state: InterviewState, db: AsyncSession, query: str
+) -> InterviewState:
+    """Search user profile via RAG for additional context on the answer."""
+    events = list(state.get("pending_events", []))
+    actions = list(state.get("actions_taken", []))
+    actions.append("search_profile")
+
+    search_query = query or state.get("current_answer", "")
+    results = await profile_agent.search_profile(db, state["user_id"], search_query, top_k=5)
+
+    if results:
+        events.append({
+            "event": "status",
+            "data": {"phase": "profile_context_found", "count": len(results)},
+        })
+
+    return {
+        **state,
+        "profile_context": results,
+        "actions_taken": actions,
+        "pending_events": events,
+    }
+
+
+# ── 기존 노드 ──────────────────────────────────────────────
 
 
 async def load_profile(state: InterviewState, db: AsyncSession) -> InterviewState:
@@ -96,6 +186,8 @@ async def generate_followup(state: InterviewState, db: AsyncSession) -> Intervie
 async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewState:
     """Evaluate user's answer."""
     events = list(state.get("pending_events", []))
+    actions = list(state.get("actions_taken", []))
+    actions.append("evaluate")
     events.append({"event": "status", "data": {"phase": "evaluating"}})
 
     evaluation = await evaluator_agent.evaluate_answer(
@@ -130,6 +222,7 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
         **state,
         "current_evaluation": evaluation,
         "conversation_history": history,
+        "actions_taken": actions,
         "pending_events": events,
     }
 

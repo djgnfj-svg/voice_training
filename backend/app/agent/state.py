@@ -35,5 +35,10 @@ class InterviewState(TypedDict, total=False):
     # 최종 결과
     overall_report: dict | None
 
+    # 에이전트 루프
+    profile_context: list[dict]   # 능동적 프로필 RAG 검색 결과
+    loop_count: int                # 현재 루프 횟수 (최대 3)
+    actions_taken: list[str]       # 수행한 행동 목록
+
     # SSE 이벤트 큐 (노드가 이벤트를 여기에 쌓으면 라우터가 SSE로 전송)
     pending_events: list[dict]
