@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useJournalSession } from "@/hooks/useJournalSession";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
@@ -15,7 +15,7 @@ import { ModeIndicator } from "@/components/journal/mode-indicator";
 import { SessionSummaryCard } from "@/components/journal/session-summary-card";
 import { VoiceInputBar } from "@/components/journal/voice-input-bar";
 import { MicCheckDialog } from "@/components/interview/mic-check-dialog";
-import { Loader2, Square, Play, Plus, BookOpen, History } from "lucide-react";
+import { Loader2, Square, BookOpen, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SILENCE_TIMEOUT_MS = 2000;
@@ -34,7 +34,6 @@ export function JournalPanel() {
   const { toast } = useToast();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const startedRef = useRef(false);
   const lastAiMessageRef = useRef("");
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTranscriptRef = useRef("");
@@ -54,28 +53,13 @@ export function JournalPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [journal.messages, liveText]);
 
-  // ── 1단계: 세션 시작 (마운트 시 1회) ──
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    journal.start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [journal.start]);
-
-  // ── 2단계: active 진입 시 마이크 흐름 결정 ──
+  // ── active 진입 시 마이크 확인 ──
   useEffect(() => {
     if (journal.phase !== "active" || voiceState !== "pending") return;
+    setVoiceState("mic_check");
+  }, [journal.phase, voiceState]);
 
-    if (journal.resumed) {
-      // 이어하기 → 마이크 체크 스킵
-      setVoiceState("ready");
-    } else {
-      // 신규 → 마이크 확인
-      setVoiceState("mic_check");
-    }
-  }, [journal.phase, journal.resumed, voiceState]);
-
-  // ── 3단계: ready → 리스닝 시작 ──
+  // ── ready → 리스닝 시작 ──
   useEffect(() => {
     if (voiceState !== "ready") return;
     if (journal.phase !== "active") return;
@@ -186,8 +170,8 @@ export function JournalPanel() {
   // 렌더링
   // ══════════════════════════════════════
 
-  // ── 로딩 ──
-  if (journal.phase === "idle" || journal.phase === "starting") {
+  // ── 로딩 (세션 생성 중) ──
+  if (journal.phase === "starting") {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -195,8 +179,8 @@ export function JournalPanel() {
     );
   }
 
-  // ── 이전 세션 발견 → 선택 화면 ──
-  if (journal.phase === "choose") {
+  // ── 랜딩 화면 (idle) ──
+  if (journal.phase === "idle") {
     return (
       <div className="mx-auto max-w-lg space-y-6 p-6">
         <div className="text-center">
@@ -208,20 +192,13 @@ export function JournalPanel() {
         </div>
 
         <Card>
-          <CardHeader className="text-center pb-2">
-            <CardTitle className="text-lg">이전 대화가 있어요</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
-              오늘 나눴던 대화를 이어할 수 있어요
+          <CardContent className="flex flex-col items-center gap-4 py-8">
+            <p className="text-sm text-muted-foreground text-center">
+              AI와 대화하며 오늘 하루를 정리하고 기록해보세요
             </p>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <Button onClick={journal.resumeSession} size="lg" className="w-full gap-2">
-              <Play className="h-4 w-4" />
-              이어서 하기
-            </Button>
-            <Button onClick={journal.startFresh} variant="outline" size="lg" className="w-full gap-2">
-              <Plus className="h-4 w-4" />
-              새로 시작
+            <Button size="lg" className="w-full max-w-xs gap-2" onClick={journal.begin}>
+              <BookOpen className="h-5 w-5" />
+              시작하기
             </Button>
           </CardContent>
         </Card>
@@ -254,10 +231,9 @@ export function JournalPanel() {
           <Button
             size="lg"
             onClick={() => {
-              startedRef.current = false;
               lastAiMessageRef.current = "";
               setVoiceState("pending");
-              journal.start();
+              journal.begin();
             }}
           >
             새 대화 시작
@@ -277,7 +253,7 @@ export function JournalPanel() {
   // ── 메인 대화 화면 ──
   return (
     <div className="flex h-full flex-col">
-      {/* 마이크 확인 (신규 세션만) */}
+      {/* 마이크 확인 */}
       {voiceState === "mic_check" && (
         <MicCheckDialog
           open
