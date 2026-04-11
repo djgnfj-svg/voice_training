@@ -124,15 +124,14 @@ async def send_message(
 
     # Credit check (after free limit)
     if session.free_messages_used >= FREE_MESSAGE_LIMIT:
-        from sqlalchemy import text
-        credit_result = await db.execute(
-            text("""
-                UPDATE users SET "creditBalance" = "creditBalance" - :cost
-                WHERE id = :user_id AND "creditBalance" >= :cost
-            """),
-            {"user_id": user.id, "cost": COST_PER_MESSAGE},
-        )
-        if credit_result.rowcount == 0:
+        from app.services.credit import deduct_for_feature, InsufficientCreditsError
+        try:
+            await deduct_for_feature(
+                db, user.id, session_id,
+                "저널 메시지", COST_PER_MESSAGE,
+                tx_type="JOURNAL_DEBIT",
+            )
+        except InsufficientCreditsError:
             raise HTTPException(402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"})
 
     # Rebuild conversation history from DB
