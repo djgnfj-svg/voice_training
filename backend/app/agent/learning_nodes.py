@@ -1,3 +1,4 @@
+# backend/app/agent/learning_nodes.py
 from __future__ import annotations
 
 import logging
@@ -5,16 +6,131 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.learning_state import LearningState
-from app.agent import tutor_agent
+from app.agent import tutor_agent, learning_planner
 from app.agent.profile_agent import search_profile, update_profile
+from app.agent.journal_rag import search_past_context
 
 logger = logging.getLogger(__name__)
 
 FREE_LLM_CALL_LIMIT = 3
+MAX_ACTIONS = 4
+
+
+# ── 에이전트 루프 ──────────────────────────────────────────
+
+async def agent_loop(
+    state: LearningState, db: AsyncSession, user_message: str
+) -> LearningState:
+    """Main agent loop: planner decides actions, executes them, loops back."""
+    state = {
+        **state,
+        "loop_count": 0,
+        "actions_taken": list(state.get("actions_taken", [])),
+        "profile_context": list(state.get("profile_context", [])),
+        "journal_context": list(state.get("journal_context", [])),
+    }
+
+    # Store user message + last assessment for planner
+    last_assessment = None
+    for entry in reversed(state.get("conversation_history", [])):
+        if entry.get("role") == "user" and entry.get("assessment"):
+            last_assessment = entry["assessment"]
+            break
+
+    while state.get("loop_count", 0) < MAX_ACTIONS:
+        # Planner 결정
+        plan_result = await learning_planner.plan_next_action(
+            user_message=user_message,
+            topic=state.get("topic", ""),
+            phase=state.get("current_phase", "greeting"),
+            recent_messages=state.get("conversation_history", []),
+            profile_context=state.get("profile_context", []),
+            journal_context=state.get("journal_context", []),
+            assessment=last_assessment,
+            actions_taken=state.get("actions_taken", []),
+        )
+
+        action = plan_result["action"]
+        state["strategy"] = plan_result["strategy"]
+        state["loop_count"] = state.get("loop_count", 0) + 1
+
+        if action == "search_profile":
+            state = await search_profile_node(state, db, plan_result.get("search_query", ""))
+        elif action == "search_journal":
+            state = await search_journal_node(state, db, plan_result.get("search_query", ""))
+        elif action == "assess":
+            state = await assess(state, db, user_message)
+            # Update assessment for next planner call
+            for entry in reversed(state.get("conversation_history", [])):
+                if entry.get("role") == "user" and entry.get("assessment"):
+                    last_assessment = entry["assessment"]
+                    break
+        elif action == "teach":
+            state = await teach(state, db, user_message)
+            break
+    else:
+        # 루프 초과 → 강제 teach
+        logger.warning("Learning agent loop exceeded MAX_ACTIONS (%d), forcing teach", MAX_ACTIONS)
+        state["strategy"] = state.get("strategy", "explain")
+        state = await teach(state, db, user_message)
+
+    return state
+
+
+# ── 개별 노드 ──────────────────────────────────────────────
+
+async def search_profile_node(
+    state: LearningState, db: AsyncSession, query: str
+) -> LearningState:
+    """Search user profile via RAG."""
+    events = list(state.get("pending_events", []))
+    actions = list(state.get("actions_taken", []))
+    actions.append("search_profile")
+
+    search_query = query or state.get("topic", "") or "개발자 학습 역량"
+    results = await search_profile(db, state["user_id"], search_query, top_k=5)
+
+    if results:
+        events.append({
+            "event": "status",
+            "data": {"phase": "profile_context_found", "count": len(results)},
+        })
+
+    return {
+        **state,
+        "profile_context": results,
+        "actions_taken": actions,
+        "pending_events": events,
+    }
+
+
+async def search_journal_node(
+    state: LearningState, db: AsyncSession, query: str
+) -> LearningState:
+    """Search journal embeddings for cross-context (30 days)."""
+    events = list(state.get("pending_events", []))
+    actions = list(state.get("actions_taken", []))
+    actions.append("search_journal")
+
+    search_query = query or state.get("topic", "")
+    results = await search_past_context(db, state["user_id"], search_query)
+
+    if results:
+        events.append({
+            "event": "status",
+            "data": {"phase": "journal_context_found", "count": len(results)},
+        })
+
+    return {
+        **state,
+        "journal_context": results,
+        "actions_taken": actions,
+        "pending_events": events,
+    }
 
 
 async def load_profile(state: LearningState, db: AsyncSession) -> LearningState:
-    """Load user profile from RAG for the current topic."""
+    """Load user profile from RAG for the current topic (session start)."""
     events = list(state.get("pending_events", []))
     events.append({"event": "status", "data": {"phase": "loading_profile"}})
 
@@ -75,6 +191,8 @@ async def assess(
 ) -> LearningState:
     """Assess user understanding and determine next phase."""
     events = list(state.get("pending_events", []))
+    actions = list(state.get("actions_taken", []))
+    actions.append("assess")
 
     result = await tutor_agent.assess_understanding(
         state.get("topic", ""),
@@ -104,10 +222,10 @@ async def assess(
         "conversation_history": history,
         "current_phase": next_phase if next_phase != "new_topic" else "explain",
         "llm_call_count": state.get("llm_call_count", 0) + 1,
+        "actions_taken": actions,
         "pending_events": events,
     }
 
-    # Handle topic selection / change
     if understanding == "topic_selected" or next_phase == "new_topic":
         new_state["topic"] = topic
         new_state["current_phase"] = "explain"
@@ -115,31 +233,25 @@ async def assess(
     return new_state
 
 
-async def teach(state: LearningState, db: AsyncSession) -> LearningState:
-    """Generate teaching content based on current phase."""
+async def teach(
+    state: LearningState, db: AsyncSession, user_message: str = ""
+) -> LearningState:
+    """Generate teaching content based on strategy and context."""
     events = list(state.get("pending_events", []))
 
     topic = state.get("topic", "")
     phase = state.get("current_phase", "explain")
-
-    # If topic exists but profile not loaded for this topic, load it
-    if topic and not state.get("user_profile"):
-        state = await load_profile(state, db)
-        events = list(state.get("pending_events", []))
-
-    # Get last user message from history
-    user_message = ""
-    for entry in reversed(state.get("conversation_history", [])):
-        if entry.get("role") == "user":
-            user_message = entry.get("content", "")
-            break
+    strategy = state.get("strategy", "explain")
+    profile_context = state.get("profile_context", [])
+    journal_context = state.get("journal_context", [])
 
     result = await tutor_agent.generate_teaching(
-        topic,
-        phase,
-        state.get("user_profile", {}),
+        topic, phase, state.get("user_profile", {}),
         state.get("conversation_history", []),
-        user_message,
+        user_message or "",
+        strategy=strategy,
+        profile_context=profile_context or None,
+        journal_context=journal_context or None,
     )
 
     message = result.get("message", "")
@@ -184,7 +296,6 @@ async def wrap_up(state: LearningState, db: AsyncSession) -> LearningState:
     topic = state.get("topic", "")
     conversation_history = state.get("conversation_history", [])
 
-    # Only generate summary if there's enough conversation and a topic
     if len(conversation_history) < 3 or not topic:
         events.append({
             "event": "complete",
@@ -195,7 +306,6 @@ async def wrap_up(state: LearningState, db: AsyncSession) -> LearningState:
             "pending_events": events,
         }
 
-    # Generate summary
     try:
         summary = await tutor_agent.generate_summary(
             topic, conversation_history, state.get("user_profile", {})
@@ -211,7 +321,6 @@ async def wrap_up(state: LearningState, db: AsyncSession) -> LearningState:
             "encouragement": "오늘도 수고했어요!",
         }
 
-    # Extract and save profile insights to RAG
     try:
         insights = await tutor_agent.extract_profile_insights(topic, conversation_history)
 

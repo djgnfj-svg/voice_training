@@ -215,6 +215,11 @@ async def respond_to_session(
         "credit_activated": session.credit_deducted or body.credit_confirmed or False,
         "is_free_session": session.is_free_session or False,
         "pending_events": [],
+        "profile_context": [],
+        "journal_context": [],
+        "strategy": "",
+        "loop_count": 0,
+        "actions_taken": [],
     }
 
     next_message_index = len(messages)
@@ -233,8 +238,10 @@ async def respond_to_session(
             db.add(user_msg)
             next_message_index += 1
 
-            # Assess understanding
-            state = await learning_nodes.assess(state, db, body.message)
+            # Agent loop: plan → action → plan → ... → teach
+            state = await learning_nodes.agent_loop(state, db, body.message)
+
+            # Flush all pending events
             for ev in state.get("pending_events", []):
                 yield {"event": ev["event"], "data": json.dumps(ev["data"])}
             state["pending_events"] = []
@@ -260,14 +267,15 @@ async def respond_to_session(
                 state["pending_events"] = []
 
                 state = await learning_nodes.wrap_up(state, db)
-                for ev in state.get("pending_events", []):
-                    yield {"event": ev["event"], "data": json.dumps(ev["data"])}
 
-                # Extract summary before clearing pending_events
+                # Extract summary before flushing events
                 summary = None
                 for ev_data in state.get("pending_events", []):
                     if ev_data.get("event") == "complete":
                         summary = ev_data.get("data", {}).get("summary")
+
+                for ev in state.get("pending_events", []):
+                    yield {"event": ev["event"], "data": json.dumps(ev["data"])}
                 state["pending_events"] = []
 
                 session.status = "completed"
@@ -306,12 +314,6 @@ async def respond_to_session(
                     session.llm_call_count = state.get("llm_call_count", 0)
                     await db.commit()
                     return
-
-                # Teach
-                state = await learning_nodes.teach(state, db)
-                for ev in state.get("pending_events", []):
-                    yield {"event": ev["event"], "data": json.dumps(ev["data"])}
-                state["pending_events"] = []
 
                 # Save tutor message to DB
                 tutor_content = ""
@@ -400,6 +402,11 @@ async def end_learning_session(
         "credit_activated": session.credit_deducted or False,
         "is_free_session": session.is_free_session or False,
         "pending_events": [],
+        "profile_context": [],
+        "journal_context": [],
+        "strategy": "",
+        "loop_count": 0,
+        "actions_taken": [],
     }
 
     async def event_generator():
