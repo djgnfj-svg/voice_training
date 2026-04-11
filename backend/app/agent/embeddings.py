@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 _client: AsyncOpenAI | None = None
 
 EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIM = 1536
 
 
 def _get_openai_client() -> AsyncOpenAI:

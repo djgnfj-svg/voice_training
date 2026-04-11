@@ -59,6 +59,7 @@ export function JournalPanel() {
     if (startedRef.current) return;
     startedRef.current = true;
     journal.start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [journal.start]);
 
   // ── 2단계: active 진입 시 마이크 흐름 결정 ──

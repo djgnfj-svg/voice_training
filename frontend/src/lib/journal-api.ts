@@ -68,11 +68,3 @@ export async function getJournalHistory(): Promise<JournalSessionSummary[]> {
   if (!res.ok) throw new Error("히스토리 조회 실패");
   return res.json();
 }
-
-export async function getJournalSession(sessionId: string) {
-  const res = await fetch(`/api/journal/${sessionId}`, {
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("세션 조회 실패");
-  return res.json();
-}
