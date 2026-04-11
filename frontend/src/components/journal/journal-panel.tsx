@@ -15,7 +15,7 @@ import { ModeIndicator } from "@/components/journal/mode-indicator";
 import { SessionSummaryCard } from "@/components/journal/session-summary-card";
 import { VoiceInputBar } from "@/components/journal/voice-input-bar";
 import { MicCheckDialog } from "@/components/interview/mic-check-dialog";
-import { Loader2, Square, ArrowLeft, Play, Plus, BookOpen } from "lucide-react";
+import { Loader2, Square, Play, Plus, BookOpen, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SILENCE_TIMEOUT_MS = 2000;
@@ -225,6 +225,13 @@ export function JournalPanel() {
             </Button>
           </CardContent>
         </Card>
+
+        <div className="text-center">
+          <Link href="/journal/history" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <History className="h-4 w-4" />
+            지난 기록 보기
+          </Link>
+        </div>
       </div>
     );
   }
@@ -244,12 +251,6 @@ export function JournalPanel() {
         <SessionSummaryCard summary={journal.summary} />
 
         <div className="flex gap-3 justify-center">
-          <Link href="/dashboard">
-            <Button variant="outline" size="lg">
-              <ArrowLeft className="mr-1.5 h-4 w-4" />
-              돌아가기
-            </Button>
-          </Link>
           <Button
             size="lg"
             onClick={() => {
@@ -261,6 +262,13 @@ export function JournalPanel() {
           >
             새 대화 시작
           </Button>
+        </div>
+
+        <div className="text-center">
+          <Link href="/journal/history" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <History className="h-4 w-4" />
+            지난 기록 보기
+          </Link>
         </div>
       </div>
     );
