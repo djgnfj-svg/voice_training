@@ -1,24 +1,119 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
 import { useToast } from '@/hooks/useToast';
-import { Sparkles, ArrowRight, SkipForward, PlayCircle, BookOpen, Bot } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import {
+  Sparkles, ArrowRight, SkipForward, PlayCircle, BookOpen, Bot,
+  Mic, History, Upload, FileText, CheckCircle, Loader2, Trash2, Pencil,
+  ChevronDown, ChevronUp,
+} from 'lucide-react';
+import { cn, formatDate } from '@/lib/utils';
 import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 import { MicCheckDialog } from '@/components/interview/mic-check-dialog';
-import type { ParsedJobPosting, CompanyAnalysis } from '@/types';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import type { ParsedJobPosting, CompanyAnalysis, ParsedResume } from '@/types';
+
+// ── Types ──
 
 type Step = 'resume' | 'job-posting' | 'start';
 type InterviewMode = 'ai-coach' | 'model-answer';
 
+interface SessionItem {
+  _kind: 'session';
+  id: string;
+  type: string;
+  categories?: string[] | null;
+  status: string;
+  overallScore: number | null;
+  createdAt: string;
+  resumeName?: string | null;
+  jobPostingData?: ParsedJobPosting | null;
+  answerCount: number;
+}
+
+interface ActivityItem {
+  _kind: 'activity';
+  id: string;
+  type: 'MODEL_ANSWER';
+  resumeId: string | null;
+  createdAt: string;
+  resumeName?: string | null;
+  itemCount: number;
+}
+
+type HistoryItem = SessionItem | ActivityItem;
+
+interface ResumeListItem {
+  id: string;
+  name: string;
+  parsedData: ParsedResume | null;
+  createdAt: string;
+}
+
+// ── Page ──
+
 export default function InterviewSetupPage() {
+  const searchParams = useSearchParams();
+  const defaultTab = searchParams.get('tab') === 'resume' ? 'resume' : 'interview';
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold md:text-3xl">면접 연습</h1>
+        <p className="text-muted-foreground">
+          이력서를 관리하고, AI 맞춤 면접을 연습하세요
+        </p>
+      </div>
+
+      <Tabs defaultValue={defaultTab} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="interview" className="gap-2">
+            <Mic className="h-4 w-4" />
+            면접
+          </TabsTrigger>
+          <TabsTrigger value="resume" className="gap-2">
+            <FileText className="h-4 w-4" />
+            이력서 관리
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="interview" className="space-y-6">
+          <InterviewTab />
+        </TabsContent>
+
+        <TabsContent value="resume" className="space-y-6">
+          <ResumeTab />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ── Interview Tab ──
+
+function InterviewTab() {
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState<Step>('resume');
@@ -50,6 +145,15 @@ export default function InterviewSetupPage() {
       })
       .catch(() => {});
   }, []);
+
+  const { data: historyItems } = useQuery<HistoryItem[]>({
+    queryKey: ['history'],
+    queryFn: async () => {
+      const res = await fetch('/api/history');
+      if (!res.ok) throw new Error('Failed to load history');
+      return res.json();
+    },
+  });
 
   const goToJobPosting = () => {
     if (!selectedResumeId) {
@@ -96,15 +200,20 @@ export default function InterviewSetupPage() {
     }
   };
 
-  return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold md:text-3xl">면접 시작</h1>
-        <p className="text-muted-foreground">
-          이력서를 선택하고, 선택적으로 채용 공고를 입력하면 AI가 맞춤 면접을 진행합니다.
-        </p>
-      </div>
+  const typeLabels: Record<string, string> = {
+    TECHNICAL: '기술면접',
+    BEHAVIORAL: '인성면접',
+    MIXED: '혼합면접',
+  };
 
+  const statusLabels: Record<string, string> = {
+    IN_PROGRESS: '진행 중',
+    COMPLETED: '완료',
+    ABANDONED: '중단',
+  };
+
+  return (
+    <>
       {/* In-progress session banner */}
       {inProgressSession && (
         <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
@@ -235,7 +344,6 @@ export default function InterviewSetupPage() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2">
-                {/* AI 코치 모드 */}
                 <button
                   type="button"
                   className={cn(
@@ -253,7 +361,6 @@ export default function InterviewSetupPage() {
                   <p className="text-xs text-muted-foreground">맞춤형 동적 질문, 꼬리질문, 프로필 기억</p>
                 </button>
 
-                {/* 모범답안 학습 모드 */}
                 <button
                   type="button"
                   className={cn(
@@ -331,6 +438,20 @@ export default function InterviewSetupPage() {
         </>
       )}
 
+      {/* Interview History (inline) */}
+      {historyItems && historyItems.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">면접 기록</h2>
+          {historyItems.map((item) =>
+            item._kind === 'session' ? (
+              <SessionCard key={`s-${item.id}`} session={item} typeLabels={typeLabels} statusLabels={statusLabels} />
+            ) : (
+              <ActivityCard key={`a-${item.id}`} activity={item} />
+            )
+          )}
+        </div>
+      )}
+
       <MicCheckDialog
         open={showMicCheck}
         onOpenChange={setShowMicCheck}
@@ -346,6 +467,435 @@ export default function InterviewSetupPage() {
         loading={false}
       />
       <InsufficientCreditsDialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog} />
-    </div>
+    </>
+  );
+}
+
+// ── History Cards ──
+
+function SessionCard({
+  session,
+  typeLabels,
+  statusLabels,
+}: {
+  session: SessionItem;
+  typeLabels: Record<string, string>;
+  statusLabels: Record<string, string>;
+}) {
+  return (
+    <Card className="transition-colors hover:bg-accent/50">
+      <Link href={
+        session.status === 'COMPLETED'
+          ? `/interview/practice/${session.id}`
+          : `/interview/session/${session.id}`
+      }>
+        <CardContent className="flex items-center justify-between py-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{typeLabels[session.type] || session.type}</span>
+              <Badge variant={session.status === 'COMPLETED' ? 'default' : 'secondary'}>
+                {statusLabels[session.status] || session.status}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {session.resumeName && <>{session.resumeName} | </>}
+              {(session.categories ?? []).join(', ')}{(session.categories ?? []).length > 0 && ' | '}{session.answerCount}문제 | {formatDate(session.createdAt)}
+            </p>
+            {session.jobPostingData && (
+              <p className="text-xs text-muted-foreground">
+                {session.jobPostingData.company} - {session.jobPostingData.position}
+              </p>
+            )}
+          </div>
+          <div className="text-right">
+            {session.overallScore !== null ? (
+              <p className="text-2xl font-bold">{Math.round(session.overallScore)}점</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">-</p>
+            )}
+          </div>
+        </CardContent>
+      </Link>
+    </Card>
+  );
+}
+
+function ActivityCard({ activity }: { activity: ActivityItem }) {
+  return (
+    <Card className="transition-colors hover:bg-accent/50">
+      <Link href={`/history/activity/${activity.id}`}>
+        <CardContent className="flex items-center justify-between py-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-emerald-500" />
+              <span className="font-medium">모범답안 학습</span>
+              <Badge variant="outline">모범답안</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {activity.resumeName && <>{activity.resumeName} | </>}
+              {activity.itemCount}개 질문 | {formatDate(activity.createdAt)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-muted-foreground">복습하기</p>
+          </div>
+        </CardContent>
+      </Link>
+    </Card>
+  );
+}
+
+// ── Resume Tab ──
+
+function ResumeTab() {
+  const [isDragging, setIsDragging] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: resumes, isLoading } = useQuery<ResumeListItem[]>({
+    queryKey: ['resumes-full'],
+    queryFn: async () => {
+      const res = await fetch('/api/resume?detail=true');
+      if (!res.ok) throw new Error('Failed to fetch resumes');
+      const items = await res.json();
+      return items.map((item: ResumeListItem) => ({
+        id: item.id,
+        name: item.name,
+        parsedData: item.parsedData ?? null,
+        createdAt: item.createdAt,
+      }));
+    },
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/resume', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Upload failed');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resumes-full'] });
+      queryClient.invalidateQueries({ queryKey: ['resumes'] });
+      toast({ title: '이력서가 업로드되었습니다' });
+    },
+    onError: (error: Error) => {
+      toast({ title: '업로드 실패', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const res = await fetch(`/api/resume/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error('Rename failed');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resumes-full'] });
+      queryClient.invalidateQueries({ queryKey: ['resumes'] });
+      setRenamingId(null);
+      toast({ title: '이름이 변경되었습니다' });
+    },
+    onError: (error: Error) => {
+      toast({ title: '이름 변경 실패', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/resume/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Delete failed');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resumes-full'] });
+      queryClient.invalidateQueries({ queryKey: ['resumes'] });
+      toast({ title: '이력서가 삭제되었습니다' });
+    },
+    onError: (error: Error) => {
+      toast({ title: '삭제 실패', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const handleFile = useCallback(
+    (file: File) => {
+      if (!file.name.endsWith('.pdf')) {
+        toast({ title: 'PDF 파일만 업로드 가능합니다', variant: 'destructive' });
+        return;
+      }
+      uploadMutation.mutate(file);
+    },
+    [uploadMutation, toast]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
+
+  const startRename = (id: string, currentName: string) => {
+    setRenamingId(id);
+    setRenameValue(currentName);
+  };
+
+  const submitRename = (id: string) => {
+    if (renameValue.trim()) {
+      renameMutation.mutate({ id, name: renameValue.trim() });
+    }
+  };
+
+  return (
+    <>
+      {/* Upload Area */}
+      <Card>
+        <CardHeader>
+          <CardTitle>새 이력서 업로드</CardTitle>
+          <CardDescription>PDF 형식의 이력서를 업로드해주세요</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div
+            className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 md:p-12 transition-colors ${
+              isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+          >
+            {uploadMutation.isPending ? (
+              <>
+                <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">이력서를 분석하고 있습니다...</p>
+              </>
+            ) : (
+              <>
+                <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
+                <p className="mb-2 text-sm font-medium">PDF 파일을 드래그하거나 클릭하여 업로드</p>
+                <p className="text-xs text-muted-foreground">최대 10MB</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFile(file);
+                    e.target.value = '';
+                  }}
+                />
+                <Button variant="outline" className="mt-4" onClick={() => fileInputRef.current?.click()}>
+                  파일 선택
+                </Button>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Resume List */}
+      {isLoading ? (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
+      ) : resumes && resumes.length > 0 ? (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">내 이력서 ({resumes.length}개)</h2>
+          {resumes.map((resume) => {
+            const parsed = resume.parsedData;
+            const isExpanded = expandedId === resume.id;
+
+            return (
+              <Card key={resume.id}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      {renamingId === resume.id ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') submitRename(resume.id);
+                              if (e.key === 'Escape') setRenamingId(null);
+                            }}
+                            className="h-8 w-32 sm:w-48"
+                            autoFocus
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => submitRename(resume.id)}
+                            disabled={renameMutation.isPending}
+                          >
+                            저장
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setRenamingId(null)}
+                          >
+                            취소
+                          </Button>
+                        </div>
+                      ) : (
+                        <CardTitle className="text-base">{resume.name}</CardTitle>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="mr-2 text-xs text-muted-foreground">
+                        {new Date(resume.createdAt).toLocaleDateString('ko-KR')}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => startRename(resume.id, resume.name)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>이력서를 삭제하시겠습니까?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              삭제된 이력서는 복구할 수 없습니다.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>취소</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteMutation.mutate(resume.id)}>
+                              삭제
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setExpandedId(isExpanded ? null : resume.id)}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  {parsed?.skills && parsed.skills.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {parsed.skills.slice(0, 8).map((skill) => (
+                        <Badge key={skill} variant="secondary" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                      {parsed.skills.length > 8 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{parsed.skills.length - 8}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </CardHeader>
+
+                {isExpanded && parsed && (
+                  <CardContent className="space-y-6 border-t pt-4">
+                    {parsed.name && (
+                      <div>
+                        <h3 className="mb-1 text-sm font-medium text-muted-foreground">이름</h3>
+                        <p className="font-medium">{parsed.name}</p>
+                      </div>
+                    )}
+                    {parsed.skills && parsed.skills.length > 0 && (
+                      <div>
+                        <h3 className="mb-2 text-sm font-medium text-muted-foreground">기술 스택</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {parsed.skills.map((skill) => (
+                            <Badge key={skill} variant="secondary">{skill}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {parsed.experience && parsed.experience.length > 0 && (
+                      <div>
+                        <h3 className="mb-2 text-sm font-medium text-muted-foreground">경력</h3>
+                        <div className="space-y-3">
+                          {parsed.experience.map((exp, i) => (
+                            <div key={i} className="rounded-lg border p-3">
+                              <p className="font-medium">{exp.company} - {exp.position}</p>
+                              <p className="text-sm text-muted-foreground">{exp.period}</p>
+                              <p className="mt-1 text-sm">{exp.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {parsed.projects && parsed.projects.length > 0 && (
+                      <div>
+                        <h3 className="mb-2 text-sm font-medium text-muted-foreground">프로젝트</h3>
+                        <div className="space-y-3">
+                          {parsed.projects.map((proj, i) => (
+                            <div key={i} className="rounded-lg border p-3">
+                              <p className="font-medium">{proj.name}</p>
+                              <p className="mt-1 text-sm">{proj.description}</p>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {proj.techStack.map((tech) => (
+                                  <Badge key={tech} variant="outline" className="text-xs">{tech}</Badge>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            <FileText className="mx-auto mb-4 h-10 w-10" />
+            <p>아직 이력서가 등록되지 않았습니다</p>
+            <p className="text-sm">위에서 PDF 이력서를 업로드해주세요</p>
+          </CardContent>
+        </Card>
+      )}
+    </>
   );
 }

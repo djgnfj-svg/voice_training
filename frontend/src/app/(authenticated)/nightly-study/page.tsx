@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { getLearningStatus } from '@/lib/learning-agent-api';
+import { getLearningStatus, getLearningHistory } from '@/lib/learning-agent-api';
 import { MicCheckDialog } from '@/components/interview/mic-check-dialog';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Moon, Clock, Loader2 } from 'lucide-react';
@@ -19,7 +19,13 @@ export default function NightlyStudyPage() {
     queryFn: getLearningStatus,
   });
 
+  const { data: history } = useQuery({
+    queryKey: ['learning-history'],
+    queryFn: getLearningHistory,
+  });
+
   const dailyLimitReached = statusData?.dailyLimitReached ?? false;
+  const sessions = history ?? [];
 
   const handleMicConfirm = () => {
     setShowMicCheck(false);
@@ -75,6 +81,33 @@ export default function NightlyStudyPage() {
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {sessions.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">이전 세션</h2>
+          {sessions.map((session) => (
+            <Card key={session.id}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium">
+                    {new Date(session.createdAt).toLocaleDateString('ko-KR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'short',
+                    })}
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="text-sm text-muted-foreground">
+                  {session.topic ?? '학습 세션'}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
 
       <MicCheckDialog

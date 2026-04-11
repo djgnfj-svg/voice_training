@@ -538,6 +538,36 @@ async def _save_activity(
         logger.exception("Failed to record daily progress")
 
 
+# ---------- GET /api/nightly-study/history ----------
+
+@router.get("/api/nightly-study/history")
+async def get_history(
+    user: AuthUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get completed learning sessions."""
+    result = await db.execute(
+        select(LearningAgentSession)
+        .where(
+            LearningAgentSession.user_id == user.id,
+            LearningAgentSession.status.in_(["completed", "timeout"]),
+        )
+        .order_by(LearningAgentSession.created_at.desc())
+        .limit(30)
+    )
+    sessions = result.scalars().all()
+
+    return [
+        {
+            "id": s.id,
+            "topic": s.topic,
+            "status": s.status,
+            "createdAt": s.created_at.isoformat() if s.created_at else None,
+        }
+        for s in sessions
+    ]
+
+
 # ---------- GET /api/nightly-study/status ----------
 
 @router.get("/api/nightly-study/status")

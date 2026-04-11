@@ -8,8 +8,6 @@ import { isAdmin } from '@/lib/admin';
 import {
   LayoutDashboard,
   Mic,
-  FileText,
-  History,
   LogOut,
   AudioLines,
   Eye,
@@ -29,8 +27,6 @@ const navItems = [
   { href: '/interview/setup', label: '면접 연습', icon: Mic },
   { href: '/journal', label: '하루의 정리', icon: BookOpen },
   { href: '/nightly-study', label: '오늘의 학습', icon: Moon },
-  { href: '/profile', label: '이력서 관리', icon: FileText },
-  { href: '/history', label: '면접 기록', icon: History },
 ];
 
 const adminNavItems = [

@@ -29,3 +29,16 @@ export async function getLearningStatus(): Promise<{ dailyLimitReached: boolean 
   if (!res.ok) throw new Error("Failed to fetch status");
   return res.json();
 }
+
+export interface LearningSession {
+  id: string;
+  topic: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export async function getLearningHistory(): Promise<LearningSession[]> {
+  const res = await fetch("/api/nightly-study/history", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch history");
+  return res.json();
+}
