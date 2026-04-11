@@ -15,7 +15,7 @@ import { ModeIndicator } from "@/components/journal/mode-indicator";
 import { SessionSummaryCard } from "@/components/journal/session-summary-card";
 import { VoiceInputBar } from "@/components/journal/voice-input-bar";
 import { MicCheckDialog } from "@/components/interview/mic-check-dialog";
-import { Loader2, Square, ArrowLeft, Play, Plus } from "lucide-react";
+import { Loader2, Square, ArrowLeft, Play, Plus, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SILENCE_TIMEOUT_MS = 2000;
@@ -198,29 +198,31 @@ export function JournalPanel() {
   // ── 이전 세션 발견 → 선택 화면 ──
   if (journal.phase === "choose") {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
-        <Card className="w-full max-w-sm">
-          <CardHeader className="text-center">
+      <div className="mx-auto max-w-lg space-y-6 p-6">
+        <div className="text-center">
+          <BookOpen className="mx-auto h-12 w-12 text-primary" />
+          <h1 className="mt-4 text-2xl font-bold">하루의 정리</h1>
+          <p className="mt-2 text-muted-foreground">
+            오늘 하루를 음성으로 되돌아보세요
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader className="text-center pb-2">
             <CardTitle className="text-lg">이전 대화가 있어요</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
               오늘 나눴던 대화를 이어할 수 있어요
             </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <Button onClick={journal.resumeSession} className="w-full gap-2">
+            <Button onClick={journal.resumeSession} size="lg" className="w-full gap-2">
               <Play className="h-4 w-4" />
               이어서 하기
             </Button>
-            <Button onClick={journal.startFresh} variant="outline" className="w-full gap-2">
+            <Button onClick={journal.startFresh} variant="outline" size="lg" className="w-full gap-2">
               <Plus className="h-4 w-4" />
               새로 시작
             </Button>
-            <Link href="/dashboard" className="w-full">
-              <Button variant="ghost" className="w-full gap-2">
-                <ArrowLeft className="h-4 w-4" />
-                돌아가기
-              </Button>
-            </Link>
           </CardContent>
         </Card>
       </div>
@@ -230,16 +232,26 @@ export function JournalPanel() {
   // ── 완료 화면 ──
   if (journal.phase === "completed" && journal.summary) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
+      <div className="mx-auto max-w-lg space-y-6 p-6">
+        <div className="text-center">
+          <BookOpen className="mx-auto h-12 w-12 text-primary" />
+          <h1 className="mt-4 text-2xl font-bold">하루의 정리</h1>
+          <p className="mt-2 text-muted-foreground">
+            오늘의 기록이 저장되었습니다
+          </p>
+        </div>
+
         <SessionSummaryCard summary={journal.summary} />
-        <div className="flex gap-3">
+
+        <div className="flex gap-3 justify-center">
           <Link href="/dashboard">
-            <Button variant="outline">
+            <Button variant="outline" size="lg">
               <ArrowLeft className="mr-1.5 h-4 w-4" />
               돌아가기
             </Button>
           </Link>
           <Button
+            size="lg"
             onClick={() => {
               startedRef.current = false;
               lastAiMessageRef.current = "";
@@ -273,9 +285,6 @@ export function JournalPanel() {
       {/* 헤더 */}
       <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
           <h1 className="text-lg font-semibold">하루의 정리</h1>
           <ModeIndicator mode={journal.mode} />
         </div>
