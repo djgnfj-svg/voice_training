@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func as sa_func
+from sqlalchemy import select, update, func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
@@ -209,7 +209,17 @@ async def send_message(
             # Update session counters
             session.message_count = state["message_count"]
             if session.free_messages_used < FREE_MESSAGE_LIMIT:
-                session.free_messages_used = session.free_messages_used + 1
+                # Atomic increment — race condition 방어
+                result = await db.execute(
+                    update(JournalSession)
+                    .where(
+                        JournalSession.id == session_id,
+                        JournalSession.free_messages_used < FREE_MESSAGE_LIMIT,
+                    )
+                    .values(free_messages_used=JournalSession.free_messages_used + 1)
+                )
+                if result.rowcount > 0:
+                    session.free_messages_used += 1
             else:
                 session.credits_charged = session.credits_charged + COST_PER_MESSAGE
 
