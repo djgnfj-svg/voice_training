@@ -16,7 +16,7 @@ import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-
 import { useToast } from '@/hooks/useToast';
 import {
   Sparkles, ArrowRight, SkipForward, PlayCircle, BookOpen, Bot,
-  Mic, History, Upload, FileText, CheckCircle, Loader2, Trash2, Pencil,
+  Mic, Upload, FileText, CheckCircle, Loader2, Trash2, Pencil,
   ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';

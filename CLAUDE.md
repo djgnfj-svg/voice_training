@@ -47,8 +47,8 @@
 - SQLAlchemy / Prisma 호환 PostgreSQL (Supabase)
 - NextAuth JWE 토큰 복호화: `joserfc` + HKDF (Python 네이티브, Node.js 서브프로세스 불필요)
 - Anthropic Claude API — ANALYSIS / EVALUATION / QUESTION_GEN: claude-haiku-4-5
-- **LangGraph** — 에이전트 면접 오케스트레이션 (상태 머신)
-- **pgvector** — 사용자 프로필 RAG (OpenAI text-embedding-3-small)
+- **LangGraph** — 에이전트 오케스트레이션 (면접, 저널, 학습 — 상태 머신)
+- **pgvector** — RAG (프로필 + 저널 임베딩, OpenAI text-embedding-3-small)
 - Edge TTS (`msedge-tts`) — 음성: `ko-KR-HyunsuNeural`
 - Tavily (선택적 — 심층 기업 분석용 웹 검색)
 - Whisper API (선택적 — 음성인식, 없으면 Web Speech API만 사용)
@@ -69,8 +69,8 @@
     - 훅: `hooks/useMicrophoneCheck.ts` (getUserMedia + AudioContext + AnalyserNode)
     - UI: `components/interview/mic-check-dialog.tsx` (shadcn Dialog)
 - **면접 모드 2종** (셋업에서 카드 선택):
-  - **AI 코치 모드**: 에이전트 기반 동적 면접. 프로필 RAG로 사용자 기억, 완전 동적 질문 생성, 꼬리질문 자동
-  - **모범답안 학습 모드**: AI가 질문+모범답안 생성 → 음성 연습 → 모범답안 공개
+  - **AI 코치 면접**: 에이전트 기반 동적 면접. 프로필 RAG로 사용자 기억, 완전 동적 질문 생성, 꼬리질문 자동
+  - **모범답안 학습**: AI가 질문+모범답안 생성 → 음성 연습 → 모범답안 공개
 - **AI 코치 면접 (에이전트 시스템)**:
   - 3개 에이전트: 프로필(RAG) + 면접관(질문생성/흐름결정) + 평가(답변평가/리포트)
   - 오케스트레이터: LangGraph 상태 머신 (규칙 기반 분기, LLM 호출 없음)
@@ -79,7 +79,7 @@
   - 꼬리질문: depth < 80이면 자동 생성 (최대 2회)
   - SSE 스트림: 프론트에 실시간 질문/평가 전달
   - 세션 종료 시 프로필 자동 업데이트 (인사이트 추출 → RAG 저장)
-  - 코드: `backend/app/agent/` (state, nodes, graph, profile_agent, interviewer_agent, evaluator_agent, embeddings)
+  - 코드: `backend/app/agent/` (state, nodes, profile_agent, interviewer_agent, evaluator_agent, embeddings)
   - 프롬프트: `backend/app/prompts/agent.py`
   - API: `/api/agent-interview/{start,answer,skip,end,{id}}`, `/api/profile`, `/api/profile/context`
   - UI: `frontend/src/components/agent-interview/`, `frontend/src/app/(authenticated)/agent-interview/`
@@ -100,7 +100,9 @@
   - `components/onboarding/welcome-dialog.tsx`
 
 ## 레이아웃
-- **사이드바**: `components/layout/sidebar.tsx` — 대시보드, 면접 시작, 모범답안, 이력서 관리, 크레딧, 면접 기록
+- **사이드바**: `components/layout/sidebar.tsx` — 대시보드, 면접 연습, 하루의 정리, 오늘의 학습 (4개 단일 항목)
+- **면접 연습 페이지**: 탭 구조 — [면접] (셋업 + 면접 기록 인라인) / [이력서 관리]. `/profile` → `/interview/setup?tab=resume`, `/history` → `/interview/setup` 리다이렉트
+- **히스토리 인라인**: 하루의 정리, 오늘의 학습, 면접 기록 모두 랜딩 페이지에 5건 미리보기 + 더보기 버튼
 - **푸터**: `components/layout/footer.tsx` — 문의 이메일 + 저작권 (인증된 레이아웃 하단)
 
 ## 평가 프롬프트 (`backend/app/prompts/evaluation.py`)
@@ -128,36 +130,63 @@
   - 멱등성: `orderId`를 Toss `Idempotency-Key`로 전달
   - Toss 응답 검증: `totalAmount`/`orderId` 이중 교차 검증. FAILED 주문 복구 시에도 orderId 교차 검증
 
-## 멀티 종목 학습 시스템
-- **Subject** — 학습 종목 (시스템 7개 + 커스텀). 시스템: CS기초, JavaScript, React, Next.js, TypeScript심화, DB심화, DevOps
-- **Topic** — 종목 내 세부 개념 (난이도, keyPoints). 커스텀 종목 생성 시 AI가 자동 추출
-- **UserKnowledge** — 사용자별 토픽별 숙련도 (0-100, SM-2 간소화 간격 반복)
-- **LearningSession** — 학습 세션 (mode: practice/review/quiz, 크레딧 10코인)
-- **LearningItem** — 세션 내 개별 문제 + 평가 결과
-- **DailyProgress** — 일별 학습 요약 (세션수, 문제수, 정답수, 학습시간, 스트릭)
-- **API**: `/api/subjects`, `/api/learning/{setup,evaluate,complete}`, `/api/knowledge`, `/api/progress/{daily,streak}`
-- **UI**: `/learn` (종목 그리드), `/learn/[id]` (종목 대시보드), `/learn/[id]/session` (음성 학습), `/progress` (현황)
+## 오늘의 학습 (Nightly Study) 시스템
+- **Subject** — 학습 종목 (시스템 7개 + 커스텀, parentId 계층 구조). 시스템: CS기초, JavaScript, React, Next.js, TypeScript심화, DB심화, DevOps
+- **Topic** — 종목 내 세부 개념 (난이도, keyPoints, metadata)
+- **UserKnowledge** — 사용자별 토픽별 숙련도 (proficiency 0-100, successCount, failureCount, streakCount, nextReviewAt)
+- **LearningAgentSession** — 학습 에이전트 세션 (userId, topic, status, llmCallCount, creditDeducted, isFreeSession)
+- **LearningAgentMessage** — 학습 대화 메시지 (sessionId, messageIndex, role, content, phase, assessment)
+- **DailyProgress** — 일별 학습 요약 (totalSessions, totalQuestions, totalCorrect, totalMinutes, topicsStudied[], subjectsStudied[], streakDay)
+- **API**: `/api/nightly-study/{start, {session_id}/respond, {session_id}/end, status, history}`
+- **UI**: `/nightly-study`
+- 코드: `backend/app/agent/` (learning_nodes, learning_planner, learning_state, tutor_agent)
+
+## 하루의 정리 (Journal) 시스템
+- **개요**: AI 대화형 음성 일기. 듀얼 모드(일기/상담) 자동 전환, pgvector RAG로 과거 대화 기억
+- **듀얼 모드**:
+  - **일기 모드**: 가벼운 반말 대화, 일상 이벤트 기록 ("친구" 페르소나)
+  - **상담 모드**: 공감적 존댓말, 깊은 감정 탐색 (키워드 감지 + LLM 분류)
+- **과금**: 세션당 10개 무료 메시지, 이후 메시지당 1크레딧
+- **에이전트** (`backend/app/agent/`):
+  - `journal_state.py` — 상태 머신 (세션, 대화, 모드, RAG 컨텍스트)
+  - `journal_nodes.py` — 노드 오케스트레이션 (plan → action → plan, 최대 3루프)
+  - `journal_planner.py` — LLM 기반 행동 결정 (search_past/classify_mode/respond)
+  - `journal_router_agent.py` — 일기/상담 모드 분류기
+  - `journal_extractor.py` — 인사이트 추출 → RAG 저장 (비동기)
+  - `journal_summarizer.py` — 세션 요약 + 기분 + 하이라이트 생성
+  - `journal_rag.py` — pgvector 코사인 유사도 검색, 30일 윈도우, 유사 항목 upsert (>=0.85)
+- **프롬프트**: `backend/app/prompts/journal.py`
+- **API**: `/api/journal/{start, {session_id}/message, {session_id}/end, history, {session_id}}`
+- **UI**: `/journal` (메인), `/journal/history` (지난 기록)
+  - `components/journal/` (journal-panel, journal-message, mode-indicator, session-summary-card, voice-input-bar)
+  - `hooks/useJournalSession.ts`, `lib/journal-api.ts`
 
 ## DB 모델 (핵심)
 - `User` — 계정 (Google OAuth + 이메일/비밀번호 로그인, creditBalance, freeTrialUsed)
 - `Account` — OAuth 계정 (PrismaAdapter 관리)
 - `Resume` — 복수 이력서 (userId, name, parsedData, fileUrl은 optional). `GET /api/resume?detail=true`로 parsedData 포함 조회
 - `JobPosting` — 채용공고
-- `InterviewSession` — 면접 세션 (resumeId 필수, jobPostingId 선택, creditDeducted, textMode)
+- `InterviewSession` — 면접 세션 (userId, resumeId 필수, jobPostingId 선택, type, categories[], difficulty, status, creditDeducted, textMode, overallScore, reportData, durationSeconds, totalQuestions)
 - `InterviewAnswer` — 답변/평가 (audioUrl: 녹음 파일 경로)
 - `CreditTransaction` — 크레딧 거래 내역 (amount, balance, type: CreditTxType, referenceId)
-- `PaymentOrder` — Toss 결제 주문 (orderId, paymentKey, amount, credits, status: PENDING/DONE/FAILED)
+- `PaymentOrder` — Toss 결제 주문 (orderId, paymentKey, amount, credits, status: PENDING/DONE/FAILED/CANCELED)
 - `Coupon` — 쿠폰 (code unique, credits, maxUses, usedCount, isActive, expiresAt)
 - `CouponUsage` — 쿠폰 사용 기록 (couponId+userId unique → 중복 사용 방지)
 - `Subject` — 학습 종목 (slug unique, isSystem, parentId 계층)
 - `Topic` — 종목 내 토픽 (difficulty, keyPoints[])
-- `UserKnowledge` — 사용자별 토픽별 학습 기억 (proficiency, streak, nextReviewAt)
-- `LearningSession` — 학습 세션 (subjectId, mode, correctCount)
-- `LearningItem` — 학습 문제 (topicId, evaluation JSON, isCorrect)
+- `UserKnowledge` — 사용자별 토픽별 학습 기억 (proficiency, successCount, failureCount, streakCount, nextReviewAt)
+- `LearningAgentSession` — 학습 에이전트 세션 (userId, topic, status, llmCallCount, creditDeducted)
+- `LearningAgentMessage` — 학습 대화 메시지 (sessionId, messageIndex, role, content, phase, assessment)
 - `DailyProgress` — 일별 진도 (userId+date unique)
 - `AgentInterviewSession` — 에이전트 면접 세션 (resumeId, jobPostingId, maxQuestions, status, reportData)
 - `AgentInterviewMessage` — 에이전트 면접 메시지 (sessionId, messageIndex, role, content, evaluation JSON)
 - `UserProfileEmbedding` — 사용자 프로필 벡터 (userId, category, content, embedding VECTOR(1536), metadata)
+- `JournalSession` — 저널 세션 (userId, status, messageCount, freeMessagesUsed, creditsCharged, summary)
+- `JournalMessage` — 저널 대화 메시지 (sessionId, messageIndex, role, content, mode: journal/counseling)
+- `journal_embeddings` — 저널 RAG 벡터 (userId, category, content, embedding VECTOR(1536), metadata). 카테고리: emotion/event/growth/concern/relationship/goal
+- `ActivityLog` + `ActivityItem` — 활동 추적 로그
+- `AnswerAssistSession` + `AnswerAssistItem` — AI 답변 도우미 세션
+- `QuestionBank` — 문제은행 (category, subcategory, difficulty, questionText, keyPoints)
 
 ## 배포
 - **프론트엔드**: Vercel, 리전: `icn1` (인천/서울) — `vercel.json`
@@ -165,7 +194,7 @@
 - **프로덕션 도메인**: `reseeall.com`
 - `BACKEND_URL` 환경변수로 FastAPI 주소 지정
 - **CI/CD**: `deploy.yml`은 `ci.yml` 통과 후 배포 (`needs: ci`). CI는 프론트엔드 lint/typecheck/build + 백엔드 import smoke test
-- **리소스 제한**: nginx 128M, frontend 512M, backend 1G
+- **리소스 제한** (prod만): nginx 128M, frontend 512M, backend 1G
 - **nginx**: `/api/auth` rate limit 5r/s, `/api/` rate limit 10r/s
 - **음성 파일**: Docker named volume (`audio-storage`) → 재배포 시 유지
 
