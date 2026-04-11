@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
@@ -280,21 +280,35 @@ async def respond_to_session(
 
                 session.status = "completed"
 
-                # Deduct credits for paid sessions
+                # Deduct credits for paid sessions (atomic flag)
                 if state.get("credit_activated") and not session.credit_deducted:
-                    try:
-                        await deduct_for_feature(
-                            db, user.id, session_id,
-                            "학습 에이전트 세션", CREDIT_COSTS["SESSION"],
-                            tx_type="LEARNING_DEBIT",
+                    flag_result = await db.execute(
+                        update(LearningAgentSession)
+                        .where(
+                            LearningAgentSession.id == session_id,
+                            LearningAgentSession.credit_deducted == False,  # noqa: E712
                         )
-                        session.credit_deducted = True
-                    except Exception:
-                        logger.exception("Credit deduction failed in respond wrap_up")
-                        session.status = "abandoned"
-                        await db.commit()
-                        yield {"event": "error", "data": json.dumps({"error": "크레딧 차감에 실패했습니다"})}
-                        return
+                        .values(credit_deducted=True)
+                    )
+                    if flag_result.rowcount > 0:
+                        try:
+                            await deduct_for_feature(
+                                db, user.id, session_id,
+                                "학습 에이전트 세션", CREDIT_COSTS["SESSION"],
+                                tx_type="LEARNING_DEBIT",
+                            )
+                            session.credit_deducted = True
+                        except Exception:
+                            logger.exception("Credit deduction failed in respond wrap_up")
+                            await db.execute(
+                                update(LearningAgentSession)
+                                .where(LearningAgentSession.id == session_id)
+                                .values(credit_deducted=False)
+                            )
+                            session.status = "abandoned"
+                            await db.commit()
+                            yield {"event": "error", "data": json.dumps({"error": "크레딧 차감에 실패했습니다"})}
+                            return
 
                 # Save activity log
                 await _save_activity(db, user.id, session, state.get("conversation_history", []), summary)
@@ -434,21 +448,35 @@ async def end_learning_session(
             # Mark session completed
             session.status = "completed"
 
-            # Deduct credits for paid sessions (after AI success)
+            # Deduct credits for paid sessions (atomic flag)
             if state.get("credit_activated") and not session.credit_deducted:
-                try:
-                    await deduct_for_feature(
-                        db, user.id, session_id,
-                        "학습 에이전트 세션", CREDIT_COSTS["SESSION"],
-                        tx_type="LEARNING_DEBIT",
+                flag_result = await db.execute(
+                    update(LearningAgentSession)
+                    .where(
+                        LearningAgentSession.id == session_id,
+                        LearningAgentSession.credit_deducted == False,  # noqa: E712
                     )
-                    session.credit_deducted = True
-                except Exception:
-                    logger.exception("Failed to deduct credits for learning session")
-                    session.status = "abandoned"
-                    await db.commit()
-                    yield {"event": "error", "data": json.dumps({"error": "크레딧 차감에 실패했습니다"})}
-                    return
+                    .values(credit_deducted=True)
+                )
+                if flag_result.rowcount > 0:
+                    try:
+                        await deduct_for_feature(
+                            db, user.id, session_id,
+                            "학습 에이전트 세션", CREDIT_COSTS["SESSION"],
+                            tx_type="LEARNING_DEBIT",
+                        )
+                        session.credit_deducted = True
+                    except Exception:
+                        logger.exception("Failed to deduct credits for learning session")
+                        await db.execute(
+                            update(LearningAgentSession)
+                            .where(LearningAgentSession.id == session_id)
+                            .values(credit_deducted=False)
+                        )
+                        session.status = "abandoned"
+                        await db.commit()
+                        yield {"event": "error", "data": json.dumps({"error": "크레딧 차감에 실패했습니다"})}
+                        return
 
             # Save activity log
             await _save_activity(db, user.id, session, state.get("conversation_history", []), summary)
