@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -38,7 +38,7 @@ async def search_journal(
 
     if since_date:
         conditions.append('"createdAt" >= :since_date')
-        params["since_date"] = since_date.isoformat()
+        params["since_date"] = since_date
 
     where_clause = " AND ".join(conditions)
 
@@ -128,6 +128,18 @@ async def upsert_journal_embedding(
         return new_id
 
 
+async def search_past_context(
+    db: AsyncSession,
+    user_id: str,
+    query: str,
+    days: int = 30,
+    top_k: int = 5,
+) -> list[dict]:
+    """Search journal embeddings from the past N days by similarity."""
+    since = date.today() - timedelta(days=days)
+    return await search_journal(db, user_id, query, top_k=top_k, since_date=since)
+
+
 async def load_today_context(
     db: AsyncSession,
     user_id: str,
@@ -142,7 +154,7 @@ async def load_today_context(
               AND DATE("createdAt") = :today
             ORDER BY "createdAt" DESC
         """),
-        {"user_id": user_id, "today": today.isoformat()},
+        {"user_id": user_id, "today": today},
     )
     rows = result.fetchall()
     return [

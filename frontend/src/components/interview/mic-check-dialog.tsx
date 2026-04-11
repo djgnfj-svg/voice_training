@@ -26,9 +26,19 @@ interface MicCheckDialogProps {
   onConfirm: () => void;
   onTextMode?: () => void;
   loading: boolean;
+  title?: string;
+  description?: string;
+  confirmLabel?: string;
+  loadingLabel?: string;
 }
 
-export function MicCheckDialog({ open, onOpenChange, onConfirm, onTextMode, loading }: MicCheckDialogProps) {
+export function MicCheckDialog({
+  open, onOpenChange, onConfirm, onTextMode, loading,
+  title = '마이크 확인',
+  description = '면접을 시작하기 전에 마이크가 정상 동작하는지 확인합니다.',
+  confirmLabel = '면접 시작',
+  loadingLabel = 'AI가 면접을 설계하고 있습니다...',
+}: MicCheckDialogProps) {
   const {
     status,
     level,
@@ -65,10 +75,10 @@ export function MicCheckDialog({ open, onOpenChange, onConfirm, onTextMode, load
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mic className="h-5 w-5" />
-            마이크 확인
+            {title}
           </DialogTitle>
           <DialogDescription>
-            면접을 시작하기 전에 마이크가 정상 동작하는지 확인합니다.
+            {description}
           </DialogDescription>
         </DialogHeader>
 
@@ -183,12 +193,12 @@ export function MicCheckDialog({ open, onOpenChange, onConfirm, onTextMode, load
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  AI가 면접을 설계하고 있습니다...
+                  {loadingLabel}
                 </>
               ) : (
                 <>
                   <Mic className="mr-2 h-4 w-4" />
-                  면접 시작
+                  {confirmLabel}
                 </>
               )}
             </Button>

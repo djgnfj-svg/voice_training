@@ -30,5 +30,11 @@ class JournalState(TypedDict, total=False):
     # 요약
     session_summary: str | None
 
+    # 에이전트 루프
+    past_context: list[dict]  # RAG 30일 검색 결과
+    strategy: str  # planner 결정 전략 (deepen/new_topic/recall_past/empathize)
+    loop_count: int  # 현재 루프 횟수 (최대 3)
+    actions_taken: list[str]  # 수행한 행동 목록
+
     # SSE 이벤트 큐
     pending_events: list[dict]

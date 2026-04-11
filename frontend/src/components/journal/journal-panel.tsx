@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useJournalSession } from "@/hooks/useJournalSession";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
@@ -12,42 +14,76 @@ import { JournalMessage } from "@/components/journal/journal-message";
 import { ModeIndicator } from "@/components/journal/mode-indicator";
 import { SessionSummaryCard } from "@/components/journal/session-summary-card";
 import { VoiceInputBar } from "@/components/journal/voice-input-bar";
-import { Loader2, Square } from "lucide-react";
+import { MicCheckDialog } from "@/components/interview/mic-check-dialog";
+import { Loader2, Square, ArrowLeft, Play, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const SILENCE_TIMEOUT_MS = 2000;
+
+function stripEmoji(text: string): string {
+  return text
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
 export function JournalPanel() {
   const journal = useJournalSession();
   const speech = useSpeechRecognition();
   const tts = useTextToSpeech();
   const { toast } = useToast();
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
-  const lastAiMessageRef = useRef<string>("");
+  const lastAiMessageRef = useRef("");
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTranscriptRef = useRef("");
+  const micCheckedRef = useRef(false);
+  const journalPhaseRef = useRef(journal.phase);
+  journalPhaseRef.current = journal.phase;
 
-  // Auto-scroll on new messages
+  const [voiceState, setVoiceState] = useState<"pending" | "mic_check" | "ready">("pending");
+  micCheckedRef.current = voiceState === "ready";
+
+  const liveText = speech.isListening
+    ? (speech.transcript + " " + speech.interimTranscript).trim()
+    : "";
+
+  // ── Auto-scroll ──
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [journal.messages]);
+  }, [journal.messages, liveText]);
 
-  // Start session on mount
+  // ── 1단계: 세션 시작 (마운트 시 1회) ──
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
     journal.start();
   }, [journal.start]);
 
-  // TTS for AI responses
+  // ── 2단계: active 진입 시 마이크 흐름 결정 ──
   useEffect(() => {
-    const lastMsg = journal.messages[journal.messages.length - 1];
-    if (
-      lastMsg?.role === "assistant" &&
-      lastMsg.content !== lastAiMessageRef.current
-    ) {
-      lastAiMessageRef.current = lastMsg.content;
-      tts.speak(lastMsg.content);
-    }
-  }, [journal.messages, tts]);
+    if (journal.phase !== "active" || voiceState !== "pending") return;
 
-  // Inactivity timer
+    if (journal.resumed) {
+      // 이어하기 → 마이크 체크 스킵
+      setVoiceState("ready");
+    } else {
+      // 신규 → 마이크 확인
+      setVoiceState("mic_check");
+    }
+  }, [journal.phase, journal.resumed, voiceState]);
+
+  // ── 3단계: ready → 리스닝 시작 ──
+  useEffect(() => {
+    if (voiceState !== "ready") return;
+    if (journal.phase !== "active") return;
+    if (tts.isSpeaking || speech.isListening) return;
+
+    speech.startListening();
+  }, [voiceState, journal.phase, tts.isSpeaking, speech.isListening, speech]);
+
+  // ── Inactivity timer ──
   const handleWarning = useCallback(() => {
     toast({
       title: "오늘은 여기까지 할까요?",
@@ -55,65 +91,197 @@ export function JournalPanel() {
     });
   }, [toast]);
 
+  const handleEnd = useCallback(() => {
+    speech.stopListening();
+    tts.stop();
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    journal.end();
+  }, [speech, tts, journal]);
+
   const inactivity = useInactivityTimer({
     timeoutMs: 120000,
     warningMs: 10000,
     onWarning: handleWarning,
-    onTimeout: journal.end,
-    enabled: journal.phase === "active",
+    onTimeout: handleEnd,
+    enabled: journal.phase === "active" && voiceState === "ready",
   });
 
-  const handleSubmit = useCallback(
-    (text: string) => {
+  // ── 마이크 확인 완료 ──
+  const handleMicConfirm = useCallback(() => {
+    setVoiceState("ready");
+  }, []);
+
+  // ── 침묵 감지 → 자동 전송 ──
+  useEffect(() => {
+    if (!speech.isListening) return;
+
+    const currentText = speech.transcript + speech.interimTranscript;
+    if (currentText === lastTranscriptRef.current) return;
+    lastTranscriptRef.current = currentText;
+
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+
+    if (!speech.transcript.trim()) return;
+
+    silenceTimerRef.current = setTimeout(() => {
+      const text = speech.transcript.trim();
+      if (!text) return;
+
+      speech.stopListening();
       const normalized = normalizeTranscript(text);
-      if (!normalized) return;
-      journal.sendMessage(normalized);
       speech.resetTranscript();
+      lastTranscriptRef.current = "";
+
+      if (!normalized) {
+        if (micCheckedRef.current && !tts.isSpeaking) {
+          speech.startListening();
+        }
+        return;
+      }
+
+      journal.sendMessage(normalized);
       inactivity.resetTimer();
-    },
-    [journal, speech, inactivity],
-  );
+    }, SILENCE_TIMEOUT_MS);
 
-  // Completed state — show summary
-  if (journal.phase === "completed" && journal.summary) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center p-6">
-        <SessionSummaryCard summary={journal.summary} />
-        <Button
-          className="mt-4"
-          variant="outline"
-          onClick={() => {
-            startedRef.current = false;
-            journal.start();
-          }}
-        >
-          새 대화 시작
-        </Button>
-      </div>
-    );
-  }
+    return () => {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+    };
+  }, [speech.transcript, speech.interimTranscript, speech.isListening, speech, tts.isSpeaking, journal, inactivity]);
 
-  // Loading state
-  if (journal.phase === "starting" || journal.phase === "idle") {
+  // ── AI 응답 → TTS → 끝나면 리스닝 재개 ──
+  useEffect(() => {
+    const lastMsg = journal.messages[journal.messages.length - 1];
+    if (!lastMsg || lastMsg.role !== "assistant") return;
+    if (lastMsg.content === lastAiMessageRef.current) return;
+    lastAiMessageRef.current = lastMsg.content;
+
+    speech.stopListening();
+
+    const ttsText = stripEmoji(lastMsg.content);
+    if (!ttsText) return;
+
+    const resumeListening = () => {
+      if (journalPhaseRef.current === "active" && micCheckedRef.current) {
+        speech.resetTranscript();
+        lastTranscriptRef.current = "";
+        speech.startListening();
+      }
+    };
+
+    tts.speak(ttsText).then(resumeListening).catch(resumeListening);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [journal.messages]);
+
+  // ══════════════════════════════════════
+  // 렌더링
+  // ══════════════════════════════════════
+
+  // ── 로딩 ──
+  if (journal.phase === "idle" || journal.phase === "starting") {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
+  // ── 이전 세션 발견 → 선택 화면 ──
+  if (journal.phase === "choose") {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
+        <Card className="w-full max-w-sm">
+          <CardHeader className="text-center">
+            <CardTitle className="text-lg">이전 대화가 있어요</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              오늘 나눴던 대화를 이어할 수 있어요
+            </p>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <Button onClick={journal.resumeSession} className="w-full gap-2">
+              <Play className="h-4 w-4" />
+              이어서 하기
+            </Button>
+            <Button onClick={journal.startFresh} variant="outline" className="w-full gap-2">
+              <Plus className="h-4 w-4" />
+              새로 시작
+            </Button>
+            <Link href="/dashboard" className="w-full">
+              <Button variant="ghost" className="w-full gap-2">
+                <ArrowLeft className="h-4 w-4" />
+                돌아가기
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── 완료 화면 ──
+  if (journal.phase === "completed" && journal.summary) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
+        <SessionSummaryCard summary={journal.summary} />
+        <div className="flex gap-3">
+          <Link href="/dashboard">
+            <Button variant="outline">
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              돌아가기
+            </Button>
+          </Link>
+          <Button
+            onClick={() => {
+              startedRef.current = false;
+              lastAiMessageRef.current = "";
+              setVoiceState("pending");
+              journal.start();
+            }}
+          >
+            새 대화 시작
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 메인 대화 화면 ──
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
+      {/* 마이크 확인 (신규 세션만) */}
+      {voiceState === "mic_check" && (
+        <MicCheckDialog
+          open
+          onOpenChange={() => {}}
+          onConfirm={handleMicConfirm}
+          loading={false}
+          title="마이크 확인"
+          description="하루의 정리는 음성으로 진행됩니다. 마이크가 잘 동작하는지 확인해주세요."
+          confirmLabel="시작하기"
+        />
+      )}
+
+      {/* 헤더 */}
+      <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
         <div className="flex items-center gap-3">
+          <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
           <h1 className="text-lg font-semibold">하루의 정리</h1>
           <ModeIndicator mode={journal.mode} />
         </div>
         <Button
           variant="ghost"
           size="sm"
-          onClick={journal.end}
+          onClick={handleEnd}
           disabled={journal.phase === "summarizing"}
         >
           {journal.phase === "summarizing" ? (
@@ -125,43 +293,56 @@ export function JournalPanel() {
         </Button>
       </div>
 
-      {/* Messages */}
+      {/* 메시지 영역 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {journal.messages.length === 0 && journal.phase === "active" && (
+        {journal.messages.length === 0 && !liveText && voiceState === "ready" && (
           <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-            마이크를 누르고 오늘 하루를 이야기해보세요
+            편하게 오늘 하루를 이야기해보세요
           </div>
         )}
+
         {journal.messages.map((msg, i) => (
           <JournalMessage key={i} role={msg.role} content={msg.content} mode={msg.mode} />
         ))}
+
         {journal.phase === "responding" && (
           <div className="flex justify-start">
             <div className="rounded-2xl bg-muted px-4 py-3">
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           </div>
         )}
+
+        {liveText && (
+          <div className="flex justify-end">
+            <div className={cn(
+              "max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+              "bg-primary/70 text-primary-foreground",
+            )}>
+              {liveText}
+              <span className="inline-block ml-1 w-0.5 h-4 bg-primary-foreground/60 animate-pulse align-text-bottom" />
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Error */}
+      {/* 에러 */}
       {journal.error && (
-        <div className="border-t bg-destructive/10 px-4 py-2 text-sm text-destructive">
+        <div className="border-t bg-destructive/10 px-4 py-2 text-sm text-destructive shrink-0">
           {journal.error}
         </div>
       )}
 
-      {/* Voice Input */}
-      <VoiceInputBar
-        onSubmit={handleSubmit}
-        isListening={speech.isListening}
-        transcript={speech.transcript}
-        interimTranscript={speech.interimTranscript}
-        onStartListening={speech.startListening}
-        onStopListening={speech.stopListening}
-        disabled={journal.phase !== "active"}
-      />
+      {/* 음성 상태 인디케이터 */}
+      <div className="shrink-0">
+        <VoiceInputBar
+          isListening={speech.isListening}
+          isSpeaking={tts.isSpeaking}
+          isProcessing={journal.phase === "responding"}
+        />
+      </div>
     </div>
   );
 }

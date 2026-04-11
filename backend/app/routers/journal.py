@@ -167,14 +167,18 @@ async def send_message(
         "free_messages_used": session.free_messages_used,
         "ai_response": "",
         "session_summary": None,
+        "past_context": [],
+        "strategy": "",
+        "loop_count": 0,
+        "actions_taken": [],
         "pending_events": [],
     }
 
     async def event_generator():
         nonlocal state, next_index
         try:
-            # Route + respond
-            state = await journal_nodes.route_and_respond(state, db)
+            # Agent loop: plan → action → plan → ... → respond → extract
+            state = await journal_nodes.agent_loop(state, db)
             for ev in state.get("pending_events", []):
                 yield {"event": ev["event"], "data": json.dumps(ev["data"])}
             state["pending_events"] = []
@@ -211,12 +215,6 @@ async def send_message(
                 session.credits_charged = session.credits_charged + COST_PER_MESSAGE
 
             await db.commit()
-
-            # Extract (doesn't block response)
-            state["pending_events"] = []
-            state = await journal_nodes.extract(state, db)
-            for ev in state.get("pending_events", []):
-                yield {"event": ev["event"], "data": json.dumps(ev["data"])}
 
         except Exception:
             logger.exception("Journal message processing failed")
@@ -272,6 +270,10 @@ async def end_session(
         "free_messages_used": session.free_messages_used,
         "ai_response": "",
         "session_summary": None,
+        "past_context": [],
+        "strategy": "",
+        "loop_count": 0,
+        "actions_taken": [],
         "pending_events": [],
     }
 

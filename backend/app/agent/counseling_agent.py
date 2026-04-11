@@ -5,7 +5,7 @@ import logging
 
 from app.lib.anthropic_client import call_llm
 from app.config import settings
-from app.prompts.journal import COUNSELING_SYSTEM_PROMPT
+from app.prompts.journal import COUNSELING_SYSTEM_PROMPT, STRATEGY_INSTRUCTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -14,16 +14,34 @@ async def generate_response(
     messages: list[dict],
     user_message: str,
     journal_context: list[dict],
+    strategy: str = "empathize",
+    past_context: list[dict] | None = None,
 ) -> str:
-    """Generate counseling-mode response."""
+    """Generate counseling-mode response with strategy and past context."""
+    # 사용자 컨텍스트
     context_parts = []
     if journal_context:
         context_parts.append("사용자에 대해 알고 있는 정보:")
         for item in journal_context[:5]:
             context_parts.append(f"- [{item['category']}] {item['content']}")
-
     context_str = "\n".join(context_parts) if context_parts else ""
-    system = COUNSELING_SYSTEM_PROMPT.format(context=context_str)
+
+    # 전략 지시문
+    strategy_instruction = STRATEGY_INSTRUCTIONS.get(strategy, "")
+
+    # 과거 맥락
+    past_parts = []
+    if past_context:
+        past_parts.append("과거 대화에서 알게 된 정보:")
+        for item in past_context[:5]:
+            past_parts.append(f"- [{item['category']}] {item['content']}")
+    past_str = "\n".join(past_parts) if past_parts else ""
+
+    system = COUNSELING_SYSTEM_PROMPT.format(
+        strategy_instruction=strategy_instruction,
+        past_context=past_str,
+        context=context_str,
+    )
 
     conversation = ""
     for m in messages[-10:]:
