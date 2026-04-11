@@ -21,6 +21,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _rollback_session(db: AsyncSession, session_id: str) -> None:
+    """크레딧 차감 실패 시 이미 커밋된 세션 정리."""
+    await db.rollback()
+    await db.execute(
+        delete(InterviewAnswer).where(InterviewAnswer.session_id == session_id)
+    )
+    await db.execute(
+        delete(InterviewSession).where(InterviewSession.id == session_id)
+    )
+    await db.commit()
+
+
 # --- POST /api/interview/setup ---
 class SetupRequest(BaseModel):
     resumeId: str
@@ -117,29 +129,13 @@ async def setup_interview(
             db, user.id, session_id, credit_check["usingFreeTrial"]
         )
     except (InsufficientCreditsError, FreeTrialAlreadyUsedError):
-        # Rollback any partial transaction, then delete the already-committed session
-        await db.rollback()
-        await db.execute(
-            delete(InterviewAnswer).where(InterviewAnswer.session_id == session_id)
-        )
-        await db.execute(
-            delete(InterviewSession).where(InterviewSession.id == session_id)
-        )
-        await db.commit()
+        await _rollback_session(db, session_id)
         raise HTTPException(
             402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
         )
     except Exception:
         logger.exception("Credit deduction failed for session %s", session_id)
-        # 크레딧 차감 실패 시 세션 삭제 — 무료 이용 방지
-        await db.rollback()
-        await db.execute(
-            delete(InterviewAnswer).where(InterviewAnswer.session_id == session_id)
-        )
-        await db.execute(
-            delete(InterviewSession).where(InterviewSession.id == session_id)
-        )
-        await db.commit()
+        await _rollback_session(db, session_id)
         raise HTTPException(500, {"error": "CREDIT_DEDUCTION_FAILED"})
 
     return {"sessionId": session_id, "plan": plan, "questions": questions}
