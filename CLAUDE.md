@@ -54,8 +54,7 @@
 - Whisper API (선택적 — 음성인식, 없으면 Web Speech API만 사용)
 
 ### 프론트↔백엔드 통신
-- **Docker (dev/prod)**: nginx가 `/api/auth` → frontend, `/api/*` → backend로 라우팅
-- **Vercel 배포**: Next.js rewrite (`next.config.ts`)가 `/api/*` (auth 제외) → FastAPI(`BACKEND_URL`)로 프록시
+- **Docker**: nginx가 `/api/auth` → frontend, `/api/*` → backend로 라우팅
 - 유일한 Next.js API route: `/api/auth/[...nextauth]`
 
 ## 브랜드
@@ -189,14 +188,14 @@
 - `QuestionBank` — 문제은행 (category, subcategory, difficulty, questionText, keyPoints)
 
 ## 배포
-- **프론트엔드**: Vercel, 리전: `icn1` (인천/서울) — `vercel.json`
-- **백엔드**: EC2 Docker Compose (`docker-compose.prod.yml`)
-- **프로덕션 도메인**: `reseeall.com`
-- `BACKEND_URL` 환경변수로 FastAPI 주소 지정
-- **CI/CD**: `deploy.yml`은 `ci.yml` 통과 후 배포 (`needs: ci`). CI는 프론트엔드 lint/typecheck/build + 백엔드 import smoke test
-- **리소스 제한** (prod만): nginx 128M, frontend 512M, backend 1G
+- **방식**: 로컬 PC + Cloudflare Tunnel (PC 전원 켜져 있을 때만 서비스)
+- **도메인**: `jachana.com` (Cloudflare 관리)
+- **배포 설정**: `docker compose up -d` → `cloudflared tunnel run`
+- **터널 config**: `~/.cloudflared/config.yml` — `jachana.com` → `http://localhost:81`
+- **CI**: `.github/workflows/ci.yml` — PR/push 시 프론트엔드 lint/typecheck/build + 백엔드 import smoke test
 - **nginx**: `/api/auth` rate limit 5r/s, `/api/` rate limit 10r/s
-- **음성 파일**: Docker named volume (`audio-storage`) → 재배포 시 유지
+- **음성 파일**: Docker named volume (`audio-storage`)
+- **Supabase keep-alive**: `.github/workflows/keep-alive.yml` (5일마다 ping)
 
 ## 음성 처리
 - **transcript 정규화**: `frontend/src/lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 + `countFillerWords()` (필러워드 카운트, 클라이언트용)
@@ -211,8 +210,8 @@
   - `SpeechMetrics`: wpm (음절/분), fillerCount, silenceSec, silenceRatio, elapsedSec
 
 ## 환경 변수
-- `frontend/.env` — DB, NextAuth, Google OAuth, Toss, BACKEND_URL
+- `frontend/.env` — DB, NextAuth (`NEXTAUTH_URL=https://jachana.com`, `AUTH_TRUST_HOST=true`), Google OAuth, Toss, BACKEND_URL
 - `backend/.env` — DB, Anthropic API 키, Tavily, OpenAI (Whisper)
-- Vercel 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `NEXT_PUBLIC_TOSS_CLIENT_KEY`, `BACKEND_URL`
+- Frontend 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `NEXT_PUBLIC_TOSS_CLIENT_KEY`, `BACKEND_URL`
 - Backend 필수: `DATABASE_URL`, `NEXTAUTH_SECRET`, `ANTHROPIC_API_KEY`
 - Backend 선택: `ENVIRONMENT`, `TAVILY_API_KEY`, `OPENAI_API_KEY` (Whisper), `TOSS_SECRET_KEY`, `ADMIN_EMAILS`
