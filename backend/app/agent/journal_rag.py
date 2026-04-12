@@ -138,31 +138,3 @@ async def search_past_context(
     """Search journal embeddings from the past N days by similarity."""
     since = date.today() - timedelta(days=days)
     return await search_journal(db, user_id, query, top_k=top_k, since_date=since)
-
-
-async def load_today_context(
-    db: AsyncSession,
-    user_id: str,
-    today: date,
-) -> list[dict]:
-    """Load today's journal embeddings for context restoration."""
-    result = await db.execute(
-        text("""
-            SELECT id, category, content, metadata
-            FROM journal_embeddings
-            WHERE "userId" = :user_id
-              AND DATE("createdAt") = :today
-            ORDER BY "createdAt" DESC
-        """),
-        {"user_id": user_id, "today": today},
-    )
-    rows = result.fetchall()
-    return [
-        {
-            "id": str(row.id),
-            "category": row.category,
-            "content": row.content,
-            "metadata": row.metadata,
-        }
-        for row in rows
-    ]

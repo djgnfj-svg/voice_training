@@ -14,9 +14,6 @@ class JournalState(TypedDict, total=False):
     mode: Literal["journal", "counseling"]
     user_message: str  # 현재 사용자 입력
 
-    # RAG 컨텍스트 (세션 시작 시 로드)
-    journal_context: list[dict]  # 오늘 추출된 인사이트
-
     # 추출 상태
     extracted_count: int
 

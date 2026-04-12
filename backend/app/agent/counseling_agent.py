@@ -13,23 +13,16 @@ logger = logging.getLogger(__name__)
 async def generate_response(
     messages: list[dict],
     user_message: str,
-    journal_context: list[dict],
     strategy: str = "empathize",
     past_context: list[dict] | None = None,
 ) -> str:
-    """Generate counseling-mode response with strategy and past context."""
-    # 사용자 컨텍스트
-    context_parts = []
-    if journal_context:
-        context_parts.append("사용자에 대해 알고 있는 정보:")
-        for item in journal_context[:5]:
-            context_parts.append(f"- [{item['category']}] {item['content']}")
-    context_str = "\n".join(context_parts) if context_parts else ""
+    """Generate counseling-mode response with strategy and past context.
 
-    # 전략 지시문
+    Today's in-session context lives in `messages` — do NOT inject today's
+    RAG embeddings.
+    """
     strategy_instruction = STRATEGY_INSTRUCTIONS.get(strategy, "")
 
-    # 과거 맥락
     past_parts = []
     if past_context:
         past_parts.append("과거 대화에서 알게 된 정보:")
@@ -40,7 +33,6 @@ async def generate_response(
     system = COUNSELING_SYSTEM_PROMPT.format(
         strategy_instruction=strategy_instruction,
         past_context=past_str,
-        context=context_str,
     )
 
     conversation = ""

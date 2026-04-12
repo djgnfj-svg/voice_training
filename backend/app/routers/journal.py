@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update, func as sa_func
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
@@ -17,7 +17,6 @@ from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
 from app.agent import journal_nodes
 from app.agent.journal_state import JournalState
-from app.agent.journal_rag import load_today_context
 from app.models.journal import JournalSession, JournalMessage
 
 logger = logging.getLogger(__name__)
@@ -26,6 +25,7 @@ router = APIRouter()
 
 FREE_MESSAGE_LIMIT = 10
 COST_PER_MESSAGE = 1
+RESUME_WINDOW_MINUTES = 120  # 마지막 활동 후 2시간 초과 시 기존 세션 timeout → 새 세션
 
 
 # ---------- Schemas ----------
@@ -41,39 +41,52 @@ async def start_session(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Start or resume today's journal session."""
-    today = date.today()
+    """Start or resume journal session.
 
-    # Check for existing active session today
+    Resume policy: 마지막 활동 이후 2시간 이내인 active 세션만 이어간다.
+    2시간 초과면 기존 세션은 timeout 처리하고 새 세션을 만든다 —
+    오래된 맥락("오늘 피곤했다" 등)이 새 대화에 끌려오지 않도록 보장.
+    """
+    # Find most recent active session (날짜 제한 없음 — 시간 경과로 분리)
     result = await db.execute(
         select(JournalSession)
         .where(
             JournalSession.user_id == user.id,
             JournalSession.status == "active",
-            sa_func.date(JournalSession.created_at) == today,
         )
+        .order_by(JournalSession.updated_at.desc())
+        .limit(1)
         .options(selectinload(JournalSession.messages))
     )
     existing = result.scalar_one_or_none()
 
     if existing:
-        # Resume: load recent messages + today's context
+        messages = sorted(existing.messages, key=lambda m: m.message_index)
+        last_activity = messages[-1].created_at if messages else existing.created_at
+        now = datetime.utcnow()
+        elapsed = now - last_activity if last_activity else timedelta(0)
+
+        if elapsed > timedelta(minutes=RESUME_WINDOW_MINUTES):
+            # 오래된 세션 — timeout 처리하고 새로 시작
+            logger.info(
+                "[journal.start] timing out stale session=%s elapsed=%dmin",
+                existing.id, int(elapsed.total_seconds() // 60),
+            )
+            existing.status = "timeout"
+            await db.commit()
+            existing = None
+
+    if existing:
         messages = sorted(existing.messages, key=lambda m: m.message_index)
         recent = messages[-5:] if len(messages) > 5 else messages
-        context = await load_today_context(db, user.id, today)
-
         return {
             "sessionId": existing.id,
             "resumed": True,
             "messages": [
-                {
-                    "role": m.role,
-                    "content": m.content,
-                    "mode": m.mode,
-                }
+                {"role": m.role, "content": m.content, "mode": m.mode}
                 for m in recent
             ],
-            "context": [{"category": c["category"], "content": c["content"]} for c in context],
+            "context": [],
             "messageCount": existing.message_count,
             "freeMessagesUsed": existing.free_messages_used,
         }
@@ -86,14 +99,13 @@ async def start_session(
     )
     db.add(session)
     await db.commit()
-
-    context = await load_today_context(db, user.id, today)
+    logger.info("[journal.start] new session=%s user=%s", session_id, user.id)
 
     return {
         "sessionId": session_id,
         "resumed": False,
         "messages": [],
-        "context": [{"category": c["category"], "content": c["content"]} for c in context],
+        "context": [],
         "messageCount": 0,
         "freeMessagesUsed": 0,
     }
@@ -134,15 +146,13 @@ async def send_message(
         except InsufficientCreditsError:
             raise HTTPException(402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"})
 
-    # Rebuild conversation history from DB
+    # Rebuild conversation history from DB — 현재 세션 내 대화만 사용.
+    # 오늘 날짜의 다른 세션/RAG 임베딩은 주입하지 않는다 (세션 간 맥락 누수 방지).
     db_messages = sorted(session.messages, key=lambda m: m.message_index)
     conversation: list[dict] = [
         {"role": m.role, "content": m.content, "mode": m.mode}
         for m in db_messages
     ]
-
-    today = date.today()
-    journal_context = await load_today_context(db, user.id, today)
 
     # Determine current mode from last message
     current_mode = "journal"
@@ -157,10 +167,6 @@ async def send_message(
         "messages": conversation,
         "mode": current_mode,
         "user_message": body.message,
-        "journal_context": [
-            {"category": c["category"], "content": c["content"]}
-            for c in journal_context
-        ],
         "extracted_count": 0,
         "message_count": session.message_count,
         "free_messages_used": session.free_messages_used,
@@ -273,7 +279,6 @@ async def end_session(
         "messages": conversation,
         "mode": "journal",
         "user_message": "",
-        "journal_context": [],
         "extracted_count": 0,
         "message_count": session.message_count,
         "free_messages_used": session.free_messages_used,

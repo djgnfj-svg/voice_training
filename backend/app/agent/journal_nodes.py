@@ -67,7 +67,6 @@ async def plan(state: JournalState, db: AsyncSession) -> JournalState:
         user_message=state["user_message"],
         mode=state.get("mode", "journal"),
         recent_messages=state.get("messages", []),
-        today_context=state.get("journal_context", []),
         past_context=state.get("past_context", []),
         actions_taken=state.get("actions_taken", []),
     )
@@ -147,17 +146,16 @@ async def respond(state: JournalState, db: AsyncSession) -> JournalState:
     user_message = state["user_message"]
     mode = state.get("mode", "journal")
     strategy = state.get("strategy", "deepen")
-    journal_context = state.get("journal_context", [])
     past_context = state.get("past_context", [])
 
     if mode == "counseling":
         ai_response = await counseling_agent.generate_response(
-            messages, user_message, journal_context,
+            messages, user_message,
             strategy=strategy, past_context=past_context or None,
         )
     else:
         ai_response = await journal_agent.generate_response(
-            messages, user_message, journal_context,
+            messages, user_message,
             strategy=strategy, past_context=past_context or None,
         )
 

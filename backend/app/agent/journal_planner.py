@@ -17,7 +17,6 @@ async def plan_next_action(
     user_message: str,
     mode: str,
     recent_messages: list[dict],
-    today_context: list[dict],
     past_context: list[dict],
     actions_taken: list[str],
 ) -> dict:
@@ -30,12 +29,6 @@ async def plan_next_action(
         role_label = "사용자" if m.get("role") == "user" else "AI"
         recent_text += f"{role_label}: {m.get('content', '')}\n"
 
-    today_text = ""
-    if today_context:
-        for item in today_context[:5]:
-            today_text += f"- [{item['category']}] {item['content']}\n"
-    today_text = today_text or "(없음)"
-
     past_text = ""
     if past_context:
         for item in past_context[:5]:
@@ -46,7 +39,6 @@ async def plan_next_action(
 
     prompt = PLANNER_PROMPT.format(
         mode=mode,
-        today_context=today_text,
         past_context=past_text,
         recent_messages=recent_text or "(대화 시작)",
         user_message=user_message,
