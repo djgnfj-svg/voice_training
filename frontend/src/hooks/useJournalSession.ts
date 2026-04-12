@@ -4,7 +4,6 @@ import {
   startJournalSession,
   sendJournalMessage,
   endJournalSession,
-  type JournalMessageData,
   type JournalEndResponse,
 } from "@/lib/journal-api";
 
@@ -42,7 +41,7 @@ export function useJournalSession() {
     }
   }, []);
 
-  // 시작하기 → 기존 세션 있으면 자동 종료 후 새 세션 생성
+  // 시작하기 → 백엔드가 이전 active 세션을 백그라운드 마감하고 새 세션 반환
   const begin = useCallback(async () => {
     setPhase("starting");
     setError(null);
@@ -50,18 +49,9 @@ export function useJournalSession() {
 
     try {
       const data = await startJournalSession();
-
-      if (data.resumed && data.messages.length > 0) {
-        // 기존 세션 자동 종료 후 새 세션 시작
-        await endJournalSession(data.sessionId);
-        const newData = await startJournalSession();
-        setSessionId(newData.sessionId);
-      } else {
-        setSessionId(data.sessionId);
-      }
-
-      setMessageCount(0);
-      setFreeMessagesUsed(0);
+      setSessionId(data.sessionId);
+      setMessageCount(data.messageCount);
+      setFreeMessagesUsed(data.freeMessagesUsed);
       setMessages([]);
       setMode("journal");
       setPhase("active");

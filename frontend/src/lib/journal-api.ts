@@ -3,17 +3,8 @@ import { createSSEFromPost } from "@/lib/agent-interview-api";
 
 export interface JournalStartResponse {
   sessionId: string;
-  resumed: boolean;
-  messages: JournalMessageData[];
-  context: { category: string; content: string }[];
   messageCount: number;
   freeMessagesUsed: number;
-}
-
-export interface JournalMessageData {
-  role: "user" | "assistant";
-  content: string;
-  mode: "journal" | "counseling";
 }
 
 export interface JournalSessionSummary {
