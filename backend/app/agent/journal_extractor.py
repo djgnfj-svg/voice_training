@@ -48,7 +48,8 @@ async def extract_and_save(
         content = item.get("content", "")
         importance = item.get("importance", "low")
 
-        if not content or category not in VALID_CATEGORIES or importance == "low":
+        # RAG는 장기 기억 전용 — high만 저장 (일상 감정/사건 저장 방지)
+        if not content or category not in VALID_CATEGORIES or importance != "high":
             continue
 
         metadata = {
@@ -60,7 +61,12 @@ async def extract_and_save(
         try:
             await upsert_journal_embedding(db, user_id, category, content, metadata)
             saved += 1
+            logger.info("[journal.extract] saved category=%s content=%r", category, content[:80])
         except Exception:
             logger.exception("Failed to save journal embedding: %s", content[:50])
 
+    logger.info(
+        "[journal.extract] session=%s total_items=%d saved=%d",
+        session_id, len(items), saved,
+    )
     return saved
