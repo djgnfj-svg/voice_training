@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from app.lib.anthropic_client import call_llm, MODELS
+from app.lib.llm_client import call_llm, MODELS
 
 logger = logging.getLogger(__name__)
 

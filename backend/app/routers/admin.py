@@ -11,7 +11,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_admin_user
-from app.lib.anthropic_client import _get_client, MODELS
+from app.lib.llm_client import call_llm_stream
 from app.models.resume import Resume
 from app.prompts.cunning import build_cunning_suggest_prompt
 
@@ -70,18 +70,14 @@ async def cunning_suggest(
     )
 
     async def event_generator():
-        client = _get_client()
         try:
-            async with client.messages.stream(
-                model=MODELS["ANALYSIS"],
+            async for delta in call_llm_stream(
+                prompts["user"],
+                system=prompts["system"],
                 max_tokens=512,
                 temperature=0.7,
-                system=prompts["system"],
-                messages=[{"role": "user", "content": prompts["user"]}],
-            ) as stream:
-                async for event in stream:
-                    if event.type == "content_block_delta" and hasattr(event.delta, "text"):
-                        yield {"data": json.dumps({"text": event.delta.text})}
+            ):
+                yield {"data": json.dumps({"text": delta})}
             yield {"data": "[DONE]"}
         except Exception as e:
             logger.error("Cunning suggest streaming error: %s", e)

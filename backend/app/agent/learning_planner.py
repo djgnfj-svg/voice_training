@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 
-from app.lib.anthropic_client import call_llm_json
+from app.lib.llm_client import call_llm_json
 from app.config import settings
 from app.prompts.learning_agent import LEARNING_PLANNER_PROMPT
 

@@ -5,7 +5,7 @@ import json
 import logging
 
 from app.config import settings
-from app.lib.anthropic_client import call_llm_json
+from app.lib.llm_client import call_llm_json
 from app.prompts.agent import EVALUATOR_PROMPT, REPORT_PROMPT
 
 logger = logging.getLogger(__name__)

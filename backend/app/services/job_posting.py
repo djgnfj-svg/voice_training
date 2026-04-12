@@ -8,7 +8,7 @@ from uuid import uuid4
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.lib.anthropic_client import call_llm_json, MODELS
+from app.lib.llm_client import call_llm_json, MODELS
 from app.config import settings
 from app.models.interview import JobPosting
 from app.prompts.job_posting import JOB_POSTING_ANALYSIS_PROMPT, COMPANY_ANALYSIS_PROMPT

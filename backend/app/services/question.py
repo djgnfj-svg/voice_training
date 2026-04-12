@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.lib.anthropic_client import call_llm_json, MODELS
+from app.lib.llm_client import call_llm_json, MODELS
 from app.models.interview import InterviewSession, JobPosting
 from app.models.resume import Resume
 from app.prompts.question_generation import (

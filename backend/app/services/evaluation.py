@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.lib.anthropic_client import call_llm_json, MODELS
+from app.lib.llm_client import call_llm_json, MODELS
 from app.lib.transcript_server import correct_transcript
 from app.models.interview import InterviewSession, InterviewAnswer
 from app.prompts.evaluation import (

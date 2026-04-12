@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from app.lib.anthropic_client import call_llm
+from app.lib.llm_client import call_llm
 from app.config import settings
 from app.prompts.journal import COUNSELING_SYSTEM_PROMPT, STRATEGY_INSTRUCTIONS
 

@@ -13,7 +13,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_admin_user
-from app.lib.anthropic_client import _get_client, MODELS, call_llm_json
+from app.lib.llm_client import MODELS, call_llm_json, call_llm_stream
 from app.models.answer_assist import AnswerAssistSession, AnswerAssistItem
 from app.models.resume import Resume
 from app.prompts.answer_assist import (
@@ -238,20 +238,16 @@ async def chat_item(
     )
 
     async def event_generator():
-        client = _get_client()
         accumulated = ""
         try:
-            async with client.messages.stream(
-                model=MODELS["ANALYSIS"],
+            async for delta in call_llm_stream(
+                prompts["user"],
+                system=prompts["system"],
                 max_tokens=1024,
                 temperature=0.7,
-                system=prompts["system"],
-                messages=[{"role": "user", "content": prompts["user"]}],
-            ) as stream:
-                async for event in stream:
-                    if event.type == "content_block_delta" and hasattr(event.delta, "text"):
-                        accumulated += event.delta.text
-                        yield {"data": json.dumps({"text": event.delta.text})}
+            ):
+                accumulated += delta
+                yield {"data": json.dumps({"text": delta})}
 
             # Save AI response
             conversation.append({"role": "ai", "content": accumulated})
@@ -311,20 +307,16 @@ async def compile_item(
     )
 
     async def event_generator():
-        client = _get_client()
         accumulated = ""
         try:
-            async with client.messages.stream(
-                model=MODELS["ANALYSIS"],
+            async for delta in call_llm_stream(
+                prompts["user"],
+                system=prompts["system"],
                 max_tokens=2048,
                 temperature=0.5,
-                system=prompts["system"],
-                messages=[{"role": "user", "content": prompts["user"]}],
-            ) as stream:
-                async for event in stream:
-                    if event.type == "content_block_delta" and hasattr(event.delta, "text"):
-                        accumulated += event.delta.text
-                        yield {"data": json.dumps({"text": event.delta.text})}
+            ):
+                accumulated += delta
+                yield {"data": json.dumps({"text": delta})}
 
             # Save final answer
             item.final_answer = accumulated

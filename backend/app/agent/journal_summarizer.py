@@ -6,7 +6,7 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.lib.anthropic_client import call_llm_json
+from app.lib.llm_client import call_llm_json
 from app.config import settings
 from app.prompts.journal import SUMMARIZER_PROMPT
 from app.agent.journal_rag import upsert_journal_embedding

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
-from app.lib.anthropic_client import call_llm_json
+from app.lib.llm_client import call_llm_json
 from app.models.resume import Resume
 from app.prompts.resume import RESUME_PARSING_PROMPT
 

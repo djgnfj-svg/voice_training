@@ -5,7 +5,7 @@ import json
 import logging
 
 from app.config import settings
-from app.lib.anthropic_client import call_llm_json
+from app.lib.llm_client import call_llm_json
 from app.prompts.agent import (
     INTERVIEWER_QUESTION_PROMPT,
     INTERVIEWER_DECIDE_PROMPT,

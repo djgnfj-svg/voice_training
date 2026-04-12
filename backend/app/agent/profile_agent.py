@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.embeddings import create_embedding
 from app.config import settings
-from app.lib.anthropic_client import call_llm_json
+from app.lib.llm_client import call_llm_json
 
 logger = logging.getLogger(__name__)
 

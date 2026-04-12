@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.lib.anthropic_client import call_llm_json, MODELS
+from app.lib.llm_client import call_llm_json, MODELS
 from app.prompts.matching import MATCHING_ANALYSIS_PROMPT
 
 

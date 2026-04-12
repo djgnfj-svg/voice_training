@@ -45,7 +45,7 @@
 - FastAPI (Python)
 - SQLAlchemy / Prisma 호환 PostgreSQL (Supabase)
 - NextAuth JWE 토큰 복호화: `joserfc` + HKDF (Python 네이티브, Node.js 서브프로세스 불필요)
-- Anthropic Claude API — ANALYSIS / EVALUATION / QUESTION_GEN: claude-haiku-4-5
+- OpenAI API — 모든 LLM 호출 통합 (기본 `gpt-4o-mini`). `backend/.env`의 `AGENT_MODEL`로 런타임 교체 가능 (예: `gpt-4.1-mini`, `gpt-4.1-nano`). 공용 클라이언트: `backend/app/lib/llm_client.py` (call_llm / call_llm_json / call_llm_stream)
 - **LangGraph** — 에이전트 오케스트레이션 (면접, 저널, 학습 — 상태 머신)
 - **pgvector** — RAG (프로필 + 저널 임베딩, OpenAI text-embedding-3-small)
 - Edge TTS (`msedge-tts`) — 음성: `ko-KR-HyunsuNeural`
@@ -224,7 +224,7 @@
 
 ## 환경 변수
 - `frontend/.env` — DB, NextAuth (`NEXTAUTH_URL=https://jachana.com`, `AUTH_TRUST_HOST=true`), Google OAuth, BACKEND_URL
-- `backend/.env` — DB, Anthropic API 키, Tavily, OpenAI (Whisper)
+- `backend/.env` — DB, OpenAI API 키(필수, LLM 전체+임베딩+Whisper), Tavily(선택)
 - Frontend 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `BACKEND_URL`
-- Backend 필수: `DATABASE_URL`, `NEXTAUTH_SECRET`, `ANTHROPIC_API_KEY`
-- Backend 선택: `ENVIRONMENT`, `TAVILY_API_KEY`, `OPENAI_API_KEY` (Whisper), `ADMIN_EMAILS`
+- Backend 필수: `DATABASE_URL`, `NEXTAUTH_SECRET`, `OPENAI_API_KEY`
+- Backend 선택: `ENVIRONMENT`, `TAVILY_API_KEY`, `AGENT_MODEL` (기본 `gpt-4o-mini`), `ADMIN_EMAILS`

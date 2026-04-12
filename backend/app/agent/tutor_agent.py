@@ -2,7 +2,7 @@ import json
 import logging
 
 from app.config import settings
-from app.lib.anthropic_client import call_llm_json
+from app.lib.llm_client import call_llm_json
 from app.prompts.learning_agent import (
     LEARNING_STRATEGY_INSTRUCTIONS,
     TUTOR_ASSESS_PROMPT,

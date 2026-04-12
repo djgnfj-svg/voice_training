@@ -37,7 +37,7 @@ async def generate_model_answer(
         FreeTrialAlreadyUsedError,
     )
     from app.services.question import plan_interview
-    from app.lib.anthropic_client import call_llm_json, MODELS
+    from app.lib.llm_client import call_llm_json, MODELS
     from app.prompts.model_answer import (
         MODEL_ANSWER_RESUME_PROMPT,
         MODEL_ANSWER_WITH_JOB_PROMPT,
