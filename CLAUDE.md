@@ -201,7 +201,7 @@
 - `QuestionBank` — 문제은행 (category, subcategory, difficulty, questionText, keyPoints)
 
 ## 배포
-- **방식**: 로컬 PC + Cloudflare Tunnel (PC 전원 켜져 있을 때만 서비스)
+- **방식**: 로컬 PC + Cloudflare Tunnel (PC 로그인 상태에서만 서비스)
 - **도메인**: `jachana.com` (Cloudflare 관리)
 - **배포 설정**: `docker compose up -d` → `cloudflared tunnel run`
 - **터널 config**: `~/.cloudflared/config.yml` — `jachana.com` → `http://localhost:81`
@@ -209,6 +209,15 @@
 - **nginx**: `/api/auth` rate limit 5r/s, `/api/` rate limit 10r/s
 - **음성 파일**: Docker named volume (`audio-storage`)
 - **Supabase keep-alive**: `.github/workflows/keep-alive.yml` (5일마다 ping)
+
+### 자동 시작 (로그인 시 자동 기동)
+- **Docker Desktop**: `%APPDATA%\Docker\settings-store.json`의 `AutoStart: true`로 로그인 시 자동 실행. 컨테이너 3개는 `docker-compose.yml`의 `restart: unless-stopped`로 자동 복구
+- **Cloudflared**: Windows Startup 폴더에 VBS 스크립트 배치 — 콘솔창 없이 백그라운드 실행
+  - 경로: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VoicePrep-Cloudflared.vbs`
+  - 내용: `WshShell.Run """...\cloudflared.exe"" tunnel run", 0, False` (창 숨김 + 비동기)
+  - cloudflared 실행 파일 경로가 바뀌면(winget 업데이트 등) VBS의 경로도 수정 필요
+- **동작 순서**: Windows 로그인 → Docker Desktop 기동 → 컨테이너 자동 복구 → VBS가 cloudflared 기동 → `jachana.com` 온라인 (대략 30초~1분)
+- **주의**: 로그아웃/잠금 상태에서는 서비스 중단. 자동 로그인 설정 권장. Docker Desktop 수동 종료 시 컨테이너도 같이 내려감. VBS 중복 실행 금지(cloudflared 프로세스 충돌)
 
 ## 음성 처리
 - **transcript 정규화**: `frontend/src/lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 + `countFillerWords()` (필러워드 카운트, 클라이언트용)
