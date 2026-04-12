@@ -29,9 +29,8 @@ async def generate_teaching(
     user_message: str,
     strategy: str = "explain",
     profile_context: list[dict] | None = None,
-    journal_context: list[dict] | None = None,
 ) -> dict:
-    """Generate teaching content with strategy and cross-context."""
+    """Generate teaching content with strategy and profile context."""
     profile_str = json.dumps(user_profile, ensure_ascii=False) if user_profile else "프로필 없음"
     history_str = json.dumps(conversation_history, ensure_ascii=False) if conversation_history else "[]"
 
@@ -46,14 +45,6 @@ async def generate_teaching(
             profile_parts.append(f"- [{item.get('category', '')}] {item.get('content', '')}")
     profile_ctx_str = "\n".join(profile_parts) if profile_parts else ""
 
-    # 저널 크로스 맥락
-    journal_parts = []
-    if journal_context:
-        journal_parts.append("사용자의 최근 일상/감정/목표에서 검색된 정보:")
-        for item in journal_context[:5]:
-            journal_parts.append(f"- [{item.get('category', '')}] {item.get('content', '')}")
-    journal_ctx_str = "\n".join(journal_parts) if journal_parts else ""
-
     prompt = (
         TUTOR_TEACH_PROMPT
         .replace("{topic}", topic)
@@ -63,7 +54,6 @@ async def generate_teaching(
         .replace("{user_message}", user_message)
         .replace("{strategy_instruction}", strategy_instruction)
         .replace("{profile_context}", profile_ctx_str)
-        .replace("{journal_context}", journal_ctx_str)
     )
     return await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.7)
 

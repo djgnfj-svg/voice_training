@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.learning_state import LearningState
 from app.agent import tutor_agent, learning_planner
 from app.agent.profile_agent import search_profile, update_profile
-from app.agent.journal_rag import search_past_context
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,6 @@ async def agent_loop(
         "loop_count": 0,
         "actions_taken": list(state.get("actions_taken", [])),
         "profile_context": list(state.get("profile_context", [])),
-        "journal_context": list(state.get("journal_context", [])),
     }
 
     # Store user message + last assessment for planner
@@ -45,7 +43,6 @@ async def agent_loop(
             phase=state.get("current_phase", "greeting"),
             recent_messages=state.get("conversation_history", []),
             profile_context=state.get("profile_context", []),
-            journal_context=state.get("journal_context", []),
             assessment=last_assessment,
             actions_taken=state.get("actions_taken", []),
         )
@@ -56,8 +53,6 @@ async def agent_loop(
 
         if action == "search_profile":
             state = await search_profile_node(state, db, plan_result.get("search_query", ""))
-        elif action == "search_journal":
-            state = await search_journal_node(state, db, plan_result.get("search_query", ""))
         elif action == "assess":
             state = await assess(state, db, user_message)
             # Update assessment for next planner call
@@ -99,31 +94,6 @@ async def search_profile_node(
     return {
         **state,
         "profile_context": results,
-        "actions_taken": actions,
-        "pending_events": events,
-    }
-
-
-async def search_journal_node(
-    state: LearningState, db: AsyncSession, query: str
-) -> LearningState:
-    """Search journal embeddings for cross-context (30 days)."""
-    events = list(state.get("pending_events", []))
-    actions = list(state.get("actions_taken", []))
-    actions.append("search_journal")
-
-    search_query = query or state.get("topic", "")
-    results = await search_past_context(db, state["user_id"], search_query)
-
-    if results:
-        events.append({
-            "event": "status",
-            "data": {"phase": "journal_context_found", "count": len(results)},
-        })
-
-    return {
-        **state,
-        "journal_context": results,
         "actions_taken": actions,
         "pending_events": events,
     }
@@ -243,7 +213,6 @@ async def teach(
     phase = state.get("current_phase", "explain")
     strategy = state.get("strategy", "explain")
     profile_context = state.get("profile_context", [])
-    journal_context = state.get("journal_context", [])
 
     result = await tutor_agent.generate_teaching(
         topic, phase, state.get("user_profile", {}),
@@ -251,7 +220,6 @@ async def teach(
         user_message or "",
         strategy=strategy,
         profile_context=profile_context or None,
-        journal_context=journal_context or None,
     )
 
     message = result.get("message", "")

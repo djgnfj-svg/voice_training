@@ -10,7 +10,7 @@ from app.prompts.learning_agent import LEARNING_PLANNER_PROMPT
 
 logger = logging.getLogger(__name__)
 
-VALID_ACTIONS = {"search_profile", "search_journal", "assess", "teach"}
+VALID_ACTIONS = {"search_profile", "assess", "teach"}
 VALID_STRATEGIES = {"explain", "deepen", "simplify", "connect", "challenge", "next_topic"}
 
 
@@ -20,7 +20,6 @@ async def plan_next_action(
     phase: str,
     recent_messages: list[dict],
     profile_context: list[dict],
-    journal_context: list[dict],
     assessment: dict | None,
     actions_taken: list[str],
 ) -> dict:
@@ -39,12 +38,6 @@ async def plan_next_action(
             profile_text += f"- [{item.get('category', '')}] {item.get('content', '')}\n"
     profile_text = profile_text or "(아직 검색하지 않음)"
 
-    journal_text = ""
-    if journal_context:
-        for item in journal_context[:5]:
-            journal_text += f"- [{item.get('category', '')}] {item.get('content', '')}\n"
-    journal_text = journal_text or "(아직 검색하지 않음)"
-
     assessment_text = json.dumps(assessment, ensure_ascii=False) if assessment else "(아직 평가하지 않음)"
     actions_text = ", ".join(actions_taken) if actions_taken else "(없음)"
 
@@ -52,7 +45,6 @@ async def plan_next_action(
         topic=topic or "미정",
         phase=phase or "greeting",
         profile_context=profile_text,
-        journal_context=journal_text,
         assessment=assessment_text,
         recent_messages=recent_text or "(대화 시작)",
         user_message=user_message,
