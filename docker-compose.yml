@@ -30,4 +30,9 @@ services:
       - "8000"
     env_file:
       - ./backend/.env
+    volumes:
+      - audio-storage:/app/.audio-storage
     restart: unless-stopped
+
+volumes:
+  audio-storage:
