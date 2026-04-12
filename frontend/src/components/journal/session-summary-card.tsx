@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 interface SessionSummaryCardProps {
   summary: {
     summary: string;
-    mood: string;
     highlights: string[];
   };
   date?: string;
@@ -20,9 +19,6 @@ export function SessionSummaryCard({ summary, date }: SessionSummaryCardProps) {
           {date && (
             <span className="text-sm text-muted-foreground">{date}</span>
           )}
-        </div>
-        <div className="inline-flex w-fit items-center rounded-full bg-muted px-2.5 py-0.5 text-xs">
-          기분: {summary.mood}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

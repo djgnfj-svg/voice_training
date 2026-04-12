@@ -19,7 +19,6 @@ export interface JournalEndResponse {
   status: string;
   summary: {
     summary: string;
-    mood: string;
     highlights: string[];
   } | null;
 }

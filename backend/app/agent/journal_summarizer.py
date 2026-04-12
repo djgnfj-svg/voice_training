@@ -21,10 +21,10 @@ async def generate_summary(
     messages: list[dict],
 ) -> dict:
     """Generate session summary and save to RAG.
-    Returns: {"summary": "...", "mood": "...", "highlights": [...]}
+    Returns: {"summary": "...", "highlights": [...]}
     """
     if not messages:
-        return {"summary": "대화 없음", "mood": "보통", "highlights": []}
+        return {"summary": "대화 없음", "highlights": []}
 
     conversation = ""
     for m in messages:
@@ -37,7 +37,7 @@ async def generate_summary(
         result = await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.3)
     except Exception:
         logger.exception("Summarizer LLM call failed")
-        return {"summary": "요약 생성 실패", "mood": "알 수 없음", "highlights": []}
+        return {"summary": "요약 생성 실패", "highlights": []}
 
     summary = result.get("summary", "")
 
@@ -45,7 +45,6 @@ async def generate_summary(
         metadata = {
             "session_id": session_id,
             "date": date.today().isoformat(),
-            "mood": result.get("mood", ""),
             "highlights": result.get("highlights", []),
         }
         try:
