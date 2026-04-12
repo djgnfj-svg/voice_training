@@ -4,8 +4,7 @@
 - `frontend/` — Next.js 프론트엔드 + NextAuth 인증만
 - `backend/` — FastAPI 백엔드 (API, 서비스, 프롬프트, AI 로직 전부)
 - `db/` — DB 초기화 스크립트
-- `docker-compose.yml` — 로컬 개발용 (nginx + frontend + backend). 인프라(PostgreSQL)는 Supabase 사용
-- `docker-compose.prod.yml` — 프로덕션 (EC2)
+- `docker-compose.yml` — 로컬 Docker (nginx + frontend + backend). 개발 및 Cloudflare Tunnel 배포 공용. DB는 Supabase 호스팅
 - `nginx/` — nginx 리버스 프록시 (`/api/auth` → frontend, `/api/*` → backend, 나머지 → frontend)
 
 ## 개발 규칙
