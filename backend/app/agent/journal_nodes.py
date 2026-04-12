@@ -26,6 +26,11 @@ async def agent_loop(state: JournalState, db: AsyncSession) -> JournalState:
         "past_context": list(state.get("past_context", [])),
     }
 
+    logger.info(
+        "[journal.loop] start session=%s mode=%s user_msg=%r",
+        state.get("session_id"), state.get("mode"), (state.get("user_message") or "")[:80],
+    )
+
     while state.get("loop_count", 0) < MAX_ACTIONS:
         # Planner 결정
         state = await plan(state, db)
@@ -40,9 +45,15 @@ async def agent_loop(state: JournalState, db: AsyncSession) -> JournalState:
             break
     else:
         # 루프 초과 → 강제 응답
-        logger.warning("Agent loop exceeded MAX_ACTIONS (%d), forcing respond", MAX_ACTIONS)
+        logger.warning("[journal.loop] exceeded MAX_ACTIONS (%d), forcing respond", MAX_ACTIONS)
         state["strategy"] = state.get("strategy", "deepen")
         state = await respond(state, db)
+
+    logger.info(
+        "[journal.loop] end session=%s loops=%d actions=%s final_mode=%s strategy=%s",
+        state.get("session_id"), state.get("loop_count", 0),
+        state.get("actions_taken", []), state.get("mode"), state.get("strategy"),
+    )
 
     # 후처리: 인사이트 추출 (비차단)
     state = await extract(state, db)
@@ -79,6 +90,10 @@ async def search_past(state: JournalState, db: AsyncSession) -> JournalState:
 
     query = state.get("search_query", state["user_message"])
     results = await search_past_context(db, state["user_id"], query)
+    logger.info(
+        "[journal.search_past] query=%r hits=%d categories=%s",
+        query[:80], len(results), [r["category"] for r in results],
+    )
 
     if results:
         events.append({
@@ -107,6 +122,10 @@ async def classify_mode(state: JournalState, db: AsyncSession) -> JournalState:
     )
     new_mode = classification["mode"]
     current_mode = state.get("mode", "journal")
+    logger.info(
+        "[journal.classify_mode] %s → %s reason=%r",
+        current_mode, new_mode, classification.get("reason", ""),
+    )
 
     if new_mode != current_mode:
         events.append({

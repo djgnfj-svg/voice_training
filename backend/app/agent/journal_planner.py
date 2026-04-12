@@ -72,9 +72,17 @@ async def plan_next_action(
     if strategy not in VALID_STRATEGIES:
         strategy = "deepen"
 
+    search_query = result.get("search_query", "")
+    reason = result.get("reason", "")
+
+    logger.info(
+        "[journal.plan] action=%s strategy=%s mode=%s actions_taken=%s query=%r reason=%r",
+        action, strategy, mode, actions_taken or [], search_query, reason,
+    )
+
     return {
         "action": action,
         "strategy": strategy,
-        "search_query": result.get("search_query", ""),
-        "reason": result.get("reason", ""),
+        "search_query": search_query,
+        "reason": reason,
     }
