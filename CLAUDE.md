@@ -3,16 +3,28 @@
 ## 구조
 - `frontend/` — Next.js 프론트엔드 + NextAuth 인증만
 - `backend/` — FastAPI 백엔드 (API, 서비스, 프롬프트, AI 로직 전부)
+- `tts/` — OpenAI TTS 래퍼 서비스 (FastAPI + gpt-4o-mini-tts)
 - `db/` — DB 초기화 스크립트
-- `docker-compose.yml` — 로컬 Docker (nginx + frontend + backend). 개발 및 Cloudflare Tunnel 배포 공용. DB는 Supabase 호스팅
+- `docker-compose.yml` — 로컬 Docker. **Dev와 Prod 동시 기동** (포트 81 = dev, 포트 82 = prod). DB는 Supabase 호스팅
+  - Dev: `nginx` + `frontend` (target: development, `next dev`)
+  - Prod: `nginx-prod` + `frontend-prod` (target: production, 최적화 빌드, DevTools 숨김)
+  - 공유: `backend`, `tts`
 - `nginx/` — nginx 리버스 프록시 (`/api/auth` → frontend, `/api/*` → backend, 나머지 → frontend)
 
 ## 개발 규칙
-- 개발 환경은 `docker compose up -d`로 띄움 (nginx:81 + frontend:3000 + backend:8000). DB는 Supabase 호스팅.
-- 접속: `http://localhost:81` (nginx 경유). frontend/backend는 외부 포트 노출 없이 Docker 내부 네트워크만 사용.
+- 개발 환경은 `docker compose up -d`로 띄움 (dev: nginx:81 + frontend / prod: nginx-prod:82 + frontend-prod / 공유: backend:8000 + tts:8080). DB는 Supabase 호스팅.
+- 접속: **dev = `http://localhost:81`**, **prod = `http://localhost:82`**. frontend/backend/tts는 외부 포트 노출 없이 Docker 내부 네트워크만 사용.
+- Cloudflare Tunnel은 `~/.cloudflared/config.yml` 에서 `jachana.com` → `http://localhost:82` (prod)로 라우팅 권장. dev는 로컬 확인용.
+- 프로덕션 빌드는 `NEXT_PUBLIC_*` 환경변수를 빌드 타임에 번들에 인라인. **루트 `.env`** 에 값 둠 (docker-compose `args` 로 빌드 스테이지에 전달). `frontend/.env`와 동기화 필요.
 - 로컬 직접 실행 시: `cd frontend && PORT=3001 npm run dev` / `cd backend && uvicorn app.main:app --reload --port 8000`
 - prisma 명령 실행 시 `cd frontend && set -a && source .env && set +a` 후 실행.
 - `node.exe` 프로세스를 함부로 죽이지 말 것 (dev 서버가 꺼짐).
+- 프론트 소스 수정 시 **이미지 rebuild 필수** (둘 다 필요 시): `docker compose build frontend frontend-prod && docker compose up -d frontend frontend-prod`. Dev만 테스트할 거면 `frontend`만 빌드.
+- NEXT_PUBLIC_* 환경변수 변경 시:
+  - `frontend/.env` (dev용, 런타임 로드) + 루트 `.env` (prod 빌드 args용) 둘 다 수정
+  - 컨테이너 **force-recreate**: `docker compose up -d --force-recreate frontend frontend-prod`
+  - Prod는 빌드 타임 인라인이라 **rebuild 필수**: `docker compose build frontend-prod`
+- 인증 필요 페이지는 `src/app/(authenticated)/layout.tsx` 의 `export const dynamic = 'force-dynamic'`로 프로덕션 빌드 시 prerender 회피.
 
 ## 코드 규칙
 - placeholder/example 값 만들지 말 것. 실제 값이 없으면 비워두거나 물어볼 것.
@@ -48,9 +60,16 @@
 - OpenAI API — 모든 LLM 호출 통합 (기본 `gpt-4o-mini`). `backend/.env`의 `AGENT_MODEL`로 런타임 교체 가능 (예: `gpt-4.1-mini`, `gpt-4.1-nano`). 공용 클라이언트: `backend/app/lib/llm_client.py` (call_llm / call_llm_json / call_llm_stream)
 - 에이전트 오케스트레이션 — 수동 상태 머신 (면접/저널/학습). 패턴은 LangGraph 스타일이나 패키지 의존성은 없음
 - **pgvector** — Postgres 확장 기반 RAG (프로필 + 저널 임베딩, OpenAI text-embedding-3-small). raw SQL로 코사인 유사도 검색
-- Edge TTS (`msedge-tts`) — 음성: `ko-KR-HyunsuNeural`
+- TTS — **OpenAI `gpt-4o-mini-tts`** (voice `sage`, speed 2.0x, 페르소나 5종: default/interviewer/journal_friend/journal_counselor/tutor). 별도 `tts` Docker 서비스가 래핑. 실패 시 edge-tts로 자동 폴백
 - Tavily (선택적 — 심층 기업 분석용 웹 검색)
 - Whisper API (선택적 — 음성인식, 없으면 Web Speech API만 사용)
+
+### TTS 서비스 (`tts/`)
+- FastAPI + OpenAI TTS SDK, 포트 8080 (Docker 내부만)
+- 엔드포인트: `POST /synthesize {text, voice?, persona?, speed?, model?}` → audio/mpeg
+- 페르소나는 `gpt-4o-mini-tts`의 `instructions` 파라미터로 톤 지시 (같은 보이스도 다르게 들림)
+- 속도: gpt-4o-mini-tts는 `speed` 파라미터를 거의 무시 → instructions에 "very fast" 힌트로 보완. 실제 속도 빠르게 원하면 `tts-1` 모델 사용 (페르소나는 무시됨)
+- 어드민 테스트: `/admin/voice-test` 의 "TTS 발화" 탭 (모델/보이스/페르소나/속도 조합 비교)
 
 ### 프론트↔백엔드 통신
 - **Docker**: nginx가 `/api/auth` → frontend, `/api/*` → backend로 라우팅
@@ -204,11 +223,10 @@
 - **방식**: 로컬 PC + Cloudflare Tunnel (PC 로그인 상태에서만 서비스)
 - **도메인**: `jachana.com` (Cloudflare 관리)
 - **배포 설정**: `docker compose up -d` → `cloudflared tunnel run`
-- **터널 config**: `~/.cloudflared/config.yml` — `jachana.com` → `http://localhost:81`
+- **터널 config**: `~/.cloudflared/config.yml` — `jachana.com` → `http://localhost:82` (prod). 로컬 dev는 `http://localhost:81` 직접 접속
 - **CI**: `.github/workflows/ci.yml` — PR/push 시 프론트엔드 lint/typecheck/build + 백엔드 import smoke test
 - **nginx**: `/api/auth` rate limit 5r/s, `/api/` rate limit 10r/s
 - **음성 파일**: Docker named volume (`audio-storage`)
-- **Supabase keep-alive**: `.github/workflows/keep-alive.yml` (5일마다 ping)
 
 ### 자동 시작 (로그인 시 자동 기동)
 - **Docker Desktop**: `%APPDATA%\Docker\settings-store.json`의 `AutoStart: true`로 로그인 시 자동 실행. 컨테이너 3개는 `docker-compose.yml`의 `restart: unless-stopped`로 자동 복구
@@ -235,5 +253,7 @@
 - `frontend/.env` — DB, NextAuth (`NEXTAUTH_URL=https://jachana.com`, `AUTH_TRUST_HOST=true`), Google OAuth, BACKEND_URL
 - `backend/.env` — DB, OpenAI API 키(필수, LLM 전체+임베딩+Whisper), Tavily(선택)
 - Frontend 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `BACKEND_URL`
+- Frontend 선택: `NEXT_PUBLIC_ADMIN_EMAILS` (쉼표 구분, 어드민 메뉴 노출용 — **반드시 `NEXT_PUBLIC_` 접두어** 필요. 클라이언트 번들에 인라인됨)
 - Backend 필수: `DATABASE_URL`, `NEXTAUTH_SECRET`, `OPENAI_API_KEY`
 - Backend 선택: `ENVIRONMENT`, `TAVILY_API_KEY`, `AGENT_MODEL` (기본 `gpt-4o-mini`), `ADMIN_EMAILS`
+- TTS 서비스는 `backend/.env`의 `OPENAI_API_KEY`를 공유 (docker-compose의 `env_file`로 전달)

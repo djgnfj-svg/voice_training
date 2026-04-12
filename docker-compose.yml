@@ -1,9 +1,11 @@
 services:
+  # ══════════ Dev (port 81) ══════════
   nginx:
-    build:
-      context: ./nginx
+    image: nginx:1.27-alpine
     ports:
       - "81:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - frontend
       - backend
@@ -23,6 +25,38 @@ services:
       - backend
     restart: unless-stopped
 
+  # ══════════ Prod (port 82) ══════════
+  nginx-prod:
+    image: nginx:1.27-alpine
+    ports:
+      - "82:80"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend-prod
+      - backend
+    restart: unless-stopped
+
+  frontend-prod:
+    build:
+      context: ./frontend
+      target: production
+      args:
+        NEXT_PUBLIC_TOSS_CLIENT_KEY: ${NEXT_PUBLIC_TOSS_CLIENT_KEY:-}
+        NEXT_PUBLIC_ADMIN_EMAILS: ${NEXT_PUBLIC_ADMIN_EMAILS:-}
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
+    expose:
+      - "3000"
+    env_file:
+      - ./frontend/.env
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ══════════ Shared ══════════
   backend:
     build:
       context: ./backend
@@ -30,8 +64,21 @@ services:
       - "8000"
     env_file:
       - ./backend/.env
+    environment:
+      - TTS_SERVICE_URL=http://tts:8080
     volumes:
       - audio-storage:/app/.audio-storage
+    depends_on:
+      - tts
+    restart: unless-stopped
+
+  tts:
+    build:
+      context: ./tts
+    expose:
+      - "8080"
+    env_file:
+      - ./backend/.env
     restart: unless-stopped
 
 volumes:
