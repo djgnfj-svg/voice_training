@@ -58,7 +58,7 @@ async def setup_interview(
     credit_check = await can_start_session(db, user.id)
     if not credit_check["allowed"]:
         raise HTTPException(
-            402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
+            402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"}
         )
 
     # Verify resume
@@ -131,7 +131,7 @@ async def setup_interview(
     except (InsufficientCreditsError, FreeTrialAlreadyUsedError):
         await _rollback_session(db, session_id)
         raise HTTPException(
-            402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
+            402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"}
         )
     except Exception:
         logger.exception("Credit deduction failed for session %s", session_id)
