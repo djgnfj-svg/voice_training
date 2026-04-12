@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from app.models.credit import CreditTransaction
 from app.models.interview import InterviewSession
+from app.models.agent_interview import AgentInterviewSession
 
 
 class InsufficientCreditsError(Exception):
@@ -153,6 +154,69 @@ async def mark_free_trial_used(db: AsyncSession, user_id: str) -> None:
     )
     if result.rowcount == 0:
         raise FreeTrialAlreadyUsedError("FREE_TRIAL_ALREADY_USED")
+    await db.commit()
+
+
+async def deduct_for_agent_session(
+    db: AsyncSession,
+    user_id: str,
+    session_id: str,
+    using_free_trial: bool,
+) -> None:
+    """
+    Atomic credit deduction for an agent interview (AI 코치 면접) session.
+    Same semantics as deduct_for_session but targets AgentInterviewSession.
+    """
+    if using_free_trial:
+        await mark_free_trial_used(db, user_id)
+
+        await db.execute(
+            update(AgentInterviewSession)
+            .where(AgentInterviewSession.id == session_id)
+            .values(credit_deducted=True)
+        )
+
+        tx = CreditTransaction(
+            id=str(uuid4()),
+            user_id=user_id,
+            amount=0,
+            balance=0,
+            type="FREE_TRIAL",
+            description="무료 체험 사용 (AI 코치 면접)",
+            reference_id=session_id,
+        )
+        db.add(tx)
+        await db.commit()
+        return
+
+    cost = CREDIT_COSTS["SESSION"]
+    result = await db.execute(
+        update(User)
+        .where(User.id == user_id, User.credit_balance >= cost)
+        .values(credit_balance=User.credit_balance - cost)
+        .returning(User.credit_balance)
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise InsufficientCreditsError("INSUFFICIENT_CREDITS")
+    new_balance = row.credit_balance
+
+    await db.execute(
+        update(AgentInterviewSession)
+        .where(AgentInterviewSession.id == session_id)
+        .values(credit_deducted=True)
+    )
+
+    tx = CreditTransaction(
+        id=str(uuid4()),
+        user_id=user_id,
+        amount=-cost,
+        balance=new_balance,
+        type="SESSION_DEBIT",
+        description="AI 코치 면접 세션 사용",
+        reference_id=session_id,
+    )
+    db.add(tx)
     await db.commit()
 
 

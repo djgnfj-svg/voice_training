@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
@@ -18,6 +18,12 @@ from app.agent.state import InterviewState
 from app.models.agent_interview import AgentInterviewSession, AgentInterviewMessage
 from app.models.resume import Resume
 from app.models.interview import JobPosting
+from app.services.credit import (
+    can_start_session,
+    deduct_for_agent_session,
+    InsufficientCreditsError,
+    FreeTrialAlreadyUsedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +56,14 @@ async def start_interview(
     db: AsyncSession = Depends(get_db),
 ):
     """Start agent interview: load profile, generate first question."""
+    # Credit gating (before any AI/DB work)
+    credit_check = await can_start_session(db, user.id)
+    if not credit_check["allowed"]:
+        raise HTTPException(
+            402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"}
+        )
+    using_free_trial = credit_check["usingFreeTrial"]
+
     # Verify resume
     result = await db.execute(
         select(Resume).where(Resume.id == body.resumeId, Resume.user_id == user.id)
@@ -73,6 +87,9 @@ async def start_interview(
         if jp:
             job_posting_data = jp.parsed_data
 
+    # Free trial: cap questions to 3 (consistent with /api/interview/setup)
+    effective_max_questions = min(body.maxQuestions, 3) if using_free_trial else body.maxQuestions
+
     # Create session
     session_id = str(uuid4())
     session = AgentInterviewSession(
@@ -80,13 +97,11 @@ async def start_interview(
         user_id=user.id,
         resume_id=body.resumeId,
         job_posting_id=body.jobPostingId,
-        max_questions=body.maxQuestions,
+        max_questions=effective_max_questions,
         text_mode=body.textMode,
     )
     db.add(session)
     await db.commit()
-
-    # TODO(v2): 크레딧 차감 — 기존 credit.py의 deduct_credits() 연동
 
     # Build initial state
     initial_state: InterviewState = {
@@ -99,7 +114,7 @@ async def start_interview(
         "current_answer": "",
         "question_count": 0,
         "follow_up_round": 0,
-        "max_questions": body.maxQuestions,
+        "max_questions": effective_max_questions,
         "current_evaluation": {},
         "next_action": "",
         "conversation_history": [],
@@ -120,6 +135,40 @@ async def start_interview(
             state["pending_events"] = []
 
             state = await nodes.generate_question(state, db)
+
+            # AI 질문 생성 성공 → 크레딧 차감 (실패 시 세션 폐기 + 에러 반환)
+            try:
+                await deduct_for_agent_session(db, user.id, session_id, using_free_trial)
+            except (InsufficientCreditsError, FreeTrialAlreadyUsedError):
+                await db.rollback()
+                await db.execute(
+                    delete(AgentInterviewSession).where(
+                        AgentInterviewSession.id == session_id
+                    )
+                )
+                await db.commit()
+                yield {
+                    "event": "error",
+                    "data": json.dumps({
+                        "error": "크레딧이 부족합니다",
+                        "code": "INSUFFICIENT_CREDITS",
+                    }),
+                }
+                return
+            except Exception:
+                logger.exception("Credit deduction failed for agent session %s", session_id)
+                await db.rollback()
+                await db.execute(
+                    delete(AgentInterviewSession).where(
+                        AgentInterviewSession.id == session_id
+                    )
+                )
+                await db.commit()
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"error": "크레딧 차감에 실패했습니다"}),
+                }
+                return
 
             # session 이벤트를 question보다 먼저 전송 (프론트에서 sessionId 필요)
             yield {
