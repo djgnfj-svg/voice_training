@@ -184,17 +184,15 @@ async def send_message(
     if not session:
         raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
-    # Credit check (after free limit)
-    if session.free_messages_used >= FREE_MESSAGE_LIMIT:
-        from app.services.credit import deduct_for_feature, InsufficientCreditsError
-        try:
-            await deduct_for_feature(
-                db, user.id, session_id,
-                "저널 메시지", COST_PER_MESSAGE,
-                tx_type="JOURNAL_DEBIT",
+    # Credit pre-check (실제 차감은 AI 성공 후 — CLAUDE.md 원칙 준수)
+    requires_credit = session.free_messages_used >= FREE_MESSAGE_LIMIT
+    if requires_credit:
+        from app.services.credit import get_credit_info
+        info = await get_credit_info(db, user.id)
+        if info["balance"] < COST_PER_MESSAGE:
+            raise HTTPException(
+                402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"}
             )
-        except InsufficientCreditsError:
-            raise HTTPException(402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"})
 
     # 현재 세션 내 대화만 사용 — 다른 세션/RAG 오염 없음.
     db_messages = sorted(session.messages, key=lambda m: m.message_index)
@@ -234,6 +232,36 @@ async def send_message(
             for ev in state.get("pending_events", []):
                 yield {"event": ev["event"], "data": json.dumps(ev["data"])}
             state["pending_events"] = []
+
+            # AI 응답 검증 — 빈 응답이면 차감/저장 없이 에러 반환
+            if not state.get("ai_response"):
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"error": "AI 응답 생성에 실패했습니다"}),
+                }
+                return
+
+            # AI 응답 성공 → 크레딧 차감 (무료 한도 초과 시에만)
+            if requires_credit:
+                from app.services.credit import (
+                    deduct_for_feature,
+                    InsufficientCreditsError,
+                )
+                try:
+                    await deduct_for_feature(
+                        db, user.id, session_id,
+                        "저널 메시지", COST_PER_MESSAGE,
+                        tx_type="JOURNAL_DEBIT",
+                    )
+                except InsufficientCreditsError:
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({
+                            "error": "크레딧이 부족합니다",
+                            "code": "INSUFFICIENT_CREDITS",
+                        }),
+                    }
+                    return
 
             user_msg = JournalMessage(
                 id=uuid4(),
