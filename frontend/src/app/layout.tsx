@@ -8,7 +8,7 @@ import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://reseeall.com'),
+  metadataBase: new URL('https://jachana.com'),
   title: {
     default: '보이스프렙 — 말하며 준비하는 개발자 면접',
     template: '%s | 보이스프렙',

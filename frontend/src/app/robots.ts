@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/api/', '/dashboard', '/interview/', '/credits', '/history', '/resume', '/model-answer'],
       },
     ],
-    sitemap: 'https://reseeall.com/sitemap.xml',
+    sitemap: 'https://jachana.com/sitemap.xml',
   };
 }
