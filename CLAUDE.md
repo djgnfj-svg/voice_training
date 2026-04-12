@@ -123,11 +123,10 @@
 - **게이팅 라우트**: `/api/interview/setup`, `/api/model-answer/generate`
 - **402 응답**: `{ error: '...', code: 'INSUFFICIENT_CREDITS' }` → UI에서 크레딧 부족 다이얼로그/페이지 표시
 - **UI**: `components/credit/credit-badge.tsx` (헤더), `components/credit/insufficient-credits-dialog.tsx`, `/credits` 페이지
-- **Toss Payments 연동**:
-  - 상품: `frontend/src/lib/payment-products.ts` — 50/150/300 코인 (3,000/8,000/14,000원)
-  - 플로우: 상품 선택 → `POST /api/payments/orders` (주문 생성) → Toss SDK 결제창 → `POST /api/payments/confirm` (서버 확인 + 크레딧 부여)
-  - 멱등성: `orderId`를 Toss `Idempotency-Key`로 전달
-  - Toss 응답 검증: `totalAmount`/`orderId` 이중 교차 검증. FAILED 주문 복구 시에도 orderId 교차 검증
+- **결제 기능 미구현** (출시 예정): `/credits` 페이지에 상품 표시만 있고, 버튼 클릭 시 **출시 알림 wishlist** 이메일 등록
+  - API: `POST /api/payments/wishlist` (로그인 필요)
+  - 테이블: `payment_wishlist` (email, userId, productId)
+  - 결제 준비되면 해당 이메일로 알림 발송 예정
 
 ## 오늘의 학습 (Nightly Study) 시스템
 - **Subject** — 학습 종목 (시스템 7개 + 커스텀, parentId 계층 구조). 시스템: CS기초, JavaScript, React, Next.js, TypeScript심화, DB심화, DevOps
@@ -168,7 +167,7 @@
 - `InterviewSession` — 면접 세션 (userId, resumeId 필수, jobPostingId 선택, type, categories[], difficulty, status, creditDeducted, textMode, overallScore, reportData, durationSeconds, totalQuestions)
 - `InterviewAnswer` — 답변/평가 (audioUrl: 녹음 파일 경로)
 - `CreditTransaction` — 크레딧 거래 내역 (amount, balance, type: CreditTxType, referenceId)
-- `PaymentOrder` — Toss 결제 주문 (orderId, paymentKey, amount, credits, status: PENDING/DONE/FAILED/CANCELED)
+- `PaymentWishlist` — 결제 출시 알림 신청 (email, userId, productId) — 결제 기능 구현 전 관심 유저 수집
 - `Coupon` — 쿠폰 (code unique, credits, maxUses, usedCount, isActive, expiresAt)
 - `CouponUsage` — 쿠폰 사용 기록 (couponId+userId unique → 중복 사용 방지)
 - `Subject` — 학습 종목 (slug unique, isSystem, parentId 계층)
@@ -210,8 +209,8 @@
   - `SpeechMetrics`: wpm (음절/분), fillerCount, silenceSec, silenceRatio, elapsedSec
 
 ## 환경 변수
-- `frontend/.env` — DB, NextAuth (`NEXTAUTH_URL=https://jachana.com`, `AUTH_TRUST_HOST=true`), Google OAuth, Toss, BACKEND_URL
+- `frontend/.env` — DB, NextAuth (`NEXTAUTH_URL=https://jachana.com`, `AUTH_TRUST_HOST=true`), Google OAuth, BACKEND_URL
 - `backend/.env` — DB, Anthropic API 키, Tavily, OpenAI (Whisper)
-- Frontend 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `NEXT_PUBLIC_TOSS_CLIENT_KEY`, `BACKEND_URL`
+- Frontend 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `BACKEND_URL`
 - Backend 필수: `DATABASE_URL`, `NEXTAUTH_SECRET`, `ANTHROPIC_API_KEY`
-- Backend 선택: `ENVIRONMENT`, `TAVILY_API_KEY`, `OPENAI_API_KEY` (Whisper), `TOSS_SECRET_KEY`, `ADMIN_EMAILS`
+- Backend 선택: `ENVIRONMENT`, `TAVILY_API_KEY`, `OPENAI_API_KEY` (Whisper), `ADMIN_EMAILS`

@@ -21,13 +21,6 @@ class SessionStatus(str, enum.Enum):
     ABANDONED = "ABANDONED"
 
 
-class PaymentStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    DONE = "DONE"
-    FAILED = "FAILED"
-    CANCELED = "CANCELED"
-
-
 class ActivityType(str, enum.Enum):
     MODEL_ANSWER = "MODEL_ANSWER"
     NIGHTLY_STUDY = "NIGHTLY_STUDY"
@@ -51,6 +44,5 @@ class CreditTxType(str, enum.Enum):
 PgInterviewType = ENUM(InterviewType, name="InterviewType", create_type=False)
 PgDifficulty = ENUM(Difficulty, name="Difficulty", create_type=False)
 PgSessionStatus = ENUM(SessionStatus, name="SessionStatus", create_type=False)
-PgPaymentStatus = ENUM(PaymentStatus, name="PaymentStatus", create_type=False)
 PgActivityType = ENUM(ActivityType, name="ActivityType", create_type=False)
 PgCreditTxType = ENUM(CreditTxType, name="CreditTxType", create_type=False)

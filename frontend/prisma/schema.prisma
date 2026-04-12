@@ -26,7 +26,6 @@ model User {
   interviewSessions  InterviewSession[]
   resumes            Resume[]
   creditTransactions CreditTransaction[]
-  paymentOrders      PaymentOrder[]
   activityLogs       ActivityLog[]
   couponUsages       CouponUsage[]
   answerAssistSessions AnswerAssistSession[]
@@ -216,35 +215,6 @@ enum CreditTxType {
   REFUND
   COUPON
   LEARNING_DEBIT
-}
-
-model PaymentOrder {
-  id         String        @id @default(uuid())
-  userId     String
-  orderId    String        @unique
-  orderName  String
-  amount     Int
-  credits    Int
-  status     PaymentStatus @default(PENDING)
-  paymentKey String?
-  method     String?
-  approvedAt DateTime?
-  failReason String?
-  raw        Json?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@map("payment_orders")
-}
-
-enum PaymentStatus {
-  PENDING
-  DONE
-  FAILED
-  CANCELED
 }
 
 model PaymentWishlist {

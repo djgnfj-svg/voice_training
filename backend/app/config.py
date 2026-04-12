@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     TAVILY_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
-    TOSS_SECRET_KEY: str | None = None
     ADMIN_EMAILS: str = ""
 
     # Agent

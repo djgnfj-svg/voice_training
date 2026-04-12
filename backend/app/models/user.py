@@ -26,7 +26,6 @@ class User(Base):
     job_postings = relationship("JobPosting", back_populates="user", cascade="all, delete-orphan")
     interview_sessions = relationship("InterviewSession", back_populates="user", cascade="all, delete-orphan")
     credit_transactions = relationship("CreditTransaction", back_populates="user", cascade="all, delete-orphan")
-    payment_orders = relationship("PaymentOrder", back_populates="user", cascade="all, delete-orphan")
     activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
     coupon_usages = relationship("CouponUsage", back_populates="user", cascade="all, delete-orphan")
     answer_assist_sessions = relationship("AnswerAssistSession", back_populates="user", cascade="all, delete-orphan")

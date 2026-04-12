@@ -42,8 +42,6 @@ jobs:
           ANTHROPIC_API_KEY: sk-dummy
           AUTH_GOOGLE_ID: dummy.apps.googleusercontent.com
           AUTH_GOOGLE_SECRET: dummy-secret
-          NEXT_PUBLIC_TOSS_CLIENT_KEY: test_ck_dummy
-          TOSS_SECRET_KEY: test_sk_dummy
 
       # Backend validation
       - uses: actions/setup-python@v5

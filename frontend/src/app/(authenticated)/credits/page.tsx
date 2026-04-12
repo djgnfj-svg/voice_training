@@ -10,7 +10,12 @@ import { Coins, ShoppingCart, ArrowUpRight, ArrowDownLeft, Loader2, Gift, Mail, 
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
-import { PAYMENT_PRODUCTS } from '@/lib/payment-products';
+
+const CREDIT_PRODUCTS = [
+  { id: 'credit_50', label: '50 크레딧', priceLabel: '3,000원' },
+  { id: 'credit_150', label: '150 크레딧', priceLabel: '8,000원' },
+  { id: 'credit_300', label: '300 크레딧', priceLabel: '14,000원' },
+];
 import {
   Dialog,
   DialogContent,
@@ -203,7 +208,7 @@ export default function CreditsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">
-            {PAYMENT_PRODUCTS.map((product) => (
+            {CREDIT_PRODUCTS.map((product) => (
               <div
                 key={product.id}
                 className={cn(
