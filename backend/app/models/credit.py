@@ -21,6 +21,16 @@ class CreditTransaction(Base):
     user = relationship("User", back_populates="credit_transactions")
 
 
+class PaymentWishlist(Base):
+    __tablename__ = "payment_wishlist"
+
+    id = Column(String, primary_key=True)
+    email = Column(String, nullable=False)
+    user_id = Column("userId", String, nullable=True)
+    product_id = Column("productId", String, nullable=True)
+    created_at = Column("createdAt", DateTime, server_default=func.now())
+
+
 class PaymentOrder(Base):
     __tablename__ = "payment_orders"
 

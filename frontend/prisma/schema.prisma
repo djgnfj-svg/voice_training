@@ -247,6 +247,18 @@ enum PaymentStatus {
   CANCELED
 }
 
+model PaymentWishlist {
+  id        String   @id @default(uuid())
+  email     String
+  userId    String?
+  productId String?
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([createdAt])
+  @@map("payment_wishlist")
+}
+
 model ActivityLog {
   id        String       @id @default(uuid())
   userId    String
