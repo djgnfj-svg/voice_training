@@ -55,8 +55,7 @@ async def agent_loop(state: JournalState, db: AsyncSession) -> JournalState:
         state.get("actions_taken", []), state.get("mode"), state.get("strategy"),
     )
 
-    # 후처리: 인사이트 추출 (비차단)
-    state = await extract(state, db)
+    # 추출은 세션 종료 시 1회 (end_session에서 호출) — 루프당 호출 금지
     return state
 
 
@@ -181,13 +180,15 @@ async def respond(state: JournalState, db: AsyncSession) -> JournalState:
 
 
 async def extract(state: JournalState, db: AsyncSession) -> JournalState:
-    """Extract insights from conversation and save to RAG."""
+    """Extract long-term insights from the full session and save to RAG.
+
+    Called once at session end. Reads whole messages list (capped internally).
+    """
     saved = await journal_extractor.extract_and_save(
         db,
         state["user_id"],
         state["session_id"],
         state.get("messages", []),
-        state["user_message"],
     )
 
     events = list(state.get("pending_events", []))

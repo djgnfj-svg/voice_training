@@ -14,6 +14,7 @@ from app.agent.journal_rag import upsert_journal_embedding
 logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = {"emotion", "event", "growth", "concern", "relationship", "goal"}
+MAX_MESSAGES_FOR_EXTRACTION = 40
 
 
 async def extract_and_save(
@@ -21,18 +22,23 @@ async def extract_and_save(
     user_id: str,
     session_id: str,
     messages: list[dict],
-    user_message: str,
 ) -> int:
-    """Extract insights from the latest exchange and save to RAG.
+    """Extract long-term insights from an entire session and save to RAG.
+
+    Called once at session end (not per message) so the LLM sees full context
+    and can judge importance across the whole conversation.
     Returns number of items saved.
     """
-    recent = ""
-    for m in messages[-2:]:
-        role_label = "사용자" if m.get("role") == "user" else "AI"
-        recent += f"{role_label}: {m.get('content', '')}\n"
-    recent += f"사용자: {user_message}\n"
+    if not messages:
+        return 0
 
-    prompt = EXTRACTOR_PROMPT.format(conversation=recent)
+    tail = messages[-MAX_MESSAGES_FOR_EXTRACTION:]
+    conversation = ""
+    for m in tail:
+        role_label = "사용자" if m.get("role") == "user" else "AI"
+        conversation += f"{role_label}: {m.get('content', '')}\n"
+
+    prompt = EXTRACTOR_PROMPT.format(conversation=conversation)
 
     try:
         result = await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.2)

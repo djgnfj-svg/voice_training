@@ -288,6 +288,12 @@ async def end_session(
 
     state = await journal_nodes.summarize(state, db)
 
+    # 세션 종료 시 1회만 장기 기억 추출 (메시지당 추출 대신)
+    try:
+        state = await journal_nodes.extract(state, db)
+    except Exception:
+        logger.exception("End-session extraction failed")
+
     session.status = "completed"
     session.summary = state.get("session_summary", "")
     await db.commit()
