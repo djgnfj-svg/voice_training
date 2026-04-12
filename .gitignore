@@ -46,6 +46,9 @@ frontend/prisma/migrations/
 # Audio storage
 .audio-storage/
 
+# Playwright MCP scratch output
+.playwright-mcp/
+
 # Images (screenshots, references)
 *.png
 *.jpg
