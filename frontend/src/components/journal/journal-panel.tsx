@@ -113,14 +113,16 @@ export function JournalPanel() {
       silenceTimerRef.current = null;
     }
 
-    if (!speech.transcript.trim()) return;
+    // final 또는 interim 어느 쪽이라도 내용이 있으면 타이머 시작
+    if (!speech.transcript.trim() && !speech.interimTranscript.trim()) return;
 
     silenceTimerRef.current = setTimeout(() => {
-      const text = speech.transcript.trim();
-      if (!text) return;
+      // final 우선, 없으면 interim 사용
+      const raw = speech.transcript.trim() || speech.interimTranscript.trim();
+      if (!raw) return;
 
       speech.stopListening();
-      const normalized = normalizeTranscript(text);
+      const normalized = normalizeTranscript(raw);
       speech.resetTranscript();
       lastTranscriptRef.current = "";
 

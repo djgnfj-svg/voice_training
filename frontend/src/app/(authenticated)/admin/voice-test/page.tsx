@@ -11,7 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Mic, MicOff, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Mic, MicOff, Loader2, Play, Square } from 'lucide-react';
 
 function TranscriptDisplay({ label, raw, normalized }: { label: string; raw: string; normalized?: string }) {
   if (!raw) return null;
@@ -303,6 +306,180 @@ function ComparePanel() {
   );
 }
 
+const TTS_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];
+const TTS_PERSONAS = [
+  { value: 'default', label: '기본' },
+  { value: 'interviewer', label: '면접관 (프로페셔널)' },
+  { value: 'journal_friend', label: '저널 친구 (편안)' },
+  { value: 'journal_counselor', label: '상담사 (차분)' },
+  { value: 'tutor', label: '튜터 (활기)' },
+];
+const TTS_MODELS = [
+  { value: 'gpt-4o-mini-tts', label: 'gpt-4o-mini-tts (페르소나 지원, speed 약함)' },
+  { value: 'tts-1', label: 'tts-1 (speed 정확, 페르소나 무시)' },
+  { value: 'tts-1-hd', label: 'tts-1-hd (고품질, 느리고 비쌈)' },
+];
+const DEFAULT_TEXT = '안녕하세요. 오늘 기술 면접을 시작하겠습니다. 자기소개와 함께 가장 자신있는 프로젝트를 소개해주세요.';
+
+function TTSTestPanel() {
+  const [voice, setVoice] = useState('sage');
+  const [persona, setPersona] = useState('default');
+  const [speed, setSpeed] = useState(1.1);
+  const [model, setModel] = useState('gpt-4o-mini-tts');
+  const [text, setText] = useState(DEFAULT_TEXT);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [elapsed, setElapsed] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const urlRef = useRef<string | null>(null);
+
+  const stop = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+    }
+    setIsPlaying(false);
+  }, []);
+
+  useEffect(() => () => stop(), [stop]);
+
+  const handlePlay = async () => {
+    stop();
+    setError('');
+    setIsLoading(true);
+    setElapsed(null);
+    const t0 = performance.now();
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice, persona, speed, model }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      urlRef.current = url;
+      setElapsed(Math.round(performance.now() - t0));
+
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onplay = () => setIsPlaying(true);
+      audio.onended = () => {
+        setIsPlaying(false);
+        URL.revokeObjectURL(url);
+        urlRef.current = null;
+      };
+      audio.onerror = () => {
+        setError('오디오 재생 실패');
+        setIsPlaying(false);
+      };
+      await audio.play();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '요청 실패');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>TTS 발화 테스트</CardTitle>
+        <CardDescription>보이스 / 페르소나 / 속도 조합으로 OpenAI gpt-4o-mini-tts 품질 확인</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label>모델</Label>
+          <Select value={model} onValueChange={setModel}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TTS_MODELS.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label>보이스</Label>
+            <Select value={voice} onValueChange={setVoice}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {TTS_VOICES.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>페르소나</Label>
+            <Select value={persona} onValueChange={setPersona}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {TTS_PERSONAS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>속도: {speed.toFixed(2)}x</Label>
+            <input
+              type="range"
+              min="0.25"
+              max="4.0"
+              step="0.05"
+              value={speed}
+              onChange={(e) => setSpeed(parseFloat(e.target.value))}
+              className="w-full"
+            />
+            {model === 'gpt-4o-mini-tts' && speed !== 1.0 && (
+              <p className="text-xs text-amber-600">⚠️ gpt-4o-mini-tts는 speed 파라미터를 거의 무시해요. 빠르게 원하면 모델을 tts-1로 바꾸세요.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>문장</Label>
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={3}
+            placeholder="읽어볼 문장을 입력하세요"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isPlaying ? (
+            <Button variant="destructive" onClick={stop}>
+              <Square className="mr-2 h-4 w-4" />
+              정지
+            </Button>
+          ) : (
+            <Button onClick={handlePlay} disabled={isLoading || !text.trim()}>
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+              {isLoading ? '생성 중...' : '재생'}
+            </Button>
+          )}
+          {elapsed !== null && (
+            <Badge variant="secondary">생성 {elapsed}ms</Badge>
+          )}
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+          <p>💡 마음에 드는 조합을 찾으면 기본값으로 설정 가능 (tts/main.py 의 <code>TTS_DEFAULT_VOICE</code>, <code>TTS_SPEED</code>).</p>
+          <p>💡 페르소나는 gpt-4o-mini-tts의 <code>instructions</code>로 톤을 지시 — 같은 보이스도 다르게 들림.</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function VoiceTestPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -325,16 +502,20 @@ export default function VoiceTestPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold">음성인식 테스트</h1>
-        <p className="text-muted-foreground">Web Speech API와 Whisper의 음성인식 품질을 테스트합니다.</p>
+        <h1 className="text-2xl font-bold">음성 테스트</h1>
+        <p className="text-muted-foreground">STT(음성인식) + TTS(발화) 품질 테스트</p>
       </div>
 
-      <Tabs defaultValue="webspeech">
+      <Tabs defaultValue="tts">
         <TabsList>
+          <TabsTrigger value="tts">TTS 발화</TabsTrigger>
           <TabsTrigger value="webspeech">Web Speech API</TabsTrigger>
           <TabsTrigger value="whisper">Whisper</TabsTrigger>
           <TabsTrigger value="compare">비교 모드</TabsTrigger>
         </TabsList>
+        <TabsContent value="tts" className="mt-4">
+          <TTSTestPanel />
+        </TabsContent>
         <TabsContent value="webspeech" className="mt-4">
           <WebSpeechPanel />
         </TabsContent>

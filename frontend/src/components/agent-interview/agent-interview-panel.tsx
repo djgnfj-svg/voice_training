@@ -18,6 +18,8 @@ import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { normalizeTranscript } from '@/lib/transcript';
 
+const SILENCE_TIMEOUT_MS = 3000;
+
 interface AgentInterviewPanelProps {
   resumeId: string;
   jobPostingId?: string;
@@ -52,6 +54,8 @@ export function AgentInterviewPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
   const lastSpokenRef = useRef('');
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTranscriptRef = useRef('');
 
   // Auto-scroll
   useEffect(() => {
@@ -89,15 +93,61 @@ export function AgentInterviewPanel({
     if (phase !== 'waiting_answer' && speech.isListening) {
       speech.stopListening();
     }
+    if (phase !== 'waiting_answer' && silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Silence auto-submit: N초간 transcript 변화 없으면 자동 제출
+  useEffect(() => {
+    if (phase !== 'waiting_answer') return;
+    if (!speech.isListening) return;
+    if (tts.isSpeaking) return;
+
+    const currentText = speech.transcript + '|' + speech.interimTranscript;
+    if (currentText === lastTranscriptRef.current) return;
+    lastTranscriptRef.current = currentText;
+
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+
+    if (!speech.transcript.trim() && !speech.interimTranscript.trim()) return;
+
+    silenceTimerRef.current = setTimeout(() => {
+      const raw = speech.transcript.trim() || speech.interimTranscript.trim();
+      if (!raw) return;
+      const text = normalizeTranscript(raw);
+      if (!text) return;
+      tts.stop();
+      speech.stopListening();
+      submitAnswer(text);
+      speech.resetTranscript();
+      lastTranscriptRef.current = '';
+    }, SILENCE_TIMEOUT_MS);
+
+    return () => {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+    };
+  }, [speech.transcript, speech.interimTranscript, speech.isListening, phase, tts.isSpeaking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = () => {
     const transcript = normalizeTranscript(speech.transcript);
     if (!transcript) return;
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
     tts.stop();
     speech.stopListening();
     submitAnswer(transcript);
     speech.resetTranscript();
+    lastTranscriptRef.current = '';
   };
 
   const handleSkip = () => {
