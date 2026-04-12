@@ -46,8 +46,8 @@
 - SQLAlchemy / Prisma 호환 PostgreSQL (Supabase)
 - NextAuth JWE 토큰 복호화: `joserfc` + HKDF (Python 네이티브, Node.js 서브프로세스 불필요)
 - OpenAI API — 모든 LLM 호출 통합 (기본 `gpt-4o-mini`). `backend/.env`의 `AGENT_MODEL`로 런타임 교체 가능 (예: `gpt-4.1-mini`, `gpt-4.1-nano`). 공용 클라이언트: `backend/app/lib/llm_client.py` (call_llm / call_llm_json / call_llm_stream)
-- **LangGraph** — 에이전트 오케스트레이션 (면접, 저널, 학습 — 상태 머신)
-- **pgvector** — RAG (프로필 + 저널 임베딩, OpenAI text-embedding-3-small)
+- 에이전트 오케스트레이션 — 수동 상태 머신 (면접/저널/학습). 패턴은 LangGraph 스타일이나 패키지 의존성은 없음
+- **pgvector** — Postgres 확장 기반 RAG (프로필 + 저널 임베딩, OpenAI text-embedding-3-small). raw SQL로 코사인 유사도 검색
 - Edge TTS (`msedge-tts`) — 음성: `ko-KR-HyunsuNeural`
 - Tavily (선택적 — 심층 기업 분석용 웹 검색)
 - Whisper API (선택적 — 음성인식, 없으면 Web Speech API만 사용)

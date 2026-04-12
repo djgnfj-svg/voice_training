@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     # Optional
     ENVIRONMENT: str = "development"
     TAVILY_API_KEY: str | None = None
-    ANTHROPIC_API_KEY: str | None = None  # Legacy — 미사용, 나중에 제거 예정
     ADMIN_EMAILS: str = ""
 
     # LLM — `.env`의 AGENT_MODEL로 런타임 교체 가능 (예: gpt-4.1-mini, gpt-4.1-nano)
