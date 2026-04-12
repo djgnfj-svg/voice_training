@@ -203,24 +203,9 @@ export function JournalPanel() {
       )}
 
       {/* 헤더 */}
-      <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">하루의 정리</h1>
-          <ModeIndicator mode={journal.mode} />
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleEnd}
-          disabled={journal.phase === "summarizing"}
-        >
-          {journal.phase === "summarizing" ? (
-            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-          ) : (
-            <Square className="mr-1 h-3 w-3" />
-          )}
-          마무리
-        </Button>
+      <div className="flex items-center gap-3 border-b px-4 py-3 shrink-0">
+        <h1 className="text-lg font-semibold">하루의 정리</h1>
+        <ModeIndicator mode={journal.mode} />
       </div>
 
       {/* 메시지 영역 */}
@@ -265,13 +250,28 @@ export function JournalPanel() {
         </div>
       )}
 
-      {/* 음성 상태 인디케이터 */}
-      <div className="shrink-0">
+      {/* 하단: 음성 상태 + 마무리 버튼 */}
+      <div className="shrink-0 border-t bg-background">
         <VoiceInputBar
           isListening={speech.isListening}
           isSpeaking={tts.isSpeaking}
           isProcessing={journal.phase === "responding"}
         />
+        <div className="px-4 pb-4">
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={handleEnd}
+            disabled={journal.phase === "summarizing"}
+          >
+            {journal.phase === "summarizing" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Square className="h-4 w-4" />
+            )}
+            마무리하기
+          </Button>
+        </div>
       </div>
     </div>
   );
