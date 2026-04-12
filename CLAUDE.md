@@ -126,6 +126,21 @@
   - API: `POST /api/payments/wishlist` (로그인 필요)
   - 테이블: `payment_wishlist` (email, userId, productId)
   - 결제 준비되면 해당 이메일로 알림 발송 예정
+  - **wishlist 확인**: Supabase SQL Editor에서 아래 쿼리 실행 (관리자 UI/알림 없음 — 수동 확인)
+    ```sql
+    -- 전체 등록자 (최신순)
+    SELECT email, "userId", "productId", "createdAt"
+    FROM payment_wishlist
+    ORDER BY "createdAt" DESC;
+
+    -- 총 몇 명 (중복 제외 / 전체)
+    SELECT COUNT(DISTINCT email) AS unique_emails, COUNT(*) AS total_entries
+    FROM payment_wishlist;
+
+    -- 상품별 집계
+    SELECT "productId", COUNT(*) AS count
+    FROM payment_wishlist GROUP BY "productId" ORDER BY count DESC;
+    ```
 
 ## 오늘의 학습 (Nightly Study) 시스템
 - **Subject** — 학습 종목 (시스템 7개 + 커스텀, parentId 계층 구조). 시스템: CS기초, JavaScript, React, Next.js, TypeScript심화, DB심화, DevOps
