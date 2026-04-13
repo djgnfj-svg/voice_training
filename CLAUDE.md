@@ -91,14 +91,21 @@
   - 3개 에이전트: 프로필(RAG) + 면접관(질문생성/흐름결정) + 평가(답변평가/리포트)
   - 오케스트레이터: LangGraph 상태 머신 (규칙 기반 분기, LLM 호출 없음)
   - 프로필 RAG: pgvector + OpenAI Embeddings, 강점/약점/패턴/맥락 카테고리
+  - **이력서 RAG (2026-04-13 신규)**: `resume_embeddings` 테이블 (chunk_type: summary/project/experience/education). 이력서 저장 시 BackgroundTask로 자동 청킹+임베딩. 매 질문 직전 focus_topics 기반 query로 top-3 retrieve
+  - **Fit Analysis (2026-04-13 신규)**: 면접 시작 시 1회 산출 → `agent_interview_sessions.fit_analysis` JSONB 영속화. answer/skip 흐름에서 재사용. skill_match(코드) + focus_topics(LLM, 3~5개) + avoid_topics
+  - **프롬프트 분기**: `INTERVIEWER_QUESTION_PROMPT_SLIM` (임베딩 있을 때) / `_FALLBACK` (없을 때 JSON 통째)
   - 완전 동적 질문: 미리 생성하지 않고 대화 흐름에 따라 1개씩 생성
   - 꼬리질문: depth < 80이면 자동 생성 (최대 2회)
-  - SSE 스트림: 프론트에 실시간 질문/평가 전달
+  - SSE 스트림: 프론트에 실시간 질문/평가 전달. 이벤트 `phase: loading_profile → profile_loaded → fit_analyzing → fit_analyzed → generating_question → question`
   - 세션 종료 시 프로필 자동 업데이트 (인사이트 추출 → RAG 저장)
-  - 코드: `backend/app/agent/` (state, nodes, profile_agent, interviewer_agent, evaluator_agent, embeddings)
+  - 코드: `backend/app/agent/` (state, nodes, profile_agent, interviewer_agent, evaluator_agent, embeddings, **resume_rag**, **fit_analyzer**)
   - 프롬프트: `backend/app/prompts/agent.py`
   - API: `/api/agent-interview/{start,answer,skip,end,{id}}`, `/api/profile`, `/api/profile/context`
   - UI: `frontend/src/components/agent-interview/`, `frontend/src/app/(authenticated)/agent-interview/`
+  - **알려진 이슈 (2026-04-13 테스트, `docs/TODO.md`에 상세)**:
+    - 면접 중 침묵 허용이 짧아서 답변 서두름 발생
+    - 꼬리질문 중복/애매함 (depth < 80 임계 느슨)
+    - **평가 시스템 의심**: 점수 70점 고정/역량별 평균 이상/개선점 비어있음 — 회귀 가능성 높음, 우선 조사 필요
 - **기존 면접 (레거시, 코드 유지)**: 일반/심화 모드는 UI에서 제거됨. 백엔드 API는 그대로 남아있음
 - **멀티라운드 꼬리질문** (기존): 메인 답변 → 꼬리질문 최대 2회 연쇄
   - 깊이 사다리: what → why → tradeoffs/alternatives
