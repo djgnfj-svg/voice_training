@@ -6,7 +6,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.state import InterviewState
-from app.agent import profile_agent, interviewer_agent, evaluator_agent, interview_planner
+from app.agent import profile_agent, interviewer_agent, evaluator_agent, interview_planner, resume_rag, fit_analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -118,16 +118,72 @@ async def load_profile(state: InterviewState, db: AsyncSession) -> InterviewStat
     }
 
 
+async def fit_analysis_node(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """이력서↔JD Fit Analysis. 면접 시작 시 1회 호출. has_resume_embeddings도 같이 판정."""
+    events = list(state.get("pending_events", []))
+    events.append({"event": "status", "data": {"phase": "fit_analyzing"}})
+
+    fa = await fit_analyzer.run_fit_analysis(state["resume"], state.get("job_posting"))
+
+    has_emb = False
+    rid = state.get("resume_id")
+    if rid:
+        has_emb = await resume_rag.has_resume_embeddings(db, rid)
+
+    events.append({
+        "event": "status",
+        "data": {
+            "phase": "fit_analyzed",
+            "focus_topics_count": len(fa["focus_topics"]),
+            "has_resume_embeddings": has_emb,
+        },
+    })
+
+    return {
+        **state,
+        "fit_analysis": fa,
+        "has_resume_embeddings": has_emb,
+        "current_resume_chunks": [],
+        "pending_events": events,
+    }
+
+
 async def generate_question(state: InterviewState, db: AsyncSession) -> InterviewState:
-    """Generate next interview question."""
+    """Generate next interview question. RAG 검색 후 SLIM/FALLBACK 분기."""
     events = list(state.get("pending_events", []))
     events.append({"event": "status", "data": {"phase": "generating_question"}})
 
+    # 1) 검색 query 산출 (Spec D5): focus_topics → current_answer → summary 순으로 fallback
+    fa = state.get("fit_analysis") or {}
+    focus_topics = fa.get("focus_topics") or []
+    i = state.get("question_count", 0)
+    current_focus_topic = ""
+    if focus_topics:
+        ft = focus_topics[i % len(focus_topics)]
+        current_focus_topic = ft.get("topic", "")
+    query = current_focus_topic or state.get("current_answer") or (state["resume"] or {}).get("summary") or "주요 경험"
+
+    # 2) RAG 검색 (임베딩 있을 때만)
+    chunks: list[dict] = []
+    has_emb = state.get("has_resume_embeddings", False)
+    rid = state.get("resume_id")
+    if has_emb and rid:
+        try:
+            chunks = await resume_rag.search_resume(db, state["user_id"], rid, query, top_k=3)
+        except Exception:
+            logger.exception("search_resume failed; falling back to no chunks")
+            chunks = []
+
+    # 3) 질문 생성 (chunks 있으면 SLIM, 없으면 FALLBACK)
     result = await interviewer_agent.generate_question(
-        state["resume"],
-        state.get("job_posting"),
-        state["user_profile"],
-        state.get("conversation_history", []),
+        resume=state["resume"],
+        job_posting=state.get("job_posting"),
+        user_profile=state["user_profile"],
+        conversation_history=state.get("conversation_history", []),
+        fit_analysis=fa or None,
+        resume_chunks=chunks,
+        has_embeddings=has_emb and bool(chunks),
+        current_focus_topic=current_focus_topic,
     )
 
     question = result.get("question", "")
@@ -147,6 +203,7 @@ async def generate_question(state: InterviewState, db: AsyncSession) -> Intervie
     return {
         **state,
         "current_question": question,
+        "current_resume_chunks": chunks,
         "question_count": question_count,
         "follow_up_round": 0,
         "pending_events": events,
@@ -227,17 +284,37 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
     }
 
 
+MAX_FOLLOW_UP_ROUND = 1  # 피드백: 꼬리질문이 너무 자주/중복 → main당 최대 1회
+
+
 async def decide_next(state: InterviewState, db: AsyncSession) -> InterviewState:
-    """Decide next action after evaluation."""
+    """Decide next action after evaluation. LLM이 제시한 후, 한계치를 코드가 강제."""
+    question_count = state.get("question_count", 0)
+    max_questions = state.get("max_questions", 7)
+    follow_up_round = state.get("follow_up_round", 0)
+
     result = await interviewer_agent.decide_next_action(
         state.get("conversation_history", []),
         state.get("current_evaluation", {}),
-        state.get("question_count", 0),
-        state.get("max_questions", 7),
-        state.get("follow_up_round", 0),
+        question_count,
+        max_questions,
+        follow_up_round,
     )
-
     action = result.get("action", "next_question")
+
+    # ── 한계치 강제 (LLM이 규칙을 무시해도 흐름 보장) ───────
+    at_max_questions = question_count >= max_questions
+    followups_exhausted = follow_up_round >= MAX_FOLLOW_UP_ROUND
+
+    if at_max_questions and followups_exhausted:
+        action = "end"
+    elif followups_exhausted and action == "follow_up":
+        # 꼬리 한도 소진 → 남은 main 있으면 다음으로, 없으면 end
+        action = "end" if at_max_questions else "next_question"
+    elif at_max_questions and action == "next_question":
+        # main 한도 소진 → end
+        action = "end"
+    # at_max + !followups_exhausted + follow_up 은 의도된 케이스 (마지막 질문의 꼬리 1회 허용)
 
     return {
         **state,

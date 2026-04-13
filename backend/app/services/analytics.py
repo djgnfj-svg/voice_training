@@ -4,12 +4,15 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.interview import InterviewSession, InterviewAnswer
+from app.models.interview import InterviewSession, InterviewAnswer, JobPosting
+from app.models.agent_interview import AgentInterviewSession, AgentInterviewMessage
+from app.models.resume import Resume
 from app.models.activity import ActivityLog, ActivityItem
 
 
 async def get_session_history(db: AsyncSession, user_id: str, limit: int = 20) -> list[dict]:
-    answer_count_sub = (
+    # ── 레거시 InterviewSession ──
+    legacy_answer_count_sub = (
         select(
             InterviewAnswer.session_id,
             func.count().label("cnt"),
@@ -18,9 +21,9 @@ async def get_session_history(db: AsyncSession, user_id: str, limit: int = 20) -
         .subquery()
     )
 
-    result = await db.execute(
-        select(InterviewSession, func.coalesce(answer_count_sub.c.cnt, 0).label("answer_count"))
-        .outerjoin(answer_count_sub, InterviewSession.id == answer_count_sub.c.session_id)
+    legacy_result = await db.execute(
+        select(InterviewSession, func.coalesce(legacy_answer_count_sub.c.cnt, 0).label("answer_count"))
+        .outerjoin(legacy_answer_count_sub, InterviewSession.id == legacy_answer_count_sub.c.session_id)
         .options(
             selectinload(InterviewSession.resume),
             selectinload(InterviewSession.job_posting),
@@ -29,9 +32,7 @@ async def get_session_history(db: AsyncSession, user_id: str, limit: int = 20) -
         .order_by(InterviewSession.created_at.desc())
         .limit(limit)
     )
-    rows = result.all()
-
-    return [
+    legacy_sessions = [
         {
             "_kind": "session",
             "id": s.id,
@@ -44,9 +45,62 @@ async def get_session_history(db: AsyncSession, user_id: str, limit: int = 20) -
             "resumeName": s.resume.name if s.resume else None,
             "jobPostingData": s.job_posting.parsed_data if s.job_posting else None,
             "answerCount": answer_count,
+            "_sortKey": s.created_at,
         }
-        for s, answer_count in rows
+        for s, answer_count in legacy_result.all()
     ]
+
+    # ── AgentInterviewSession ──
+    agent_answer_count_sub = (
+        select(
+            AgentInterviewMessage.session_id,
+            func.count().label("cnt"),
+        )
+        .where(AgentInterviewMessage.role == "user_answer")
+        .group_by(AgentInterviewMessage.session_id)
+        .subquery()
+    )
+
+    agent_result = await db.execute(
+        select(
+            AgentInterviewSession,
+            Resume.name.label("resume_name"),
+            JobPosting.parsed_data.label("job_posting_data"),
+            func.coalesce(agent_answer_count_sub.c.cnt, 0).label("answer_count"),
+        )
+        .outerjoin(Resume, AgentInterviewSession.resume_id == Resume.id)
+        .outerjoin(JobPosting, AgentInterviewSession.job_posting_id == JobPosting.id)
+        .outerjoin(agent_answer_count_sub, AgentInterviewSession.id == agent_answer_count_sub.c.session_id)
+        .where(AgentInterviewSession.user_id == user_id)
+        .order_by(AgentInterviewSession.created_at.desc())
+        .limit(limit)
+    )
+    agent_sessions = [
+        {
+            "_kind": "session",
+            "id": s.id,
+            "userId": s.user_id,
+            # 프론트가 대문자로 비교하므로 통일
+            "status": (s.status or "").upper(),
+            "type": "ai-coach",
+            "overallScore": s.overall_score,
+            "createdAt": s.created_at.isoformat() if s.created_at else None,
+            "updatedAt": s.updated_at.isoformat() if s.updated_at else None,
+            "resumeName": resume_name,
+            "jobPostingData": job_posting_data,
+            "answerCount": answer_count,
+            "_sortKey": s.created_at,
+        }
+        for s, resume_name, job_posting_data, answer_count in agent_result.all()
+    ]
+
+    # ── 병합 후 createdAt 내림차순, limit ──
+    merged = legacy_sessions + agent_sessions
+    merged.sort(key=lambda x: x["_sortKey"], reverse=True)
+    merged = merged[:limit]
+    for m in merged:
+        m.pop("_sortKey", None)
+    return merged
 
 
 async def get_activity_history(db: AsyncSession, user_id: str, limit: int = 20) -> list[dict]:

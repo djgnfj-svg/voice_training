@@ -22,7 +22,6 @@ class FreeTrialAlreadyUsedError(Exception):
 CREDIT_COSTS = {
     "SESSION": 10,
     "MODEL_ANSWER": 10,
-    "DEEP_RESEARCH": 1,
     "FOLLOW_UP": 1,
 }
 

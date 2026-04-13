@@ -18,14 +18,6 @@ export interface CompanyAnalysis {
   interviewStyle: string;
   culture: string[];
   pastQuestionTrends: string[];
-  // 심층 분석 필드 (optional)
-  deepResearch?: boolean;
-  companyOverview?: string;
-  recentNews?: string[];
-  products?: string[];
-  interviewReviews?: string[];
-  keyTopicsForInterview?: string[];
-  suggestedQuestions?: string[];
 }
 
 // Resume

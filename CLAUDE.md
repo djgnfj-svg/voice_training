@@ -61,7 +61,6 @@
 - 에이전트 오케스트레이션 — 수동 상태 머신 (면접/저널/학습). 패턴은 LangGraph 스타일이나 패키지 의존성은 없음
 - **pgvector** — Postgres 확장 기반 RAG (프로필 + 저널 임베딩, OpenAI text-embedding-3-small). raw SQL로 코사인 유사도 검색
 - TTS — **OpenAI `gpt-4o-mini-tts`** (voice `sage`, speed 2.0x, 페르소나 5종: default/interviewer/journal_friend/journal_counselor/tutor). 별도 `tts` Docker 서비스가 래핑. 실패 시 edge-tts로 자동 폴백
-- Tavily (선택적 — 심층 기업 분석용 웹 검색)
 - Whisper API (선택적 — 음성인식, 없으면 Web Speech API만 사용)
 
 ### TTS 서비스 (`tts/`)
@@ -92,14 +91,31 @@
   - 3개 에이전트: 프로필(RAG) + 면접관(질문생성/흐름결정) + 평가(답변평가/리포트)
   - 오케스트레이터: LangGraph 상태 머신 (규칙 기반 분기, LLM 호출 없음)
   - 프로필 RAG: pgvector + OpenAI Embeddings, 강점/약점/패턴/맥락 카테고리
+  - **이력서 RAG (2026-04-13 신규)**: `resume_embeddings` 테이블 (chunk_type: summary/project/experience/education). 이력서 저장 시 BackgroundTask로 자동 청킹+임베딩. 매 질문 직전 focus_topics 기반 query로 top-3 retrieve
+  - **Fit Analysis (2026-04-13 신규)**: 면접 시작 시 1회 산출 → `agent_interview_sessions.fit_analysis` JSONB 영속화. answer/skip 흐름에서 재사용. skill_match(코드) + focus_topics(LLM, 3~5개) + avoid_topics
+  - **프롬프트 분기**: `INTERVIEWER_QUESTION_PROMPT_SLIM` (임베딩 있을 때) / `_FALLBACK` (없을 때 JSON 통째)
   - 완전 동적 질문: 미리 생성하지 않고 대화 흐름에 따라 1개씩 생성
   - 꼬리질문: depth < 80이면 자동 생성 (최대 2회)
-  - SSE 스트림: 프론트에 실시간 질문/평가 전달
+  - SSE 스트림: 프론트에 실시간 질문/평가 전달. 이벤트 `phase: loading_profile → profile_loaded → fit_analyzing → fit_analyzed → generating_question → question`
   - 세션 종료 시 프로필 자동 업데이트 (인사이트 추출 → RAG 저장)
-  - 코드: `backend/app/agent/` (state, nodes, profile_agent, interviewer_agent, evaluator_agent, embeddings)
+  - 코드: `backend/app/agent/` (state, nodes, profile_agent, interviewer_agent, evaluator_agent, embeddings, **resume_rag**, **fit_analyzer**)
   - 프롬프트: `backend/app/prompts/agent.py`
   - API: `/api/agent-interview/{start,answer,skip,end,{id}}`, `/api/profile`, `/api/profile/context`
   - UI: `frontend/src/components/agent-interview/`, `frontend/src/app/(authenticated)/agent-interview/`
+  - **평가 파이프라인 (2026-04-14 정비 완료)**:
+    - EVALUATOR_PROMPT: 각 역량 0~100 독립 채점 + 저품질 답변 규칙(반복/무관/포기/단답에 카테고리별 0~40 cap 명시)
+    - `evaluator_agent._normalize_evaluation(evaluation, answer)`: scores 0~100 clamp + `_quality_cap(answer)` 후처리(char_ratio/token unique_ratio 기반) + **overallScore = Σ(score_i × weight_i) 서버 강제 계산** (LLM 출력 무시)
+    - 가중치: clarity 30%, accuracy 25%, practicality 25%, depth 15%, completeness 5%
+  - **꼬리질문 제어**: `nodes.MAX_FOLLOW_UP_ROUND = 1`, `decide_next`가 LLM 출력 후 한계치 강제(question_count >= max 또는 follow_up_round >= 1이면 end/next_question). DECIDE 임계 depth < 70
+  - **답변 가드**: 프론트 `lib/transcript.ts`의 `hasMeaningfulContent`(정규화 후 10자/3 유니크 토큰) + 인라인 경고 UI, 백엔드 `_is_meaningful_answer`로 400 반환 (우회 방어). `SILENCE_TIMEOUT_MS = 30000`
+  - **모바일 중복 입력 방어**: `useSpeechRecognition.appendWithOverlap`으로 prev 끝과 새 final overlap 제거 (Android Chrome 동일 final 반복 emit 대응). `transcript.ts`의 `collapseImmediateRepeats`/`collapseRepeatedPhrases`
+  - **/end 핸들러**: 수동 종료도 `update_profile` + `generate_report` 호출 후 reportData 저장. 프론트 `endAgentInterview`는 `AbortSignal.timeout(30000)`
+  - **히스토리 통합**: `services/analytics.get_session_history`가 InterviewSession + AgentInterviewSession 병합. agent는 `type: 'ai-coach'`, `status` 대문자 통일. `SessionCard`가 `isAgent` 분기로 `/agent-interview/session/{id}` 라우팅
+  - **레이아웃**: `authenticated-content.isFullscreenSession`에 `/agent-interview/session/` 포함 (면접 중 Header 숨김)
+  - **알려진 제약 (`docs/TODO.md`)**:
+    - 모바일 중복 입력 완전 제거 불가 — 대부분 해소되지만 공백 없이 붙은 chunk 일부 잔존
+    - `/end` 리포트 생성 실패 시 status=completed + reportData=NULL 세션 남을 수 있음 (프론트 방어 있음)
+    - 400 응답이 SSE error로 빠져 재개 경로 없음 (이중 가드라 실제 발동 드묾)
 - **기존 면접 (레거시, 코드 유지)**: 일반/심화 모드는 UI에서 제거됨. 백엔드 API는 그대로 남아있음
 - **멀티라운드 꼬리질문** (기존): 메인 답변 → 꼬리질문 최대 2회 연쇄
   - 깊이 사다리: what → why → tradeoffs/alternatives
@@ -109,8 +125,6 @@
 - **답변 녹음 재생**: 음성 답변 녹음 → fire-and-forget 업로드 → 리포트에서 재생 버튼
   - `InterviewAnswer.audioUrl` 필드
   - API: `POST /api/interview/audio` (multipart, 세션 소유권 검증)
-- **심층 기업 분석**: 채용공고 분석 후 "심층 분석" 버튼 → 1크레딧 차감 → Tavily 웹 검색 → LLM 구조화
-  - API: `POST /api/job-posting/{id}/research` (멱등)
 - **모범답안 학습**: 이력서 선택 → AI가 질문+모범답안 생성 → 질문별 음성 답변 연습 → 모범답안 공개
 - **대시보드**: 성장 분석(점수 추이 차트 + 카테고리별 성과 차트)이 대시보드에 통합됨.
 - **온보딩**: 첫 방문 시(sessionCount=0 && !freeTrialUsed) 웰컴 다이얼로그 3단계 표시
@@ -255,5 +269,5 @@
 - Frontend 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `BACKEND_URL`
 - Frontend 선택: `NEXT_PUBLIC_ADMIN_EMAILS` (쉼표 구분, 어드민 메뉴 노출용 — **반드시 `NEXT_PUBLIC_` 접두어** 필요. 클라이언트 번들에 인라인됨)
 - Backend 필수: `DATABASE_URL`, `NEXTAUTH_SECRET`, `OPENAI_API_KEY`
-- Backend 선택: `ENVIRONMENT`, `TAVILY_API_KEY`, `AGENT_MODEL` (기본 `gpt-4o-mini`), `ADMIN_EMAILS`
+- Backend 선택: `ENVIRONMENT`, `AGENT_MODEL` (기본 `gpt-4o-mini`), `ADMIN_EMAILS`
 - TTS 서비스는 `backend/.env`의 `OPENAI_API_KEY`를 공유 (docker-compose의 `env_file`로 전달)
