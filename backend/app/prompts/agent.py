@@ -170,3 +170,33 @@ REPORT_PROMPT = """다음 면접 세션의 전체 대화를 분석하여 종합 
   "growthNotes": "이전 프로필 대비 성장한 부분 (프로필 데이터가 없으면 null)",
   "recommendations": ["다음 면접을 위한 구체적 추천 1", "추천 2"]
 }}"""
+
+FIT_ANALYSIS_PROMPT = """당신은 면접 설계 전문가입니다. 지원자의 이력서와 채용공고를 비교하여, 면접관이 깊이 파볼 만한 주제(focus_topics)와 다루지 말아야 할 주제(avoid_topics)를 추출하세요.
+
+<resume>
+{resume_brief}
+</resume>
+
+<job_posting>
+{jd_brief}
+</job_posting>
+
+<skill_match>
+matched(이력서·JD 둘 다 있음): {matched}
+gap(JD 요구이나 이력서 미언급): {gap}
+</skill_match>
+
+다음 JSON 형식으로 반환하세요:
+{{
+  "focus_topics": [
+    {{"topic": "주제명", "why": "선택 이유 한 줄", "priority": "high|medium|low"}}
+  ],
+  "avoid_topics": ["피할 주제 1"]
+}}
+
+규칙:
+- focus_topics 3~5개. JD의 핵심 요구사항 + 이력서 강점 영역을 우선
+- gap 영역은 "기초 탐색" 차원에서 1개 이내만 포함
+- avoid_topics는 0~3개. 이력서 수준 대비 너무 낮거나 본질에서 벗어난 주제
+- 채용공고가 없으면 이력서 기반 강점/관심 영역으로만 작성
+"""
