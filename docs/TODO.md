@@ -8,8 +8,11 @@
 1. **모든 답변의 `overallScore`가 70점 고정**으로 출력
 2. 역량별 점수도 단조로움 (예: 4개 답변 연속 `clarity:15, accuracy:20, practicality:20, depth:10, completeness:5` 패턴)
 3. 마지막 케이스에서 `scores` 합이 60인데 `overallScore: 70` — **합산과 mismatch**
-4. 리포트의 "개선점(improvements)"이 비어있음
-5. 역량별 평균 표시 이상
+4. **역량별 평균점수 표시가 이상함** (대시보드/리포트)
+   - 1차 원인: 답변별 scores 단조로움 → 평균도 단조롭게 나옴
+   - 2차 원인 의심: 프론트가 정규화 없이 raw 숫자 표시. clarity(15/30=50%)와 completeness(5/5=100%)를 같은 스케일로 비교 → 시각적으로 무의미
+   - 확인 위치: `frontend/src/components/agent-interview/` 리포트 컴포넌트, `backend/app/services/analytics.py`(역량별 집계 있는지)
+5. 리포트의 "개선점(improvements)"이 비어있음
 
 **근본 원인 (`backend/app/prompts/agent.py:173-194` EVALUATOR_PROMPT)**:
 ```
@@ -61,10 +64,18 @@ EVALUATOR_PROMPT:
 
 ### 영향 범위
 
-- `backend/app/prompts/agent.py` (EVALUATOR_PROMPT, REPORT_PROMPT)
-- `backend/app/agent/evaluator_agent.py` (post-processing)
-- `backend/app/routers/agent_interview.py` (end 핸들러 흐름)
+- `backend/app/prompts/agent.py` (EVALUATOR_PROMPT line 158-194, REPORT_PROMPT line 196-215)
+- `backend/app/agent/evaluator_agent.py` (post-processing — 합산/검증 코드 추가 위치)
+- `backend/app/routers/agent_interview.py` (end 핸들러 흐름 — `/api/agent-interview/{session_id}/end`)
+- `backend/app/agent/nodes.py` (`update_profile` + `generate_report` 호출 순서)
 - 프론트엔드 리포트 표시 컴포넌트 (`frontend/src/components/agent-interview/...`)
+- `backend/app/services/analytics.py` (대시보드 역량별 집계 — 정규화 로직 점검)
+
+### 회귀 가능성 평가
+
+- 이번 세션(`feat/resume-rag`)에서 evaluator_agent / EVALUATOR_PROMPT는 **건드리지 않음** → 신규 회귀 아님
+- main 브랜치에서도 동일 현상일 가능성 높음 (기존 버그)
+- `git log -- backend/app/prompts/agent.py backend/app/agent/evaluator_agent.py` 로 마지막 변경 시점 확인하여 도입 시점 추적 가능
 
 ### 우선 검증 명령
 
