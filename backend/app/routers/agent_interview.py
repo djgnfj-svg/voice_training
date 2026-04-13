@@ -120,6 +120,10 @@ async def start_interview(
         "conversation_history": [],
         "overall_report": None,
         "pending_events": [],
+        "resume_id": body.resumeId,
+        "fit_analysis": None,
+        "has_resume_embeddings": False,
+        "current_resume_chunks": [],
     }
 
     async def event_generator():
@@ -130,6 +134,11 @@ async def start_interview(
             state["pending_events"] = []
 
             state = await nodes.load_profile(state, db)
+            for ev in state.get("pending_events", []):
+                yield {"event": ev["event"], "data": json.dumps(ev["data"])}
+            state["pending_events"] = []
+
+            state = await nodes.fit_analysis_node(state, db)
             for ev in state.get("pending_events", []):
                 yield {"event": ev["event"], "data": json.dumps(ev["data"])}
             state["pending_events"] = []
