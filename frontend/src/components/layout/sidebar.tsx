@@ -25,11 +25,11 @@ import { useMobileSidebar } from '@/hooks/useMobileSidebar';
 const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { href: '/interview/setup', label: '면접 연습', icon: Mic },
-  { href: '/journal', label: '하루의 정리', icon: BookOpen },
-  { href: '/nightly-study', label: '오늘의 학습', icon: Moon },
 ];
 
 const adminNavItems = [
+  { href: '/journal', label: '하루의 정리', icon: BookOpen },
+  { href: '/nightly-study', label: '오늘의 학습', icon: Moon },
   { href: '/admin/cunning', label: '컨닝 모드', icon: Eye },
   { href: '/admin/answer-assist', label: '답변 어시스트', icon: MessageSquare },
   { href: '/admin/voice-test', label: '음성 테스트', icon: AudioLines },
