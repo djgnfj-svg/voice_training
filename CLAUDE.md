@@ -103,9 +103,10 @@
   - API: `/api/agent-interview/{start,answer,skip,end,{id}}`, `/api/profile`, `/api/profile/context`
   - UI: `frontend/src/components/agent-interview/`, `frontend/src/app/(authenticated)/agent-interview/`
   - **알려진 이슈 (2026-04-13 테스트, `docs/TODO.md`에 상세)**:
+    - 🔥 **최우선: 평가 시스템 점수 70점 고정 버그** — 원인 분석 완료. EVALUATOR_PROMPT의 가중치(30%, 25%...)를 LLM이 각 카테고리 만점으로 해석해 일관 70점 출력. overallScore도 LLM이 별도 박음 (scores 합과 mismatch). 코드에 가중평균 계산 부재. 수정안: 프롬프트 명확화 + 코드 후처리에서 weighted average 강제
+    - 개선점(improvements) 비어있음 — 모든 세션 in_progress 상태로 끝남, end 핸들러 호출 흐름 검증 필요
     - 면접 중 침묵 허용이 짧아서 답변 서두름 발생
-    - 꼬리질문 중복/애매함 (depth < 80 임계 느슨)
-    - **평가 시스템 의심**: 점수 70점 고정/역량별 평균 이상/개선점 비어있음 — 회귀 가능성 높음, 우선 조사 필요
+    - 꼬리질문 중복/애매함 (depth < 80 임계 느슨, 평가 버그 수정 후 재측정 필요)
 - **기존 면접 (레거시, 코드 유지)**: 일반/심화 모드는 UI에서 제거됨. 백엔드 API는 그대로 남아있음
 - **멀티라운드 꼬리질문** (기존): 메인 답변 → 꼬리질문 최대 2회 연쇄
   - 깊이 사다리: what → why → tradeoffs/alternatives
