@@ -284,7 +284,7 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
     }
 
 
-MAX_FOLLOW_UP_ROUND = 2
+MAX_FOLLOW_UP_ROUND = 1  # 피드백: 꼬리질문이 너무 자주/중복 → main당 최대 1회
 
 
 async def decide_next(state: InterviewState, db: AsyncSession) -> InterviewState:
