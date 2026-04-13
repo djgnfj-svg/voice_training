@@ -128,7 +128,6 @@ function InterviewTab() {
     rawText: string;
     parsedData: ParsedJobPosting;
     companyAnalysis: CompanyAnalysis;
-    deepResearchAvailable: boolean;
   } | null>(null);
   const [inProgressSession, setInProgressSession] = useState<{
     id: string;
@@ -172,7 +171,6 @@ function InterviewTab() {
     rawText: string;
     parsedData: ParsedJobPosting;
     companyAnalysis: CompanyAnalysis;
-    deepResearchAvailable: boolean;
   }) => {
     setJobPostingData(data);
     setStep('start');
@@ -307,13 +305,8 @@ function InterviewTab() {
             </>
           ) : (
             <JobPostingResult
-              jobPostingId={jobPostingData.id}
               parsedData={jobPostingData.parsedData}
               companyAnalysis={jobPostingData.companyAnalysis}
-              deepResearchAvailable={jobPostingData.deepResearchAvailable}
-              onCompanyAnalysisUpdate={(analysis) =>
-                setJobPostingData(prev => prev ? { ...prev, companyAnalysis: analysis } : prev)
-              }
             />
           )}
         </>
@@ -324,13 +317,8 @@ function InterviewTab() {
         <>
           {jobPostingData && (
             <JobPostingResult
-              jobPostingId={jobPostingData.id}
               parsedData={jobPostingData.parsedData}
               companyAnalysis={jobPostingData.companyAnalysis}
-              deepResearchAvailable={jobPostingData.deepResearchAvailable}
-              onCompanyAnalysisUpdate={(analysis) =>
-                setJobPostingData(prev => prev ? { ...prev, companyAnalysis: analysis } : prev)
-              }
             />
           )}
 

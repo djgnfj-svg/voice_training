@@ -13,7 +13,6 @@ const serverEnvSchema = z.object({
   TOSS_SECRET_KEY: z.string().optional(),
 
   // Optional
-  TAVILY_API_KEY: z.string().optional(),
   REDIS_URL: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().optional(),

@@ -61,7 +61,6 @@
 - 에이전트 오케스트레이션 — 수동 상태 머신 (면접/저널/학습). 패턴은 LangGraph 스타일이나 패키지 의존성은 없음
 - **pgvector** — Postgres 확장 기반 RAG (프로필 + 저널 임베딩, OpenAI text-embedding-3-small). raw SQL로 코사인 유사도 검색
 - TTS — **OpenAI `gpt-4o-mini-tts`** (voice `sage`, speed 2.0x, 페르소나 5종: default/interviewer/journal_friend/journal_counselor/tutor). 별도 `tts` Docker 서비스가 래핑. 실패 시 edge-tts로 자동 폴백
-- Tavily (선택적 — 심층 기업 분석용 웹 검색)
 - Whisper API (선택적 — 음성인식, 없으면 Web Speech API만 사용)
 
 ### TTS 서비스 (`tts/`)
@@ -109,8 +108,6 @@
 - **답변 녹음 재생**: 음성 답변 녹음 → fire-and-forget 업로드 → 리포트에서 재생 버튼
   - `InterviewAnswer.audioUrl` 필드
   - API: `POST /api/interview/audio` (multipart, 세션 소유권 검증)
-- **심층 기업 분석**: 채용공고 분석 후 "심층 분석" 버튼 → 1크레딧 차감 → Tavily 웹 검색 → LLM 구조화
-  - API: `POST /api/job-posting/{id}/research` (멱등)
 - **모범답안 학습**: 이력서 선택 → AI가 질문+모범답안 생성 → 질문별 음성 답변 연습 → 모범답안 공개
 - **대시보드**: 성장 분석(점수 추이 차트 + 카테고리별 성과 차트)이 대시보드에 통합됨.
 - **온보딩**: 첫 방문 시(sessionCount=0 && !freeTrialUsed) 웰컴 다이얼로그 3단계 표시
@@ -255,5 +252,5 @@
 - Frontend 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `BACKEND_URL`
 - Frontend 선택: `NEXT_PUBLIC_ADMIN_EMAILS` (쉼표 구분, 어드민 메뉴 노출용 — **반드시 `NEXT_PUBLIC_` 접두어** 필요. 클라이언트 번들에 인라인됨)
 - Backend 필수: `DATABASE_URL`, `NEXTAUTH_SECRET`, `OPENAI_API_KEY`
-- Backend 선택: `ENVIRONMENT`, `TAVILY_API_KEY`, `AGENT_MODEL` (기본 `gpt-4o-mini`), `ADMIN_EMAILS`
+- Backend 선택: `ENVIRONMENT`, `AGENT_MODEL` (기본 `gpt-4o-mini`), `ADMIN_EMAILS`
 - TTS 서비스는 `backend/.env`의 `OPENAI_API_KEY`를 공유 (docker-compose의 `env_file`로 전달)
