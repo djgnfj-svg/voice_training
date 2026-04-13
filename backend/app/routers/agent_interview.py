@@ -586,19 +586,94 @@ async def end_interview(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Manually end interview early."""
+    """Manually end interview early. 프로필 업데이트 + 리포트 생성까지 수행."""
     result = await db.execute(
-        select(AgentInterviewSession).where(
+        select(AgentInterviewSession)
+        .where(
             AgentInterviewSession.id == session_id,
             AgentInterviewSession.user_id == user.id,
             AgentInterviewSession.status == "in_progress",
         )
+        .options(selectinload(AgentInterviewSession.messages))
     )
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
+    # 대화 히스토리 복원
+    messages = sorted(session.messages, key=lambda m: m.message_index)
+    conversation_history = []
+    question_count = 0
+    current_q = ""
+    for msg in messages:
+        if msg.role in ("agent_question", "agent_followup"):
+            current_q = msg.content
+            if msg.role == "agent_question":
+                question_count = msg.question_number or question_count
+        elif msg.role == "user_answer" and msg.evaluation:
+            conversation_history.append({
+                "question": current_q,
+                "answer": msg.content,
+                "evaluation": msg.evaluation,
+                "question_number": msg.question_number,
+                "follow_up_round": msg.follow_up_round or 0,
+            })
+
+    # 리소스 로드 (프로필 업데이트 및 리포트 생성용)
+    resume_result = await db.execute(select(Resume).where(Resume.id == session.resume_id))
+    resume = resume_result.scalar_one_or_none()
+    resume_data = resume.parsed_data if resume else {}
+
+    job_posting_data = None
+    if session.job_posting_id:
+        jp_result = await db.execute(
+            select(JobPosting).where(
+                JobPosting.id == session.job_posting_id,
+                JobPosting.user_id == user.id,
+            )
+        )
+        jp = jp_result.scalar_one_or_none()
+        if jp:
+            job_posting_data = jp.parsed_data
+
+    from app.agent.profile_agent import load_user_profile
+    user_profile = await load_user_profile(db, user.id, resume_data, job_posting_data)
+
+    state: InterviewState = {
+        "session_id": session_id,
+        "user_id": user.id,
+        "resume": resume_data,
+        "job_posting": job_posting_data,
+        "user_profile": user_profile,
+        "current_question": "",
+        "current_answer": "",
+        "question_count": question_count,
+        "follow_up_round": 0,
+        "max_questions": session.max_questions or 7,
+        "current_evaluation": {},
+        "next_action": "end",
+        "conversation_history": conversation_history,
+        "overall_report": None,
+        "pending_events": [],
+        "resume_id": session.resume_id,
+        "fit_analysis": session.fit_analysis,
+        "has_resume_embeddings": False,
+        "current_resume_chunks": [],
+    }
+
+    # 대화 내역이 없으면 리포트 생성 건너뜀 (LLM 호출 낭비 + 의미 없는 리포트 방지)
+    if conversation_history:
+        try:
+            state = await nodes.update_profile(state, db)
+            state = await nodes.generate_report(state, db)
+            session.report_data = state.get("overall_report")
+            if state.get("overall_report"):
+                session.overall_score = state["overall_report"].get("overallScore")
+        except Exception:
+            logger.exception("End interview report generation failed for %s", session_id)
+
     session.status = "completed"
+    session.total_questions = question_count
     await db.commit()
 
     return {"status": "completed", "sessionId": session_id}

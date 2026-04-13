@@ -284,17 +284,34 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
     }
 
 
+MAX_FOLLOW_UP_ROUND = 2
+
+
 async def decide_next(state: InterviewState, db: AsyncSession) -> InterviewState:
-    """Decide next action after evaluation."""
+    """Decide next action after evaluation. LLM이 제시한 후, 한계치를 코드가 강제."""
+    question_count = state.get("question_count", 0)
+    max_questions = state.get("max_questions", 7)
+    follow_up_round = state.get("follow_up_round", 0)
+
     result = await interviewer_agent.decide_next_action(
         state.get("conversation_history", []),
         state.get("current_evaluation", {}),
-        state.get("question_count", 0),
-        state.get("max_questions", 7),
-        state.get("follow_up_round", 0),
+        question_count,
+        max_questions,
+        follow_up_round,
     )
-
     action = result.get("action", "next_question")
+
+    # ── 한계치 강제 (LLM이 규칙을 무시해도 흐름 보장) ───────
+    at_max_questions = question_count >= max_questions
+    followups_exhausted = follow_up_round >= MAX_FOLLOW_UP_ROUND
+
+    if at_max_questions and followups_exhausted:
+        action = "end"
+    elif followups_exhausted and action == "follow_up":
+        action = "end" if at_max_questions else "next_question"
+    elif at_max_questions and action == "next_question":
+        action = "end"
 
     return {
         **state,
