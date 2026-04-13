@@ -6,7 +6,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.state import InterviewState
-from app.agent import profile_agent, interviewer_agent, evaluator_agent, interview_planner
+from app.agent import profile_agent, interviewer_agent, evaluator_agent, interview_planner, resume_rag, fit_analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -118,16 +118,72 @@ async def load_profile(state: InterviewState, db: AsyncSession) -> InterviewStat
     }
 
 
+async def fit_analysis_node(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """이력서↔JD Fit Analysis. 면접 시작 시 1회 호출. has_resume_embeddings도 같이 판정."""
+    events = list(state.get("pending_events", []))
+    events.append({"event": "status", "data": {"phase": "fit_analyzing"}})
+
+    fa = await fit_analyzer.run_fit_analysis(state["resume"], state.get("job_posting"))
+
+    has_emb = False
+    rid = state.get("resume_id")
+    if rid:
+        has_emb = await resume_rag.has_resume_embeddings(db, rid)
+
+    events.append({
+        "event": "status",
+        "data": {
+            "phase": "fit_analyzed",
+            "focus_topics_count": len(fa["focus_topics"]),
+            "has_resume_embeddings": has_emb,
+        },
+    })
+
+    return {
+        **state,
+        "fit_analysis": fa,
+        "has_resume_embeddings": has_emb,
+        "current_resume_chunks": [],
+        "pending_events": events,
+    }
+
+
 async def generate_question(state: InterviewState, db: AsyncSession) -> InterviewState:
-    """Generate next interview question."""
+    """Generate next interview question. RAG 검색 후 SLIM/FALLBACK 분기."""
     events = list(state.get("pending_events", []))
     events.append({"event": "status", "data": {"phase": "generating_question"}})
 
+    # 1) 검색 query 산출 (Spec D5): focus_topics → current_answer → summary 순으로 fallback
+    fa = state.get("fit_analysis") or {}
+    focus_topics = fa.get("focus_topics") or []
+    i = state.get("question_count", 0)
+    current_focus_topic = ""
+    if focus_topics:
+        ft = focus_topics[i % len(focus_topics)]
+        current_focus_topic = ft.get("topic", "")
+    query = current_focus_topic or state.get("current_answer") or (state["resume"] or {}).get("summary") or "주요 경험"
+
+    # 2) RAG 검색 (임베딩 있을 때만)
+    chunks: list[dict] = []
+    has_emb = state.get("has_resume_embeddings", False)
+    rid = state.get("resume_id")
+    if has_emb and rid:
+        try:
+            chunks = await resume_rag.search_resume(db, state["user_id"], rid, query, top_k=3)
+        except Exception:
+            logger.exception("search_resume failed; falling back to no chunks")
+            chunks = []
+
+    # 3) 질문 생성 (chunks 있으면 SLIM, 없으면 FALLBACK)
     result = await interviewer_agent.generate_question(
-        state["resume"],
-        state.get("job_posting"),
-        state["user_profile"],
-        state.get("conversation_history", []),
+        resume=state["resume"],
+        job_posting=state.get("job_posting"),
+        user_profile=state["user_profile"],
+        conversation_history=state.get("conversation_history", []),
+        fit_analysis=fa or None,
+        resume_chunks=chunks,
+        has_embeddings=has_emb and bool(chunks),
+        current_focus_topic=current_focus_topic,
     )
 
     question = result.get("question", "")
@@ -147,6 +203,7 @@ async def generate_question(state: InterviewState, db: AsyncSession) -> Intervie
     return {
         **state,
         "current_question": question,
+        "current_resume_chunks": chunks,
         "question_count": question_count,
         "follow_up_round": 0,
         "pending_events": events,
