@@ -18,7 +18,8 @@ import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { normalizeTranscript } from '@/lib/transcript';
 
-const SILENCE_TIMEOUT_MS = 3000;
+// 답변 중 침묵 자동 제출 타이머. 3s는 사용자가 잠깐 생각만 해도 제출되어 "급해서 연습 안 됨" 피드백의 원인. 30s로 완화.
+const SILENCE_TIMEOUT_MS = 30000;
 
 interface AgentInterviewPanelProps {
   resumeId: string;
