@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import logging
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 logger = logging.getLogger(__name__)
 
+ChunkType = Literal["summary", "project", "experience", "education"]
+
 
 class Chunk(TypedDict):
-    chunk_type: str   # 'summary' | 'project' | 'experience' | 'education'
+    chunk_type: ChunkType
+    # 원본 배열 인덱스 (건너뛴 항목 있을 시 비연속). DB UNIQUE("resumeId", chunk_type, chunk_index) 키로 사용.
     chunk_index: int
     content: str
     metadata: dict
