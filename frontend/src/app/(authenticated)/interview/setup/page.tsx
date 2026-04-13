@@ -202,6 +202,7 @@ function InterviewTab() {
     TECHNICAL: '기술면접',
     BEHAVIORAL: '인성면접',
     MIXED: '혼합면접',
+    'ai-coach': 'AI 코치 면접',
   };
 
   const statusLabels: Record<string, string> = {
@@ -461,13 +462,15 @@ function SessionCard({
   typeLabels: Record<string, string>;
   statusLabels: Record<string, string>;
 }) {
+  const isAgent = session.type === 'ai-coach';
+  const href = isAgent
+    ? `/agent-interview/session/${session.id}`
+    : session.status === 'COMPLETED'
+      ? `/interview/practice/${session.id}`
+      : `/interview/session/${session.id}`;
   return (
     <Card className="transition-colors hover:bg-accent/50">
-      <Link href={
-        session.status === 'COMPLETED'
-          ? `/interview/practice/${session.id}`
-          : `/interview/session/${session.id}`
-      }>
+      <Link href={href}>
         <CardContent className="flex items-center justify-between py-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
