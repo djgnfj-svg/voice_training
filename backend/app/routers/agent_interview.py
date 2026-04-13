@@ -143,6 +143,9 @@ async def start_interview(
                 yield {"event": ev["event"], "data": json.dumps(ev["data"])}
             state["pending_events"] = []
 
+            # Fit Analysis 영속화 — answer/skip 흐름에서 재사용 (Spec 4.2(b))
+            session.fit_analysis = state.get("fit_analysis")
+
             state = await nodes.generate_question(state, db)
 
             # AI 질문 생성 성공 → 크레딧 차감 (실패 시 세션 폐기 + 에러 반환)
@@ -293,6 +296,10 @@ async def submit_answer(
     from app.agent.profile_agent import load_user_profile
     user_profile = await load_user_profile(db, user.id, resume_data, job_posting_data)
 
+    # 이력서 RAG / Fit Analysis 컨텍스트 복원 (Spec 4.2(b))
+    from app.agent.resume_rag import has_resume_embeddings as _has_emb
+    has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
+
     state: InterviewState = {
         "session_id": session_id,
         "user_id": user.id,
@@ -312,6 +319,10 @@ async def submit_answer(
         "loop_count": 0,
         "actions_taken": [],
         "pending_events": [],
+        "fit_analysis": session.fit_analysis,
+        "resume_id": session.resume_id,
+        "has_resume_embeddings": has_emb,
+        "current_resume_chunks": [],
     }
 
     next_message_index = len(messages)
@@ -462,6 +473,11 @@ async def skip_question(
 
     max_questions = session.max_questions or 7
 
+    # 이력서 RAG / Fit Analysis 컨텍스트 복원 (Spec 4.2(b))
+    from app.agent.resume_rag import has_resume_embeddings as _has_emb
+    has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
+    persisted_fit = session.fit_analysis
+
     async def event_generator():
         nonlocal question_count, next_message_index
         try:
@@ -496,6 +512,10 @@ async def skip_question(
                     "conversation_history": conversation_history,
                     "overall_report": None,
                     "pending_events": [],
+                    "fit_analysis": persisted_fit,
+                    "resume_id": session.resume_id,
+                    "has_resume_embeddings": has_emb,
+                    "current_resume_chunks": [],
                 }
                 state = await nodes.update_profile(state, db)
                 state = await nodes.generate_report(state, db)
@@ -528,6 +548,10 @@ async def skip_question(
                     "conversation_history": conversation_history,
                     "overall_report": None,
                     "pending_events": [],
+                    "fit_analysis": persisted_fit,
+                    "resume_id": session.resume_id,
+                    "has_resume_embeddings": has_emb,
+                    "current_resume_chunks": [],
                 }
                 state = await nodes.generate_question(state, db)
                 for ev in state.get("pending_events", []):
