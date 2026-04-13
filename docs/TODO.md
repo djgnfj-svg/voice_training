@@ -30,6 +30,53 @@
 
 ---
 
+## 레거시 정리 (한 번에 일괄 작업)
+
+### 배경
+- AI 코치 면접(`AgentInterviewSession`)이 유일한 면접 흐름으로 정착. 레거시 일반/심화 면접 UI는 이미 제거됨
+- 하지만 프론트 페이지·백엔드 라우터·DB 테이블은 남아있어 history 병합·analytics 분기 등 유지보수 부담
+
+### 제거 대상
+**프론트**
+- `frontend/src/app/(authenticated)/interview/session/[id]/page.tsx` — 레거시 세션 진행 페이지
+- `frontend/src/app/(authenticated)/interview/practice/[id]/page.tsx` — 레거시 연습 페이지 (COMPLETED 세션 진입)
+- `frontend/src/app/(authenticated)/interview/report/[id]/page.tsx` — 레거시 리포트
+- `frontend/src/hooks/usePracticeSession.ts` — practice-evaluate 호출 훅
+- `frontend/src/app/(authenticated)/interview/setup/page.tsx` 의 SessionCard href 분기 단순화 (지금은 ai-coach 외에 legacy COMPLETED/IN_PROGRESS 분기 있음)
+- `authenticated-content.tsx` `isFullscreenSession`에서 `/interview/session/` 제거 가능성 (경로 자체가 사라지면)
+
+**백엔드**
+- `backend/app/routers/interview.py` — `/api/interview/setup`, `/api/interview/practice-evaluate`, `/api/interview/audio` 등 레거시 엔드포인트
+- `backend/app/services/report.py` — 레거시 세션 리포트 (share if any)
+- `backend/app/services/evaluation.py` — 레거시 평가 프롬프트 사용처
+- `backend/app/prompts/evaluation.py` — `TECHNICAL/BEHAVIORAL/MIXED + FOLLOWUP` 프롬프트 (AgentInterview는 `prompts/agent.py` 사용)
+- `backend/app/models/interview.py` 의 `InterviewSession`, `InterviewAnswer` (JobPosting은 AgentInterviewSession이 공유하므로 **유지**)
+- `backend/app/services/analytics.py` 의 legacy 분기 (병합 로직 단순화)
+
+**DB**
+- `interview_sessions`, `interview_answers` 테이블 drop
+- 단, 기존 유저 과거 기록 보존 원하면 읽기 전용 archival 옵션 (별도 논의)
+
+### 확인 필요 (제거 전 grep)
+- `usePracticeSession` / `practice-evaluate` / `InterviewSession` / `InterviewAnswer` 호출처
+- 모범답안 학습(`ActivityLog`, `AnswerAssistSession`)이 레거시와 공유하는 코드 여부
+- `InterviewAnswer.audioUrl`(녹음 파일) Docker `audio-storage` volume 정책 — 파일 정리 스크립트 필요할 수도
+
+### 작업 순서 제안
+1. 코드 grep으로 참조 전수 조사 (별도 문서에 정리)
+2. 프론트 페이지 + 훅 제거
+3. 백엔드 라우터 + 서비스 + 프롬프트 제거
+4. `analytics.get_session_history` 단순화 (agent만 반환)
+5. 유저 알림/데이터 이관 정책 합의 후 DB 마이그레이션 (테이블 drop)
+6. `authenticated-content.tsx` / `sidebar.tsx` 조건 정리
+
+### 리스크
+- 기존 유저의 과거 기록이 사라짐 → 사전 공지 + export 기능 고려
+- JobPosting 테이블은 레거시·AI 코치 양쪽에서 참조 → 삭제 금지
+- `audio-storage` volume에 남는 orphan 파일 청소
+
+---
+
 ## 기능 추가 (향후)
 
 ### 채용공고 등록 시 자동 기업 심층 정보 수집
