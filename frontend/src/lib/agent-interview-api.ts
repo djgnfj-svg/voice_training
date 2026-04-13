@@ -13,9 +13,12 @@ export interface AgentAnswerParams {
 }
 
 export async function endAgentInterview(sessionId: string) {
+  // /end는 내부적으로 update_profile + generate_report LLM 호출을 수행해 수 초 소요됨.
+  // 브라우저 기본 fetch timeout에 걸리지 않도록 30초 AbortSignal.
   const res = await fetch(`/api/agent-interview/${sessionId}/end`, {
     method: "POST",
     credentials: "include",
+    signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) throw new Error("면접 종료에 실패했습니다");
   return res.json();

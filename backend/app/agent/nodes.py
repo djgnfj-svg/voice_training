@@ -309,9 +309,12 @@ async def decide_next(state: InterviewState, db: AsyncSession) -> InterviewState
     if at_max_questions and followups_exhausted:
         action = "end"
     elif followups_exhausted and action == "follow_up":
+        # 꼬리 한도 소진 → 남은 main 있으면 다음으로, 없으면 end
         action = "end" if at_max_questions else "next_question"
     elif at_max_questions and action == "next_question":
+        # main 한도 소진 → end
         action = "end"
+    # at_max + !followups_exhausted + follow_up 은 의도된 케이스 (마지막 질문의 꼬리 1회 허용)
 
     return {
         **state,

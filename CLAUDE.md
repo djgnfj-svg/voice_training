@@ -102,11 +102,20 @@
   - 프롬프트: `backend/app/prompts/agent.py`
   - API: `/api/agent-interview/{start,answer,skip,end,{id}}`, `/api/profile`, `/api/profile/context`
   - UI: `frontend/src/components/agent-interview/`, `frontend/src/app/(authenticated)/agent-interview/`
-  - **알려진 이슈 (2026-04-13 테스트, `docs/TODO.md`에 상세)**:
-    - 🔥 **최우선: 평가 시스템 점수 70점 고정 버그** — 원인 분석 완료. EVALUATOR_PROMPT의 가중치(30%, 25%...)를 LLM이 각 카테고리 만점으로 해석해 일관 70점 출력. overallScore도 LLM이 별도 박음 (scores 합과 mismatch). 코드에 가중평균 계산 부재. 수정안: 프롬프트 명확화 + 코드 후처리에서 weighted average 강제
-    - 개선점(improvements) 비어있음 — 모든 세션 in_progress 상태로 끝남, end 핸들러 호출 흐름 검증 필요
-    - 면접 중 침묵 허용이 짧아서 답변 서두름 발생
-    - 꼬리질문 중복/애매함 (depth < 80 임계 느슨, 평가 버그 수정 후 재측정 필요)
+  - **평가 파이프라인 (2026-04-14 정비 완료)**:
+    - EVALUATOR_PROMPT: 각 역량 0~100 독립 채점 + 저품질 답변 규칙(반복/무관/포기/단답에 카테고리별 0~40 cap 명시)
+    - `evaluator_agent._normalize_evaluation(evaluation, answer)`: scores 0~100 clamp + `_quality_cap(answer)` 후처리(char_ratio/token unique_ratio 기반) + **overallScore = Σ(score_i × weight_i) 서버 강제 계산** (LLM 출력 무시)
+    - 가중치: clarity 30%, accuracy 25%, practicality 25%, depth 15%, completeness 5%
+  - **꼬리질문 제어**: `nodes.MAX_FOLLOW_UP_ROUND = 1`, `decide_next`가 LLM 출력 후 한계치 강제(question_count >= max 또는 follow_up_round >= 1이면 end/next_question). DECIDE 임계 depth < 70
+  - **답변 가드**: 프론트 `lib/transcript.ts`의 `hasMeaningfulContent`(정규화 후 10자/3 유니크 토큰) + 인라인 경고 UI, 백엔드 `_is_meaningful_answer`로 400 반환 (우회 방어). `SILENCE_TIMEOUT_MS = 30000`
+  - **모바일 중복 입력 방어**: `useSpeechRecognition.appendWithOverlap`으로 prev 끝과 새 final overlap 제거 (Android Chrome 동일 final 반복 emit 대응). `transcript.ts`의 `collapseImmediateRepeats`/`collapseRepeatedPhrases`
+  - **/end 핸들러**: 수동 종료도 `update_profile` + `generate_report` 호출 후 reportData 저장. 프론트 `endAgentInterview`는 `AbortSignal.timeout(30000)`
+  - **히스토리 통합**: `services/analytics.get_session_history`가 InterviewSession + AgentInterviewSession 병합. agent는 `type: 'ai-coach'`, `status` 대문자 통일. `SessionCard`가 `isAgent` 분기로 `/agent-interview/session/{id}` 라우팅
+  - **레이아웃**: `authenticated-content.isFullscreenSession`에 `/agent-interview/session/` 포함 (면접 중 Header 숨김)
+  - **알려진 제약 (`docs/TODO.md`)**:
+    - 모바일 중복 입력 완전 제거 불가 — 대부분 해소되지만 공백 없이 붙은 chunk 일부 잔존
+    - `/end` 리포트 생성 실패 시 status=completed + reportData=NULL 세션 남을 수 있음 (프론트 방어 있음)
+    - 400 응답이 SSE error로 빠져 재개 경로 없음 (이중 가드라 실제 발동 드묾)
 - **기존 면접 (레거시, 코드 유지)**: 일반/심화 모드는 UI에서 제거됨. 백엔드 API는 그대로 남아있음
 - **멀티라운드 꼬리질문** (기존): 메인 답변 → 꼬리질문 최대 2회 연쇄
   - 깊이 사다리: what → why → tradeoffs/alternatives

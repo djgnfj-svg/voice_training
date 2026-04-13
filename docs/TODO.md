@@ -30,6 +30,35 @@
 
 ---
 
+## 코드 리뷰 후속 (2026-04-14)
+
+### 400 응답 UX 복구
+- `agent_interview.py/submit_answer`가 의미 없는 답변에 400 반환하면 프론트 `createSSEFromPost`의 `res.ok` 분기가 SSE `error` 이벤트로 발화 → `useAgentInterview` 핸들러가 `setPhase("error")`로 전환되어 면접이 끝나버림
+- 서버 가드는 프론트 가드 우회 방어용이라 발동 확률 낮지만, 발동 시 복구 경로 없음
+- 수정안: `createSSEFromPost`가 400 status를 별도 콜백으로 분리하거나, 프론트 핸들러가 `code === 'BAD_ANSWER'` 류 케이스에 `setAnswerWarning + setPhase('answering')` 재개
+
+### Silence auto-submit 경고 후 재시도 UX
+- `hasMeaningfulContent` 실패로 warning 세팅되면 `lastTranscriptRef`가 고정되어 타이머 재설정 안 됨 → 사용자가 더 말 안 하면 warning이 영구 표시
+- 수정안: warning 세팅 후 N초 뒤 재평가 or 경고 문구에 "계속 말씀해주세요" 유도 + 30초 타이머 재등록
+
+### `_quality_cap` 임계 한국어 특성 재검증
+- `char_ratio < 0.25` / `token unique/total < 0.35` / `unique_tokens < 5` 임계가 한국어 정상 답변에 오탐 가능성
+- 실사용 데이터(completed 세션 20~30건)로 임계 튜닝 or 오탐 샘플 수집
+
+### `/api/interview/in-progress` TanStack Query 전환
+- `interview/setup/page.tsx`에 raw `useEffect + fetch` 남아있음 (CLAUDE.md 규칙 위반)
+- `useQuery`로 교체
+
+### `analytics.get_session_history` 단일 쿼리 병합
+- 현재 legacy/agent 각각 `limit 20` 후 Python 정렬, 볼륨이 커지면 오래된 쪽 잘림
+- 수정안: SQL UNION ALL 후 ORDER BY createdAt DESC LIMIT 20
+
+### `/end` 리포트 실패 시 명시적 상태
+- 현재 `update_profile`/`generate_report` 예외 시 `except: log only` → status=completed + reportData=NULL인 세션이 남음
+- 프론트는 `reportData` null 체크 있지만 **이미 인지된 edge case**. 최소 `session.report_data = None` 명시적 세팅으로 의도 드러내기
+
+---
+
 ## 레거시 정리 (한 번에 일괄 작업)
 
 ### 배경
