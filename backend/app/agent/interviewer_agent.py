@@ -7,7 +7,6 @@ import logging
 from app.config import settings
 from app.lib.llm_client import call_llm_json
 from app.prompts.agent import (
-    INTERVIEWER_QUESTION_PROMPT_FALLBACK,
     INTERVIEWER_DECIDE_PROMPT,
     INTERVIEWER_FOLLOWUP_PROMPT,
 )
@@ -45,29 +44,48 @@ async def generate_question(
     job_posting: dict | None,
     user_profile: dict,
     conversation_history: list[dict],
+    fit_analysis: dict | None = None,
+    resume_chunks: list[dict] | None = None,
+    has_embeddings: bool = False,
+    current_focus_topic: str = "",
 ) -> dict:
-    """Generate next interview question based on full context."""
+    """면접 질문 생성. has_embeddings에 따라 SLIM/FALLBACK 분기."""
     profile_str = _format_profile(user_profile)
     history_str = _format_history(conversation_history)
-
-    resume_str = json.dumps(resume, ensure_ascii=False, indent=2) if isinstance(resume, dict) else str(resume)
     job_str = json.dumps(job_posting, ensure_ascii=False, indent=2) if job_posting else "채용공고 없음"
 
-    prompt = INTERVIEWER_QUESTION_PROMPT_FALLBACK.format(
-        resume=resume_str,
-        job_posting=job_str,
-        strengths=profile_str["strengths"],
-        weaknesses=profile_str["weaknesses"],
-        patterns=profile_str["patterns"],
-        context=profile_str["context"],
-        conversation_history=history_str,
-    )
+    if has_embeddings and resume_chunks:
+        from app.prompts.agent import INTERVIEWER_QUESTION_PROMPT_SLIM
+        chunks_str = "\n\n".join(c.get("content", "") for c in resume_chunks)
+        fit_str = json.dumps(fit_analysis, ensure_ascii=False, indent=2) if fit_analysis else "Fit Analysis 없음"
+        avoid_str = ", ".join((fit_analysis or {}).get("avoid_topics", [])) or "(없음)"
+        prompt = INTERVIEWER_QUESTION_PROMPT_SLIM.format(
+            summary=resume.get("summary", "") if isinstance(resume, dict) else "",
+            skills=", ".join(str(s) for s in (resume.get("skills") or [])) if isinstance(resume, dict) else "",
+            resume_chunks=chunks_str,
+            job_posting=job_str,
+            fit_analysis=fit_str,
+            strengths=profile_str["strengths"],
+            weaknesses=profile_str["weaknesses"],
+            patterns=profile_str["patterns"],
+            conversation_history=history_str,
+            current_focus_topic=current_focus_topic or "(자유 선택)",
+            avoid_topics=avoid_str,
+        )
+    else:
+        from app.prompts.agent import INTERVIEWER_QUESTION_PROMPT_FALLBACK
+        resume_str = json.dumps(resume, ensure_ascii=False, indent=2) if isinstance(resume, dict) else str(resume)
+        prompt = INTERVIEWER_QUESTION_PROMPT_FALLBACK.format(
+            resume=resume_str,
+            job_posting=job_str,
+            strengths=profile_str["strengths"],
+            weaknesses=profile_str["weaknesses"],
+            patterns=profile_str["patterns"],
+            context=profile_str["context"],
+            conversation_history=history_str,
+        )
 
-    return await call_llm_json(
-        prompt,
-        model=settings.AGENT_MODEL,
-        temperature=0.7,
-    )
+    return await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.7)
 
 
 async def decide_next_action(
