@@ -7,7 +7,7 @@ import logging
 from app.config import settings
 from app.lib.llm_client import call_llm_json
 from app.prompts.agent import (
-    INTERVIEWER_QUESTION_PROMPT,
+    INTERVIEWER_QUESTION_PROMPT_FALLBACK,
     INTERVIEWER_DECIDE_PROMPT,
     INTERVIEWER_FOLLOWUP_PROMPT,
 )
@@ -53,7 +53,7 @@ async def generate_question(
     resume_str = json.dumps(resume, ensure_ascii=False, indent=2) if isinstance(resume, dict) else str(resume)
     job_str = json.dumps(job_posting, ensure_ascii=False, indent=2) if job_posting else "채용공고 없음"
 
-    prompt = INTERVIEWER_QUESTION_PROMPT.format(
+    prompt = INTERVIEWER_QUESTION_PROMPT_FALLBACK.format(
         resume=resume_str,
         job_posting=job_str,
         strengths=profile_str["strengths"],
