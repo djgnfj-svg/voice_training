@@ -160,7 +160,9 @@ def chunk_resume(parsed_data: dict | None) -> list[Chunk]:
 
 
 async def _embed_batch(contents: list[str]) -> list[list[float]]:
-    """OpenAI 배치 임베딩 (1회 호출)."""
+    """OpenAI 배치 임베딩 (1회 호출). 빈 입력은 API 호출 없이 [] 반환."""
+    if not contents:
+        return []
     client = _get_openai_client()
     response = await client.embeddings.create(model=EMBEDDING_MODEL, input=contents)
     return [d.embedding for d in response.data]
@@ -171,6 +173,7 @@ def _vec_str(v: list[float]) -> str:
 
 
 async def has_resume_embeddings(db: AsyncSession, resume_id: str) -> bool:
+    """이력서에 임베딩이 1건이라도 있는지 확인. 면접 시작 시 SLIM/FALLBACK 분기 판정용."""
     r = await db.execute(
         text('SELECT 1 FROM resume_embeddings WHERE "resumeId" = :rid LIMIT 1'),
         {"rid": resume_id},
@@ -220,6 +223,8 @@ async def embed_resume(resume_id: str, user_id: str, parsed_data: dict | None) -
             logger.info("embed_resume: stored %d chunks for resume_id=%s", len(chunks), resume_id)
             return len(chunks)
         except Exception:
+            # BackgroundTask 컨텍스트 — 호출자에게 전파할 수 없으므로 로그 + 0 반환.
+            # 의도적 광범위 catch (좁히면 worker 스레드 죽음). logger.exception로 stack trace 보존.
             await db.rollback()
             logger.exception("embed_resume failed: resume_id=%s", resume_id)
             return 0
