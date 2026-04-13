@@ -3,12 +3,13 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pymupdf
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent.resume_rag import embed_resume
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
 from app.lib.llm_client import call_llm_json
@@ -80,6 +81,7 @@ async def get_resume(
 
 @router.post("/api/resume")
 async def upload_resume(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -126,6 +128,8 @@ async def upload_resume(
     await db.commit()
     await db.refresh(resume)
 
+    background_tasks.add_task(embed_resume, resume.id, user.id, resume.parsed_data)
+
     return {
         "id": resume.id,
         "userId": resume.user_id,
@@ -145,6 +149,7 @@ class ResumeUpdateRequest(BaseModel):
 async def update_resume(
     resume_id: str,
     body: ResumeUpdateRequest,
+    background_tasks: BackgroundTasks,
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -158,6 +163,8 @@ async def update_resume(
     resume.name = body.name
     await db.commit()
     await db.refresh(resume)
+
+    background_tasks.add_task(embed_resume, resume.id, user.id, resume.parsed_data)
 
     return {
         "id": resume.id,
