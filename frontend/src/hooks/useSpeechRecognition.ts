@@ -57,6 +57,20 @@ declare global {
   }
 }
 
+// 모바일 Web Speech API가 동일 final result를 여러 번 emit하면 "제일제일제일..." 처럼 누적됨.
+// prev 끝과 next 시작이 겹치면 그만큼 skip하고 붙인다. 최대 100자 overlap 검사.
+function appendWithOverlap(prev: string, next: string): string {
+  if (!next) return prev;
+  if (!prev) return next;
+  const maxOverlap = Math.min(prev.length, next.length, 100);
+  for (let k = maxOverlap; k > 0; k--) {
+    if (prev.slice(-k) === next.slice(0, k)) {
+      return prev + next.slice(k);
+    }
+  }
+  return prev + next;
+}
+
 export function useSpeechRecognition(): SpeechRecognitionHook {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -100,7 +114,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       }
 
       if (finalTranscript) {
-        setTranscript((prev) => prev + finalTranscript);
+        setTranscript((prev) => appendWithOverlap(prev, finalTranscript));
       }
       setInterimTranscript(interim);
     };

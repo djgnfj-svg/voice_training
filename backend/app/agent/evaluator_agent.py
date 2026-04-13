@@ -32,12 +32,48 @@ def _clamp_score(value) -> int:
     return int(round(n))
 
 
-def _normalize_evaluation(evaluation: dict) -> dict:
-    """LLM 출력 후처리: scores 0~100 clamp + overallScore를 가중 평균으로 강제 계산."""
+def _quality_cap(answer: str) -> int | None:
+    """답변의 실질적 품질 기반으로 점수 상한을 반환. None이면 상한 없음(정상 답변).
+
+    프롬프트가 저품질 규칙을 무시하는 경우의 안전장치. 반복/단어 부족 케이스에서 발동.
+    """
+    if not answer:
+        return 0
+    stripped = answer.strip()
+    if len(stripped) < 10:
+        return 15  # 매우 짧음
+    tokens = [t for t in stripped.split() if t]
+    unique_tokens = {t for t in tokens}
+
+    # 문자 단위 고유 비율: 모바일 중복 입력으로 "제일제일제일" 붙은 케이스 대응
+    no_space = "".join(ch for ch in stripped if not ch.isspace())
+    if len(no_space) >= 20:
+        unique_chars = set(no_space)
+        char_ratio = len(unique_chars) / len(no_space)
+        if char_ratio < 0.25:
+            return 20
+
+    # 토큰 단위 고유 비율
+    if tokens and len(unique_tokens) / len(tokens) < 0.35:
+        return 25
+    if len(unique_tokens) < 5:
+        return 30
+    return None
+
+
+def _normalize_evaluation(evaluation: dict, answer: str = "") -> dict:
+    """LLM 출력 후처리: scores 0~100 clamp + 저품질 답변 cap + overallScore 가중 평균 강제."""
     raw_scores = evaluation.get("scores") or {}
     scores: dict[str, int] = {}
     for key in SCORE_WEIGHTS:
         scores[key] = _clamp_score(raw_scores.get(key))
+
+    cap = _quality_cap(answer)
+    if cap is not None:
+        for key in scores:
+            if scores[key] > cap:
+                scores[key] = cap
+        logger.info("Applied quality cap=%d to scores (answer_len=%d)", cap, len(answer or ""))
 
     overall = sum(scores[k] * w for k, w in SCORE_WEIGHTS.items())
     evaluation["scores"] = scores
@@ -76,7 +112,7 @@ async def evaluate_answer(
         temperature=0.3,
     )
 
-    return _normalize_evaluation(evaluation)
+    return _normalize_evaluation(evaluation, answer)
 
 
 async def generate_report(

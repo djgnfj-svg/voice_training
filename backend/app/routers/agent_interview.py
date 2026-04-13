@@ -43,6 +43,22 @@ class AnswerRequest(BaseModel):
     answer: str = Field(min_length=1, max_length=10000)
 
 
+MIN_ANSWER_CHARS = 10
+MIN_UNIQUE_TOKENS = 3
+
+
+def _is_meaningful_answer(text: str) -> bool:
+    """모바일 중복 입력/반복 문자 나열을 막는 의미 있는 답변 가드."""
+    stripped = text.strip()
+    if len(stripped) < MIN_ANSWER_CHARS:
+        return False
+    tokens = [t for t in stripped.split() if t]
+    unique = {t for t in tokens}
+    if len(unique) < MIN_UNIQUE_TOKENS:
+        return False
+    return True
+
+
 class ProfileContextRequest(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
 
@@ -225,6 +241,13 @@ async def submit_answer(
     db: AsyncSession = Depends(get_db),
 ):
     """Submit answer: evaluate → decide next → generate next question or end."""
+    # 답변 품질 가드 (프론트 우회 방어)
+    if not _is_meaningful_answer(body.answer):
+        raise HTTPException(
+            400,
+            {"error": '답변이 너무 짧거나 반복됩니다. 조금 더 말씀해 주시거나 "건너뛰기"를 눌러주세요.'},
+        )
+
     # Verify session
     result = await db.execute(
         select(AgentInterviewSession)

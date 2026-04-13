@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { useAgentInterview } from '@/hooks/useAgentInterview';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
-import { normalizeTranscript } from '@/lib/transcript';
+import { normalizeTranscript, hasMeaningfulContent } from '@/lib/transcript';
 
 // 답변 중 침묵 자동 제출 타이머. 3s는 사용자가 잠깐 생각만 해도 제출되어 "급해서 연습 안 됨" 피드백의 원인. 30s로 완화.
 const SILENCE_TIMEOUT_MS = 30000;
@@ -51,6 +51,7 @@ export function AgentInterviewPanel({
   const tts = useTextToSpeech();
   const speech = useSpeechRecognition();
   const [showExitDialog, setShowExitDialog] = useState(false);
+  const [answerWarning, setAnswerWarning] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
@@ -85,6 +86,7 @@ export function AgentInterviewPanel({
       } catch {}
       // Start listening after TTS finishes
       speech.resetTranscript();
+      setAnswerWarning(null);
       speech.startListening();
     })();
   }, [phase, messages]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -122,6 +124,12 @@ export function AgentInterviewPanel({
       if (!raw) return;
       const text = normalizeTranscript(raw);
       if (!text) return;
+      if (!hasMeaningfulContent(text)) {
+        // 무의미 답변은 자동 제출하지 않음 — 사용자가 명시적 제출/건너뛰기 선택하도록
+        setAnswerWarning('답변이 너무 짧거나 반복된 내용 같습니다. 조금 더 말씀해 주시거나 "건너뛰기"를 눌러주세요.');
+        return;
+      }
+      setAnswerWarning(null);
       tts.stop();
       speech.stopListening();
       submitAnswer(text);
@@ -140,6 +148,11 @@ export function AgentInterviewPanel({
   const handleSubmit = () => {
     const transcript = normalizeTranscript(speech.transcript);
     if (!transcript) return;
+    if (!hasMeaningfulContent(transcript)) {
+      setAnswerWarning('답변이 너무 짧거나 반복된 내용 같습니다. 조금 더 말씀해 주시거나 "건너뛰기"를 눌러주세요.');
+      return;
+    }
+    setAnswerWarning(null);
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
@@ -286,6 +299,13 @@ export function AgentInterviewPanel({
                   <span className="text-muted-foreground">{speech.interimTranscript}</span>
                 </p>
               </div>
+
+              {/* 답변 품질 경고 */}
+              {answerWarning && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                  {answerWarning}
+                </div>
+              )}
 
               <div className="flex items-center justify-center gap-3">
                 <Button variant="outline" onClick={handleSkip}>
