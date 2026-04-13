@@ -42,3 +42,11 @@ class InterviewState(TypedDict, total=False):
 
     # SSE 이벤트 큐 (노드가 이벤트를 여기에 쌓으면 라우터가 SSE로 전송)
     pending_events: list[dict]
+
+    # Fit Analysis (시작 시 1회 산출, 모든 질문에 재사용)
+    fit_analysis: dict | None  # {skill_match, focus_topics, avoid_topics} — fit_analyzer.FitAnalysis
+
+    # 이력서 RAG (Spec D5/D6)
+    resume_id: str | None              # search_resume에 필요
+    has_resume_embeddings: bool        # SLIM/FALLBACK 프롬프트 분기 판정
+    current_resume_chunks: list[dict]  # 매 질문 직전 search_resume 결과 (top_k=3)
