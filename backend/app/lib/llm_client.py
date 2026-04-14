@@ -115,3 +115,38 @@ async def call_llm_stream(
         delta = chunk.choices[0].delta.content
         if delta:
             yield delta
+
+
+async def call_llm_vision(
+    prompt: str,
+    image_data_url: str,
+    *,
+    model: str | None = None,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+    detail: str = "auto",
+) -> str:
+    """Vision LLM 호출 → 원문 텍스트 반환.
+
+    image_data_url: `data:image/png;base64,...` 형식의 data URL 또는 http(s) URL.
+    detail: "low" | "high" | "auto".
+    """
+    client = _get_client()
+    response = await client.chat.completions.create(
+        model=model or settings.AGENT_MODEL,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data_url, "detail": detail},
+                    },
+                ],
+            }
+        ],
+    )
+    return response.choices[0].message.content or ""
