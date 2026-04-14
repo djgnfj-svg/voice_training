@@ -9,9 +9,13 @@ from uuid import uuid4
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.lib.llm_client import call_llm_json, MODELS
+from app.lib.llm_client import call_llm_json, call_llm_vision, MODELS
 from app.models.interview import JobPosting
-from app.prompts.job_posting import JOB_POSTING_ANALYSIS_PROMPT, COMPANY_ANALYSIS_PROMPT
+from app.prompts.job_posting import (
+    JOB_POSTING_ANALYSIS_PROMPT,
+    COMPANY_ANALYSIS_PROMPT,
+    JOB_POSTING_IMAGE_EXTRACT_PROMPT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -153,3 +157,23 @@ def _serialize_job_posting(jp: JobPosting) -> dict[str, Any]:
         "createdAt": jp.created_at.isoformat() if jp.created_at else None,
         "updatedAt": jp.updated_at.isoformat() if jp.updated_at else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Image extraction
+# ---------------------------------------------------------------------------
+
+async def extract_text_from_image(image_data_url: str) -> str:
+    """Vision LLM으로 이미지에서 JD 평문 텍스트를 추출.
+
+    image_data_url: `data:image/png;base64,...` 형식.
+    반환: 추출된 텍스트(strip됨). 이미지에 텍스트가 없으면 빈 문자열.
+    """
+    text = await call_llm_vision(
+        JOB_POSTING_IMAGE_EXTRACT_PROMPT,
+        image_data_url,
+        model=MODELS["ANALYSIS"],
+        temperature=0.0,
+        detail="auto",
+    )
+    return text.strip()
