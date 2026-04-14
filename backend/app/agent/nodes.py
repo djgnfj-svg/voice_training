@@ -399,6 +399,27 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
         state.get("conversation_history", []),
     )
 
+    # 집계용 메타 주입: 리포트 생성 시 phase/주제별로 묶기 위함
+    phase = state.get("phase", "scan")
+    meta: dict = {"phase": phase}
+    if phase == "scan":
+        scan_idx = state.get("current_scan_idx", 0)
+        scan_plan = state.get("scan_plan") or []
+        if 0 <= scan_idx < len(scan_plan):
+            meta["scanIdx"] = scan_idx
+            meta["projectRef"] = scan_plan[scan_idx].get("project_ref", "")
+    elif phase == "dive":
+        dive_idx = state.get("current_dive_idx", 0)
+        dive_plan = state.get("dive_plan") or []
+        if 0 <= dive_idx < len(dive_plan):
+            topic = dive_plan[dive_idx]
+            meta["diveIdx"] = dive_idx
+            meta["topicLabel"] = topic.get("topic", "")
+            meta["angle"] = topic.get("angle", "")
+            meta["projectRef"] = topic.get("project_ref", "")
+            meta["diveDepth"] = state.get("current_dive_depth", 0)
+    evaluation["meta"] = meta
+
     history = list(state.get("conversation_history", []))
     history.append({
         "question": state["current_question"],
