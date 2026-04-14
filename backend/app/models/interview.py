@@ -13,6 +13,7 @@ class JobPosting(Base):
     id = Column(String, primary_key=True)
     user_id = Column("userId", String, ForeignKey("users.id"), nullable=False)
     raw_text = Column("rawText", Text, nullable=False)
+    raw_text_hash = Column("rawTextHash", String(64), nullable=True, index=True)
     parsed_data = Column("parsedData", JSON, nullable=True)
     company_analysis = Column("companyAnalysis", JSON, nullable=True)
     created_at = Column("createdAt", DateTime, server_default=func.now())

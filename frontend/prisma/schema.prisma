@@ -90,6 +90,7 @@ model JobPosting {
   id              String   @id @default(uuid())
   userId          String
   rawText         String   @db.Text
+  rawTextHash     String?  @db.VarChar(64) // sha256 of rawText — per-user cache key
   parsedData      Json?    // { company, position, requirements, preferred, techStack, duties, teamInfo }
   companyAnalysis Json?    // { interviewStyle, culture, pastQuestions }
   createdAt       DateTime @default(now())
@@ -99,6 +100,7 @@ model JobPosting {
   interviewSessions InterviewSession[]
 
   @@index([userId])
+  @@index([userId, rawTextHash])
   @@map("job_postings")
 }
 
