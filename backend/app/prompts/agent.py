@@ -135,9 +135,6 @@ INTERVIEWER_DECIDE_IN_TOPIC_PROMPT = """딥다이브 주제 진행 판정.
   "reason": "이 결정의 이유"
 }}"""
 
-# 임시 별칭 — Task 6에서 제거됨
-INTERVIEWER_DECIDE_PROMPT = INTERVIEWER_DECIDE_IN_TOPIC_PROMPT
-
 INTERVIEWER_FOLLOWUP_PROMPT = """지원자 컨텍스트:
 
 <conversation_history>
