@@ -26,6 +26,10 @@ class AgentInterviewSession(Base):
     phase = Column("phase", String, nullable=True)
     scan_plan = Column("scan_plan", JSON, nullable=True)
     dive_plan = Column("dive_plan", JSON, nullable=True)
+    scan_evaluations = Column("scan_evaluations", JSON, nullable=True)
+    current_scan_idx = Column("current_scan_idx", Integer, default=0)
+    current_dive_idx = Column("current_dive_idx", Integer, default=0)
+    current_dive_depth = Column("current_dive_depth", Integer, default=0)
     created_at = Column("createdAt", DateTime, server_default=func.now())
     updated_at = Column("updatedAt", DateTime, default=func.now(), onupdate=func.now())
 

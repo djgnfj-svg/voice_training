@@ -177,6 +177,11 @@ async def start_interview(
             session.phase = state.get("phase")
             session.scan_plan = state.get("scan_plan")
             session.dive_plan = state.get("dive_plan")
+            # Task 8-fix: progress 초기화
+            session.current_scan_idx = state.get("current_scan_idx", 0)
+            session.current_dive_idx = 0
+            session.current_dive_depth = 0
+            session.scan_evaluations = state.get("scan_evaluations", [])
 
             state = await nodes.scan_ask(state, db)
 
@@ -335,35 +340,32 @@ async def submit_answer(
     from app.agent.resume_rag import has_resume_embeddings as _has_emb
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
 
-    # Scan/Dive 페이즈 컨텍스트 복원 (Task 8)
+    # Scan/Dive 페이즈 컨텍스트 복원 (Task 8-fix: session에서 직접 복원)
     phase = session.phase or "scan"
     scan_plan = session.scan_plan or []
     dive_plan = session.dive_plan or []
+    current_scan_idx = session.current_scan_idx or 0
+    current_dive_idx = session.current_dive_idx or 0
+    current_dive_depth = session.current_dive_depth or 0
+    scan_evaluations = session.scan_evaluations or []
 
-    # scan_evaluations 복원: conversation_history 앞부분 scan_plan 길이만큼
-    scan_evaluations = [
-        h["evaluation"] for h in conversation_history[:len(scan_plan)] if h.get("evaluation")
-    ]
-    current_scan_idx = min(len(scan_evaluations), len(scan_plan))
-
-    # dive 진행 상태 복원 (주제당 최대 3질문, 순차 진행 가정)
-    current_dive_idx = 0
-    current_dive_depth = 0
-    if phase == "dive" and dive_plan:
-        dive_history = conversation_history[len(scan_plan):]
-        topic_idx = 0
-        topic_depth = 0
-        for entry in dive_history:
-            topic_depth += 1
-            ev = entry.get("evaluation") or {}
-            depth_score = (ev.get("scores") or {}).get("depth", 0)
-            if topic_depth >= 3 or (topic_depth >= 2 and depth_score >= 70):
-                topic_idx += 1
-                topic_depth = 0
-                if topic_idx >= len(dive_plan):
-                    break
-        current_dive_idx = topic_idx
-        current_dive_depth = topic_depth
+    # Task 8-fix: 레거시 세션(phase=NULL) 방어 — scan_plan 없으면 재생성
+    if not scan_plan:
+        tmp_state: InterviewState = {
+            "session_id": session_id,
+            "user_id": user.id,
+            "resume": resume_data,
+            "job_posting": job_posting_data,
+            "user_profile": user_profile,
+            "fit_analysis": session.fit_analysis,
+            "pending_events": [],
+        }  # type: ignore
+        tmp_state = await nodes.build_scan_plan_node(tmp_state, db)
+        phase = tmp_state.get("phase") or phase
+        scan_plan = tmp_state.get("scan_plan") or []
+        session.phase = phase
+        session.scan_plan = scan_plan
+        logger.info(f"Legacy session {session_id} scan_plan rebuilt")
 
     state: InterviewState = {
         "session_id": session_id,
@@ -452,6 +454,11 @@ async def submit_answer(
                 session.phase = state.get("phase")
                 session.scan_plan = state.get("scan_plan")
                 session.dive_plan = state.get("dive_plan")
+                # Task 8-fix: progress 영속화
+                session.scan_evaluations = state.get("scan_evaluations")
+                session.current_scan_idx = state.get("current_scan_idx", 0)
+                session.current_dive_idx = state.get("current_dive_idx", 0)
+                session.current_dive_depth = state.get("current_dive_depth", 0)
 
             else:  # end
                 session.status = "completed"
@@ -460,6 +467,10 @@ async def submit_answer(
                 if state.get("overall_report"):
                     session.overall_score = state["overall_report"].get("overallScore")
                 session.phase = "done"
+                # Task 8-fix: progress 영속화
+                session.current_scan_idx = state.get("current_scan_idx", 0)
+                session.current_dive_idx = state.get("current_dive_idx", 0)
+                session.current_dive_depth = state.get("current_dive_depth", 0)
 
             await db.commit()
 
@@ -555,33 +566,32 @@ async def skip_question(
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
     persisted_fit = session.fit_analysis
 
-    # Scan/Dive 페이즈 컨텍스트 복원
+    # Task 8-fix: Scan/Dive progress 직접 복원 (휴리스틱 제거)
     phase = session.phase or "scan"
     scan_plan = session.scan_plan or []
     dive_plan = session.dive_plan or []
+    current_scan_idx = session.current_scan_idx or 0
+    current_dive_idx = session.current_dive_idx or 0
+    current_dive_depth = session.current_dive_depth or 0
+    scan_evaluations = session.scan_evaluations or []
 
-    scan_evaluations = [
-        h["evaluation"] for h in conversation_history[:len(scan_plan)] if h.get("evaluation")
-    ]
-    current_scan_idx = min(len(scan_evaluations), len(scan_plan))
-
-    current_dive_idx = 0
-    current_dive_depth = 0
-    if phase == "dive" and dive_plan:
-        dive_history = conversation_history[len(scan_plan):]
-        topic_idx = 0
-        topic_depth = 0
-        for entry in dive_history:
-            topic_depth += 1
-            ev = entry.get("evaluation") or {}
-            depth_score = (ev.get("scores") or {}).get("depth", 0)
-            if topic_depth >= 3 or (topic_depth >= 2 and depth_score >= 70):
-                topic_idx += 1
-                topic_depth = 0
-                if topic_idx >= len(dive_plan):
-                    break
-        current_dive_idx = topic_idx
-        current_dive_depth = topic_depth
+    # Task 8-fix: 레거시 세션(phase=NULL) 방어 — scan_plan 없으면 재생성
+    if not scan_plan:
+        tmp_state: InterviewState = {
+            "session_id": session_id,
+            "user_id": user.id,
+            "resume": resume_data,
+            "job_posting": job_posting_data,
+            "user_profile": user_profile,
+            "fit_analysis": persisted_fit,
+            "pending_events": [],
+        }  # type: ignore
+        tmp_state = await nodes.build_scan_plan_node(tmp_state, db)
+        phase = tmp_state.get("phase") or phase
+        scan_plan = tmp_state.get("scan_plan") or []
+        session.phase = phase
+        session.scan_plan = scan_plan
+        logger.info(f"Legacy session {session_id} scan_plan rebuilt")
 
     async def event_generator():
         nonlocal question_count, next_message_index
@@ -671,6 +681,10 @@ async def skip_question(
                 if state.get("overall_report"):
                     session.overall_score = state["overall_report"].get("overallScore")
                 session.phase = "done"
+                # Task 8-fix: progress 영속화
+                session.current_scan_idx = state.get("current_scan_idx", 0)
+                session.current_dive_idx = state.get("current_dive_idx", 0)
+                session.current_dive_depth = state.get("current_dive_depth", 0)
 
                 await db.commit()
                 yield {
@@ -707,6 +721,11 @@ async def skip_question(
                 session.phase = state.get("phase")
                 session.scan_plan = state.get("scan_plan")
                 session.dive_plan = state.get("dive_plan")
+                # Task 8-fix: progress 영속화
+                session.scan_evaluations = state.get("scan_evaluations")
+                session.current_scan_idx = state.get("current_scan_idx", 0)
+                session.current_dive_idx = state.get("current_dive_idx", 0)
+                session.current_dive_depth = state.get("current_dive_depth", 0)
 
                 await db.commit()
 
