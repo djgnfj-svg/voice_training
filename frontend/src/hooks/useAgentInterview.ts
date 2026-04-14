@@ -14,6 +14,8 @@ export interface AgentMessage {
   evaluation?: Record<string, unknown>;
   questionNumber?: number;
   followUpRound?: number;
+  phase?: "scan" | "dive";
+  phaseLabel?: string;
 }
 
 type Phase =
@@ -25,7 +27,14 @@ type Phase =
   | "generating_followup"
   | "generating_report"
   | "completed"
-  | "error";
+  | "error"
+  | "scan_plan_ready"
+  | "dive_plan_ready"
+  | "fit_analyzing"
+  | "fit_analyzed"
+  | "profile_loaded"
+  | "updating_profile"
+  | (string & {});
 
 export function useAgentInterview() {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -52,6 +61,9 @@ export function useAgentInterview() {
       source.addEventListener("status", (e: MessageEvent) => {
         const data = JSON.parse(e.data);
         setPhase(data.phase as Phase);
+        if (typeof data.max_questions === "number") {
+          setMaxQuestions(data.max_questions);
+        }
       });
 
       source.addEventListener("session", (e: MessageEvent) => {
@@ -63,13 +75,16 @@ export function useAgentInterview() {
 
       source.addEventListener("question", (e: MessageEvent) => {
         const data = JSON.parse(e.data);
+        const isFollowup = (data.followUpRound ?? 0) > 0;
         setMessages((prev) => [
           ...prev,
           {
-            role: data.followUpRound > 0 ? "agent_followup" : "agent_question",
+            role: isFollowup ? "agent_followup" : "agent_question",
             content: data.question,
             questionNumber: data.questionNumber,
             followUpRound: data.followUpRound,
+            phase: data.phase,
+            phaseLabel: data.phaseLabel,
           },
         ]);
         setQuestionCount(data.questionNumber);

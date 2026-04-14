@@ -239,10 +239,22 @@ export function AgentInterviewPanel({
         <Card>
           <CardContent className="py-6">
             <div className="flex items-center justify-between mb-3">
-              <Badge variant="outline">
-                Q{currentQuestion.questionNumber}
-                {currentQuestion.followUpRound ? ` 꼬리질문 ${currentQuestion.followUpRound}` : ''}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">
+                  Q{currentQuestion.questionNumber}
+                  {currentQuestion.followUpRound ? ` 꼬리질문 ${currentQuestion.followUpRound}` : ''}
+                </Badge>
+                {currentQuestion.phaseLabel && (
+                  <span className={cn(
+                    'px-2 py-0.5 text-xs rounded-full',
+                    currentQuestion.phase === 'dive'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-muted text-muted-foreground'
+                  )}>
+                    {currentQuestion.phaseLabel}
+                  </span>
+                )}
+              </div>
               {tts.isSpeaking && (
                 <Button variant="ghost" size="icon" onClick={tts.stop} className="h-8 w-8">
                   <VolumeX className="h-4 w-4" />
