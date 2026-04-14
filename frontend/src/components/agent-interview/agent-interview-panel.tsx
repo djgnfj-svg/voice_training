@@ -7,7 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import {
-  Loader2, Send, Volume2, VolumeX, Mic, SkipForward, ArrowLeft, CheckCircle,
+  Loader2, Send, Volume2, VolumeX, Mic, SkipForward, ArrowLeft, CheckCircle, Search, Target,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -17,6 +17,7 @@ import { useAgentInterview } from '@/hooks/useAgentInterview';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { normalizeTranscript, hasMeaningfulContent } from '@/lib/transcript';
+import { scoreBg, scoreText } from '@/lib/score-colors';
 
 // 답변 중 침묵 자동 제출 타이머. 3s는 사용자가 잠깐 생각만 해도 제출되어 "급해서 연습 안 됨" 피드백의 원인. 30s로 완화.
 const SILENCE_TIMEOUT_MS = 30000;
@@ -211,12 +212,12 @@ export function AgentInterviewPanel({
 
       {/* Progress + Volume */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
           <span className="font-medium">
             질문 {questionCount} / {maxQ}
           </span>
           <div className="flex items-center gap-2">
-            <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
+            <Volume2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <input
               type="range"
               min={0}
@@ -224,9 +225,10 @@ export function AgentInterviewPanel({
               step={0.1}
               value={tts.volume}
               onChange={(e) => tts.setVolume(Number(e.target.value))}
-              className="h-1 w-20 cursor-pointer accent-primary"
+              aria-label="음량 조절"
+              className="h-1 flex-1 cursor-pointer accent-primary sm:w-24 sm:flex-none"
             />
-            <span className="text-xs text-muted-foreground w-8">
+            <span className="w-10 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
               {Math.round(tts.volume * 100)}%
             </span>
           </div>
@@ -238,19 +240,31 @@ export function AgentInterviewPanel({
       {currentQuestion && phase !== 'completed' && (
         <Card>
           <CardContent className="py-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
                 <Badge variant="outline">
                   Q{currentQuestion.questionNumber}
                   {currentQuestion.followUpRound ? ` 꼬리질문 ${currentQuestion.followUpRound}` : ''}
                 </Badge>
                 {currentQuestion.phaseLabel && (
-                  <span className={cn(
-                    'px-2 py-0.5 text-xs rounded-full',
-                    currentQuestion.phase === 'dive'
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-muted text-muted-foreground'
-                  )}>
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
+                      currentQuestion.phase === 'dive'
+                        ? 'border-primary/30 bg-primary/10 text-primary'
+                        : 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300'
+                    )}
+                    aria-label={
+                      currentQuestion.phase === 'dive'
+                        ? `딥다이브 단계: ${currentQuestion.phaseLabel}`
+                        : `훑기 단계: ${currentQuestion.phaseLabel}`
+                    }
+                  >
+                    {currentQuestion.phase === 'dive' ? (
+                      <Target className="h-3 w-3" />
+                    ) : (
+                      <Search className="h-3 w-3" />
+                    )}
                     {currentQuestion.phaseLabel}
                   </span>
                 )}
@@ -344,23 +358,14 @@ export function AgentInterviewPanel({
             <div className="mt-4 pt-4 border-t space-y-3">
               <div className="flex items-center gap-3">
                 {(() => {
-                  const score = (lastEvaluation.evaluation as Record<string, number>).overallScore;
+                  const score = (lastEvaluation.evaluation as Record<string, number>).overallScore ?? 0;
                   return (
                     <>
                       <div className={cn(
                         'flex h-12 w-12 items-center justify-center rounded-full',
-                        score >= 80 ? 'bg-green-100 dark:bg-green-900/30' :
-                        score >= 60 ? 'bg-blue-100 dark:bg-blue-900/30' :
-                        score >= 40 ? 'bg-amber-100 dark:bg-amber-900/30' :
-                        'bg-red-100 dark:bg-red-900/30'
+                        scoreBg(score)
                       )}>
-                        <span className={cn(
-                          'text-lg font-bold',
-                          score >= 80 ? 'text-green-600 dark:text-green-400' :
-                          score >= 60 ? 'text-blue-600 dark:text-blue-400' :
-                          score >= 40 ? 'text-amber-600 dark:text-amber-400' :
-                          'text-red-600 dark:text-red-400'
-                        )}>
+                        <span className={cn('text-lg font-bold', scoreText(score))}>
                           {score}
                         </span>
                       </div>

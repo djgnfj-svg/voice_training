@@ -74,6 +74,10 @@ export function createSSEFromPost(url: string, body: object) {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      // currentEvent must persist across chunk boundaries — SSE frames
+      // (event: ...\ndata: ...\n\n) can be split mid-frame by intermediaries
+      // (Cloudflare Tunnel 등). Reset only after a blank line terminates a frame.
+      let currentEvent = "message";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -83,8 +87,12 @@ export function createSSEFromPost(url: string, body: object) {
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
-        let currentEvent = "message";
         for (const line of lines) {
+          if (line === "" || line === "\r") {
+            // Blank line = end of frame → reset event name for next frame
+            currentEvent = "message";
+            continue;
+          }
           if (line.startsWith("event:")) {
             currentEvent = line.slice(6).trim();
           } else if (line.startsWith("data:")) {
@@ -92,7 +100,6 @@ export function createSSEFromPost(url: string, body: object) {
             for (const handler of listeners[currentEvent] || []) {
               handler(new MessageEvent(currentEvent, { data }));
             }
-            currentEvent = "message";
           }
         }
       }

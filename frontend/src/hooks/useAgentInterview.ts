@@ -167,8 +167,13 @@ export function useAgentInterview() {
   const endEarly = useCallback(async () => {
     if (!sessionId) return;
     cleanup();
-    await endAgentInterview(sessionId);
-    setPhase("completed");
+    try {
+      await endAgentInterview(sessionId);
+    } catch {
+      setError("면접 종료 처리에 실패했습니다. 리포트가 완성되지 않았을 수 있습니다.");
+    } finally {
+      setPhase("completed");
+    }
   }, [sessionId, cleanup]);
 
   return {

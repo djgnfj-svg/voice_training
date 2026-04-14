@@ -13,6 +13,7 @@ import { useInterviewSession } from '@/hooks/useInterviewSession';
 import { normalizeTranscript } from '@/lib/transcript';
 import { Mic, SkipForward, Send, Volume2, Loader2, CheckCircle, MessageCircle, AlertTriangle, ArrowLeft, Keyboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { scoreBg, scoreText } from '@/lib/score-colors';
 import type { InterviewQuestion, InterviewType, AnswerEvaluation } from '@/types';
 
 interface QuestionWithAnswer {
@@ -459,14 +460,8 @@ export default function InterviewSessionPage() {
             return (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className={cn(
-                  'flex h-12 w-12 items-center justify-center rounded-full',
-                  score >= 80 ? 'bg-green-100 dark:bg-green-900/30' : score >= 60 ? 'bg-blue-100 dark:bg-blue-900/30' : score >= 40 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-red-100 dark:bg-red-900/30'
-                )}>
-                  <span className={cn(
-                    'text-lg font-bold',
-                    score >= 80 ? 'text-green-600 dark:text-green-400' : score >= 60 ? 'text-blue-600 dark:text-blue-400' : score >= 40 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
-                  )}>
+                <div className={cn('flex h-12 w-12 items-center justify-center rounded-full', scoreBg(score))}>
+                  <span className={cn('text-lg font-bold', scoreText(score))}>
                     {score}
                   </span>
                 </div>

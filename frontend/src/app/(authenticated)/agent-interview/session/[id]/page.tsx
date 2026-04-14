@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, ArrowLeft, CheckCircle, TrendingUp, AlertCircle, Target, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getGrade } from '@/lib/utils';
+import { scoreText } from '@/lib/score-colors';
 import { AgentInterviewPanel } from '@/components/agent-interview/agent-interview-panel';
 import { getAgentSession } from '@/lib/agent-interview-api';
 
@@ -205,13 +206,7 @@ export default function AgentInterviewSessionPage() {
                 <div className="grid grid-cols-3 gap-4 sm:grid-cols-5">
                   {Object.entries(avgScores).map(([key, value]) => (
                     <div key={key} className="text-center">
-                      <div className={cn(
-                        'text-2xl font-bold',
-                        value >= 80 ? 'text-green-600 dark:text-green-400' :
-                        value >= 60 ? 'text-blue-600 dark:text-blue-400' :
-                        value >= 40 ? 'text-amber-600 dark:text-amber-400' :
-                        'text-red-600 dark:text-red-400'
-                      )}>
+                      <div className={cn('text-2xl font-bold', scoreText(value))}>
                         {value}
                       </div>
                       <div className="text-xs text-muted-foreground">{scoreLabels[key] || key}</div>
