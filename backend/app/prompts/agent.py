@@ -80,9 +80,9 @@ INTERVIEWER_QUESTION_PROMPT_SLIM = """당신은 숙련된 기술 면접관입니
 {job_posting}
 </채용공고>
 
-<Fit Analysis>
-{fit_analysis}
-</Fit Analysis>
+<현재 주제 플랜>
+{current_topic_plan}
+</현재 주제 플랜>
 
 <누적 프로필 인사이트>
 강점: {strengths}
@@ -95,43 +95,48 @@ INTERVIEWER_QUESTION_PROMPT_SLIM = """당신은 숙련된 기술 면접관입니
 </현재까지 대화>
 
 지시사항:
-- 이번 질문은 Fit Analysis의 focus_topic "{current_focus_topic}"을 다루세요. focus_topic이 비어있으면 이력서 발췌의 첫 청크 주제를 다루세요.
+- "현재 주제 플랜" 블록을 엄격히 따르세요. 플랜이 지정한 프로젝트/각도에서 벗어나지 마세요.
+- 질문은 반드시 "관련 이력서 발췌"의 구체 사실(프로젝트명, 기술, 역할)을 인용해 만드세요. 일반적 CS 지식 질문 금지.
 - avoid_topics는 피하세요: {avoid_topics}
+- 한 문장 또는 두 문장. 하나의 초점만.
 - 다음 JSON 형식으로만 반환:
 {{
   "question": "면접 질문 본문",
-  "targetArea": "다루는 영역 (예: 상태관리, 시스템 설계)",
+  "targetArea": "다루는 영역 (예: 크롤링 안정성, 데이터 파이프라인)",
   "difficulty": "easy|medium|hard"
 }}
 """
 
-INTERVIEWER_DECIDE_PROMPT = """지원자 컨텍스트:
+INTERVIEWER_DECIDE_IN_TOPIC_PROMPT = """딥다이브 주제 진행 판정.
 
-<conversation_history>
-{conversation_history}
-</conversation_history>
+<주제>
+프로젝트: {project_ref}
+각도: {angle}  (weakness 또는 strength)
+주제 내 질문수: {current_depth} / 최대 3
+</주제>
 
-<last_evaluation>
+<최근 평가>
 {last_evaluation}
-</last_evaluation>
+</최근 평가>
 
-현재 상태:
-- 진행된 질문 수: {question_count} / 최대 {max_questions}
-- 현재 꼬리질문 라운드: {follow_up_round} (최대 1)
+<남은 주제 수>
+{remaining_topics}  (현재 포함)
+</남은 주제 수>
 
-다음 행동을 결정하세요.
+규칙 (위에서부터 순차):
+1. current_depth >= 3 → "next_topic" (같은 주제에서 3질문 초과 금지)
+2. remaining_topics <= 1 AND current_depth >= 2 AND depth점수 >= 70 → "end" (마지막 주제, 충분히 팠음)
+3. depth점수 < 70 → "dig_deeper" (주제 안에서 더 파기)
+4. 그 외 → "next_topic"
 
-규칙 (위에서부터 순차 판정):
-1. 질문 수가 최대에 도달했으면 → "end"
-2. follow_up_round >= 1이면 → "next_question" (같은 주제에 꼬리질문 연속 금지)
-3. depth 점수 < 70 이고 follow_up_round == 0 이면 → "follow_up" (답변이 얕아 한 번만 더 파기)
-4. 그 외 → "next_question" (새 주제로 이동)
-
-반드시 다음 JSON만 반환하세요:
+반드시 다음 JSON만 반환:
 {{
-  "action": "follow_up" | "next_question" | "end",
-  "reason": "이 결정의 이유 (내부 메모)"
+  "action": "dig_deeper" | "next_topic" | "end",
+  "reason": "이 결정의 이유"
 }}"""
+
+# 임시 별칭 — Task 6에서 제거됨
+INTERVIEWER_DECIDE_PROMPT = INTERVIEWER_DECIDE_IN_TOPIC_PROMPT
 
 INTERVIEWER_FOLLOWUP_PROMPT = """지원자 컨텍스트:
 
