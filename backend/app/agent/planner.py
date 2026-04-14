@@ -89,11 +89,11 @@ def build_scan_plan(resume: dict, fit_analysis: dict) -> list[ScanItem]:
         top = scored_sorted[:2]
         bottom = scored_sorted[-1]
         plan: list[ScanItem] = []
-        for p, _ in top:
+        for p, score in top:
             plan.append({
                 "project_ref": p.get("name", "프로젝트"),
                 "query": _project_query(p),
-                "reason": "jd_match",
+                "reason": "jd_match" if score > 0 else "jd_unmatched",
             })
         p, _ = bottom
         plan.append({

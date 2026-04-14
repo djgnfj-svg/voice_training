@@ -97,3 +97,55 @@ def test_scan_query_contains_techstack():
     plan = build_scan_plan(resume, fit_analysis)
     assert "크롤링" in plan[0]["query"]
     assert "Selenium" in plan[0]["query"]
+
+
+def test_scan_plan_two_projects_with_jd_score_based_reason():
+    """projects 2개 + JD: 매칭되는 것은 jd_match, 안 되는 것은 jd_unmatched."""
+    resume = {
+        "projects": [
+            {"name": "매칭프로젝트", "techStack": ["Python", "Django"]},
+            {"name": "비매칭프로젝트", "techStack": ["Vue", "Elixir"]},
+        ]
+    }
+    fit_analysis = {
+        "skill_match": {
+            "matched": ["Python", "Django"],
+            "gap": [],
+            "coverage": 1.0,
+        },
+        "avoid_topics": [],
+    }
+
+    plan = build_scan_plan(resume, fit_analysis)
+
+    assert len(plan) == 2
+    # 매칭프로젝트가 먼저 나옴 (jd_match), 비매칭프로젝트가 뒤 (jd_unmatched)
+    reasons = {p["project_ref"]: p["reason"] for p in plan}
+    assert reasons["매칭프로젝트"] == "jd_match"
+    assert reasons["비매칭프로젝트"] == "jd_unmatched"
+
+
+def test_scan_plan_experience_supplement_with_jd_marks_unmatched():
+    """projects 1개 + experience 2개 + JD: experience는 score=0이라 jd_unmatched로 붙어야."""
+    resume = {
+        "projects": [{"name": "매칭P", "techStack": ["Python"]}],
+        "experience": [
+            {"company": "A사", "position": "백엔드", "period": "2023"},
+            {"company": "B사", "position": "프론트", "period": "2024"},
+        ],
+    }
+    fit_analysis = {
+        "skill_match": {"matched": ["Python"], "gap": [], "coverage": 1.0},
+        "avoid_topics": [],
+    }
+
+    plan = build_scan_plan(resume, fit_analysis)
+
+    assert len(plan) == 3
+    # 매칭P가 jd_match여야 함
+    matched = [p for p in plan if p["reason"] == "jd_match"]
+    assert len(matched) == 1
+    assert matched[0]["project_ref"] == "매칭P"
+    # experience 항목들은 techStack 없으므로 score=0 → jd_unmatched
+    unmatched = [p for p in plan if p["reason"] == "jd_unmatched"]
+    assert len(unmatched) == 2
