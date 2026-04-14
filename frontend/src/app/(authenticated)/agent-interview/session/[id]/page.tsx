@@ -310,6 +310,34 @@ export default function AgentInterviewSessionPage() {
                       </div>
                     )}
 
+                    {/* Demonstrated Keywords */}
+                    {Array.isArray(qa.evaluation.demonstratedKeywords) && (qa.evaluation.demonstratedKeywords as string[]).length > 0 && (
+                      <div>
+                        <p className="mb-1 text-sm font-medium text-muted-foreground">답변에서 다룬 기술</p>
+                        <div className="flex flex-wrap gap-1">
+                          {(qa.evaluation.demonstratedKeywords as string[]).map((kw, idx) => (
+                            <Badge key={idx} variant="outline" className="border-green-500/40 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300">
+                              {kw}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Missing Keywords */}
+                    {Array.isArray(qa.evaluation.missingKeywords) && (qa.evaluation.missingKeywords as string[]).length > 0 && (
+                      <div>
+                        <p className="mb-1 text-sm font-medium text-muted-foreground">빠진 핵심 개념</p>
+                        <div className="flex flex-wrap gap-1">
+                          {(qa.evaluation.missingKeywords as string[]).map((kw, idx) => (
+                            <Badge key={idx} variant="outline" className="border-red-500/40 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                              {kw}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Feedback */}
                     {(qa.evaluation.detailedFeedback as string) && (
                       <div>
