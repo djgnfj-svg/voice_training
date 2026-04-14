@@ -23,6 +23,9 @@ class AgentInterviewSession(Base):
     credit_deducted = Column("creditDeducted", Boolean, default=False)
     text_mode = Column("textMode", Boolean, default=False)
     fit_analysis = Column("fit_analysis", JSON, nullable=True)
+    phase = Column("phase", String, nullable=True)
+    scan_plan = Column("scan_plan", JSON, nullable=True)
+    dive_plan = Column("dive_plan", JSON, nullable=True)
     created_at = Column("createdAt", DateTime, server_default=func.now())
     updated_at = Column("updatedAt", DateTime, default=func.now(), onupdate=func.now())
 

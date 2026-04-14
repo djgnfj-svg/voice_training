@@ -129,7 +129,6 @@ async def start_interview(
         "current_question": "",
         "current_answer": "",
         "question_count": 0,
-        "follow_up_round": 0,
         "max_questions": effective_max_questions,
         "current_evaluation": {},
         "next_action": "",
@@ -140,6 +139,13 @@ async def start_interview(
         "fit_analysis": None,
         "has_resume_embeddings": False,
         "current_resume_chunks": [],
+        "phase": "scan",
+        "scan_plan": [],
+        "dive_plan": [],
+        "scan_evaluations": [],
+        "current_scan_idx": 0,
+        "current_dive_idx": 0,
+        "current_dive_depth": 0,
     }
 
     async def event_generator():
@@ -162,7 +168,17 @@ async def start_interview(
             # Fit Analysis 영속화 — answer/skip 흐름에서 재사용 (Spec 4.2(b))
             session.fit_analysis = state.get("fit_analysis")
 
-            state = await nodes.generate_question(state, db)
+            # Scan 플랜 확정 후 첫 질문 생성
+            state = await nodes.build_scan_plan_node(state, db)
+            for ev in state.get("pending_events", []):
+                yield {"event": ev["event"], "data": json.dumps(ev["data"])}
+            state["pending_events"] = []
+
+            session.phase = state.get("phase")
+            session.scan_plan = state.get("scan_plan")
+            session.dive_plan = state.get("dive_plan")
+
+            state = await nodes.scan_ask(state, db)
 
             # AI 질문 생성 성공 → 크레딧 차감 (실패 시 세션 폐기 + 에러 반환)
             try:
@@ -285,20 +301,17 @@ async def submit_answer(
     conversation_history = []
     current_question = ""
     question_count = 0
-    follow_up_round = 0
 
     for msg in messages:
         if msg.role in ("agent_question", "agent_followup"):
             current_question = msg.content
             question_count = msg.question_number or 0
-            follow_up_round = msg.follow_up_round or 0
         elif msg.role == "user_answer" and msg.evaluation:
             conversation_history.append({
                 "question": current_question,
                 "answer": msg.content,
                 "evaluation": msg.evaluation,
                 "question_number": msg.question_number,
-                "follow_up_round": msg.follow_up_round or 0,
             })
 
     # Get last question from messages
@@ -313,7 +326,6 @@ async def submit_answer(
 
     current_question = last_question_msg.content
     question_count = last_question_msg.question_number or 1
-    follow_up_round = last_question_msg.follow_up_round or 0
 
     # Rebuild profile from RAG
     from app.agent.profile_agent import load_user_profile
@@ -322,6 +334,36 @@ async def submit_answer(
     # 이력서 RAG / Fit Analysis 컨텍스트 복원 (Spec 4.2(b))
     from app.agent.resume_rag import has_resume_embeddings as _has_emb
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
+
+    # Scan/Dive 페이즈 컨텍스트 복원 (Task 8)
+    phase = session.phase or "scan"
+    scan_plan = session.scan_plan or []
+    dive_plan = session.dive_plan or []
+
+    # scan_evaluations 복원: conversation_history 앞부분 scan_plan 길이만큼
+    scan_evaluations = [
+        h["evaluation"] for h in conversation_history[:len(scan_plan)] if h.get("evaluation")
+    ]
+    current_scan_idx = min(len(scan_evaluations), len(scan_plan))
+
+    # dive 진행 상태 복원 (주제당 최대 3질문, 순차 진행 가정)
+    current_dive_idx = 0
+    current_dive_depth = 0
+    if phase == "dive" and dive_plan:
+        dive_history = conversation_history[len(scan_plan):]
+        topic_idx = 0
+        topic_depth = 0
+        for entry in dive_history:
+            topic_depth += 1
+            ev = entry.get("evaluation") or {}
+            depth_score = (ev.get("scores") or {}).get("depth", 0)
+            if topic_depth >= 3 or (topic_depth >= 2 and depth_score >= 70):
+                topic_idx += 1
+                topic_depth = 0
+                if topic_idx >= len(dive_plan):
+                    break
+        current_dive_idx = topic_idx
+        current_dive_depth = topic_depth
 
     state: InterviewState = {
         "session_id": session_id,
@@ -332,7 +374,6 @@ async def submit_answer(
         "current_question": current_question,
         "current_answer": body.answer,
         "question_count": question_count,
-        "follow_up_round": follow_up_round,
         "max_questions": session.max_questions or 7,
         "current_evaluation": {},
         "next_action": "",
@@ -346,6 +387,13 @@ async def submit_answer(
         "resume_id": session.resume_id,
         "has_resume_embeddings": has_emb,
         "current_resume_chunks": [],
+        "phase": phase,
+        "scan_plan": scan_plan,
+        "dive_plan": dive_plan,
+        "scan_evaluations": scan_evaluations,
+        "current_scan_idx": current_scan_idx,
+        "current_dive_idx": current_dive_idx,
+        "current_dive_depth": current_dive_depth,
     }
 
     next_message_index = len(messages)
@@ -361,7 +409,7 @@ async def submit_answer(
                 role="user_answer",
                 content=body.answer,
                 question_number=question_count,
-                follow_up_round=follow_up_round,
+                follow_up_round=0,
             )
             db.add(answer_msg)
             next_message_index += 1
@@ -377,28 +425,22 @@ async def submit_answer(
             # Update answer message with evaluation
             answer_msg.evaluation = state["current_evaluation"]
 
-            # Handle post-decide state
+            # Handle post-decide state — Scan+Dive 구조에서 next_action은
+            # scan_ask / dive_ask / build_dive_plan / end 중 하나
             action = state.get("next_action", "end")
 
-            if action == "follow_up":
-                fq_msg = AgentInterviewMessage(
-                    id=uuid4(),
-                    session_id=session_id,
-                    message_index=next_message_index,
-                    role="agent_followup",
-                    content=state["current_question"],
-                    question_number=state["question_count"],
-                    follow_up_round=state["follow_up_round"],
+            if action in ("scan_ask", "dive_ask", "build_dive_plan"):
+                # 딥다이브 depth>=2 질문은 agent_followup, 나머지는 agent_question
+                is_dive_followup = (
+                    state.get("phase") == "dive"
+                    and state.get("current_dive_depth", 0) > 1
                 )
-                db.add(fq_msg)
-                next_message_index += 1
-
-            elif action == "next_question":
+                msg_role = "agent_followup" if is_dive_followup else "agent_question"
                 q_msg = AgentInterviewMessage(
                     id=uuid4(),
                     session_id=session_id,
                     message_index=next_message_index,
-                    role="agent_question",
+                    role=msg_role,
                     content=state["current_question"],
                     question_number=state["question_count"],
                     follow_up_round=0,
@@ -406,19 +448,32 @@ async def submit_answer(
                 db.add(q_msg)
                 next_message_index += 1
 
+                # phase/scan_plan/dive_plan 영속화
+                session.phase = state.get("phase")
+                session.scan_plan = state.get("scan_plan")
+                session.dive_plan = state.get("dive_plan")
+
             else:  # end
                 session.status = "completed"
                 session.total_questions = state["question_count"]
                 session.report_data = state.get("overall_report")
                 if state.get("overall_report"):
                     session.overall_score = state["overall_report"].get("overallScore")
+                session.phase = "done"
 
             await db.commit()
+
+            # 프론트 호환: 내부 action(scan_ask/dive_ask/build_dive_plan) → "next_question"
+            legacy_action = (
+                "next_question"
+                if action in ("scan_ask", "dive_ask", "build_dive_plan")
+                else "end"
+            )
 
             yield {
                 "event": "action",
                 "data": json.dumps({
-                    "action": action,
+                    "action": legacy_action,
                     "questionCount": state.get("question_count", 0),
                     "maxQuestions": state.get("max_questions", 7),
                 }),
@@ -491,7 +546,6 @@ async def skip_question(
                 "answer": msg.content,
                 "evaluation": msg.evaluation,
                 "question_number": msg.question_number,
-                "follow_up_round": msg.follow_up_round or 0,
             })
 
     max_questions = session.max_questions or 7
@@ -500,6 +554,34 @@ async def skip_question(
     from app.agent.resume_rag import has_resume_embeddings as _has_emb
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
     persisted_fit = session.fit_analysis
+
+    # Scan/Dive 페이즈 컨텍스트 복원
+    phase = session.phase or "scan"
+    scan_plan = session.scan_plan or []
+    dive_plan = session.dive_plan or []
+
+    scan_evaluations = [
+        h["evaluation"] for h in conversation_history[:len(scan_plan)] if h.get("evaluation")
+    ]
+    current_scan_idx = min(len(scan_evaluations), len(scan_plan))
+
+    current_dive_idx = 0
+    current_dive_depth = 0
+    if phase == "dive" and dive_plan:
+        dive_history = conversation_history[len(scan_plan):]
+        topic_idx = 0
+        topic_depth = 0
+        for entry in dive_history:
+            topic_depth += 1
+            ev = entry.get("evaluation") or {}
+            depth_score = (ev.get("scores") or {}).get("depth", 0)
+            if topic_depth >= 3 or (topic_depth >= 2 and depth_score >= 70):
+                topic_idx += 1
+                topic_depth = 0
+                if topic_idx >= len(dive_plan):
+                    break
+        current_dive_idx = topic_idx
+        current_dive_depth = topic_depth
 
     async def event_generator():
         nonlocal question_count, next_message_index
@@ -517,82 +599,125 @@ async def skip_question(
             db.add(skip_msg)
             next_message_index += 1
 
+            # 공통 state 빌드
+            state: InterviewState = {
+                "session_id": session_id,
+                "user_id": user.id,
+                "resume": resume_data,
+                "job_posting": job_posting_data,
+                "user_profile": user_profile,
+                "current_question": "",
+                "current_answer": "",
+                "question_count": question_count,
+                "max_questions": max_questions,
+                "current_evaluation": {},
+                "next_action": "",
+                "conversation_history": conversation_history,
+                "overall_report": None,
+                "pending_events": [],
+                "fit_analysis": persisted_fit,
+                "resume_id": session.resume_id,
+                "has_resume_embeddings": has_emb,
+                "current_resume_chunks": [],
+                "phase": phase,
+                "scan_plan": scan_plan,
+                "dive_plan": dive_plan,
+                "scan_evaluations": scan_evaluations,
+                "current_scan_idx": current_scan_idx,
+                "current_dive_idx": current_dive_idx,
+                "current_dive_depth": current_dive_depth,
+            }
+
+            should_end = False
             if question_count >= max_questions:
-                # End interview
-                state: InterviewState = {
-                    "session_id": session_id,
-                    "user_id": user.id,
-                    "resume": resume_data,
-                    "job_posting": job_posting_data,
-                    "user_profile": user_profile,
-                    "current_question": "",
-                    "current_answer": "",
-                    "question_count": question_count,
-                    "follow_up_round": 0,
-                    "max_questions": max_questions,
-                    "current_evaluation": {},
-                    "next_action": "end",
-                    "conversation_history": conversation_history,
-                    "overall_report": None,
-                    "pending_events": [],
-                    "fit_analysis": persisted_fit,
-                    "resume_id": session.resume_id,
-                    "has_resume_embeddings": has_emb,
-                    "current_resume_chunks": [],
-                }
+                should_end = True
+            else:
+                # 페이즈별 skip 처리
+                if phase == "scan":
+                    # scan: dummy eval push, idx++
+                    new_scan_idx = current_scan_idx + 1
+                    state["scan_evaluations"] = scan_evaluations + [{"scores": {"depth": 0}}]
+                    state["current_scan_idx"] = new_scan_idx
+                    if new_scan_idx >= len(scan_plan):
+                        # 훑기 소진 → dive 전환
+                        state = await nodes.build_dive_plan_node(state, db)
+                        if not state.get("dive_plan"):
+                            # dive_plan 비어있으면 종료
+                            should_end = True
+                        else:
+                            state = await nodes.dive_ask(state, db)
+                    else:
+                        state = await nodes.scan_ask(state, db)
+                else:
+                    # dive: 현재 주제 중단 + 다음 주제로
+                    new_dive_idx = current_dive_idx + 1
+                    if new_dive_idx >= len(dive_plan):
+                        should_end = True
+                    else:
+                        state["current_dive_idx"] = new_dive_idx
+                        state["current_dive_depth"] = 0
+                        state = await nodes.dive_ask(state, db)
+
+            if should_end:
+                state["next_action"] = "end"
                 state = await nodes.update_profile(state, db)
                 state = await nodes.generate_report(state, db)
                 for ev in state.get("pending_events", []):
                     yield {"event": ev["event"], "data": json.dumps(ev["data"])}
 
                 session.status = "completed"
-                session.total_questions = question_count
+                session.total_questions = state.get("question_count", question_count)
                 session.report_data = state.get("overall_report")
                 if state.get("overall_report"):
                     session.overall_score = state["overall_report"].get("overallScore")
+                session.phase = "done"
 
                 await db.commit()
-                yield {"event": "action", "data": json.dumps({"action": "end", "questionCount": question_count, "maxQuestions": max_questions})}
-            else:
-                # Generate next question directly (no evaluation)
-                state: InterviewState = {
-                    "session_id": session_id,
-                    "user_id": user.id,
-                    "resume": resume_data,
-                    "job_posting": job_posting_data,
-                    "user_profile": user_profile,
-                    "current_question": "",
-                    "current_answer": "",
-                    "question_count": question_count,
-                    "follow_up_round": 0,
-                    "max_questions": max_questions,
-                    "current_evaluation": {},
-                    "next_action": "",
-                    "conversation_history": conversation_history,
-                    "overall_report": None,
-                    "pending_events": [],
-                    "fit_analysis": persisted_fit,
-                    "resume_id": session.resume_id,
-                    "has_resume_embeddings": has_emb,
-                    "current_resume_chunks": [],
+                yield {
+                    "event": "action",
+                    "data": json.dumps({
+                        "action": "end",
+                        "questionCount": state.get("question_count", question_count),
+                        "maxQuestions": max_questions,
+                    }),
                 }
-                state = await nodes.generate_question(state, db)
+            else:
                 for ev in state.get("pending_events", []):
                     yield {"event": ev["event"], "data": json.dumps(ev["data"])}
+                state["pending_events"] = []
+
+                is_dive_followup = (
+                    state.get("phase") == "dive"
+                    and state.get("current_dive_depth", 0) > 1
+                )
+                msg_role = "agent_followup" if is_dive_followup else "agent_question"
 
                 q_msg = AgentInterviewMessage(
                     id=uuid4(),
                     session_id=session_id,
                     message_index=next_message_index,
-                    role="agent_question",
+                    role=msg_role,
                     content=state["current_question"],
                     question_number=state["question_count"],
                     follow_up_round=0,
                 )
                 db.add(q_msg)
+
+                # phase/scan_plan/dive_plan 영속화
+                session.phase = state.get("phase")
+                session.scan_plan = state.get("scan_plan")
+                session.dive_plan = state.get("dive_plan")
+
                 await db.commit()
 
-                yield {"event": "action", "data": json.dumps({"action": "next_question", "questionCount": state["question_count"], "maxQuestions": max_questions})}
+                yield {
+                    "event": "action",
+                    "data": json.dumps({
+                        "action": "next_question",
+                        "questionCount": state["question_count"],
+                        "maxQuestions": max_questions,
+                    }),
+                }
 
         except Exception:
             logger.exception("Skip question failed")
@@ -639,7 +764,6 @@ async def end_interview(
                 "answer": msg.content,
                 "evaluation": msg.evaluation,
                 "question_number": msg.question_number,
-                "follow_up_round": msg.follow_up_round or 0,
             })
 
     # 리소스 로드 (프로필 업데이트 및 리포트 생성용)
@@ -671,7 +795,6 @@ async def end_interview(
         "current_question": "",
         "current_answer": "",
         "question_count": question_count,
-        "follow_up_round": 0,
         "max_questions": session.max_questions or 7,
         "current_evaluation": {},
         "next_action": "end",
@@ -697,6 +820,7 @@ async def end_interview(
 
     session.status = "completed"
     session.total_questions = question_count
+    session.phase = "done"
     await db.commit()
 
     return {"status": "completed", "sessionId": session_id}
