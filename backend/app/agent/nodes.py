@@ -134,7 +134,7 @@ async def fit_analysis_node(state: InterviewState, db: AsyncSession) -> Intervie
         "event": "status",
         "data": {
             "phase": "fit_analyzed",
-            "focus_topics_count": len(fa["focus_topics"]),
+            "focus_topics_count": len(fa.get("focus_topics", [])),
             "has_resume_embeddings": has_emb,
         },
     })

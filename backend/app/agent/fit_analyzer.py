@@ -1,4 +1,4 @@
-"""Fit Analysis: 이력서↔JD 매칭. skill_match는 코드, focus_topics는 LLM."""
+"""Fit Analysis: 이력서↔JD 매칭. skill_match는 코드, avoid_topics는 LLM."""
 from __future__ import annotations
 
 import logging
@@ -17,15 +17,8 @@ class SkillMatch(TypedDict):
     coverage: float
 
 
-class FocusTopic(TypedDict):
-    topic: str
-    why: str
-    priority: str  # 'high' | 'medium' | 'low'
-
-
 class FitAnalysis(TypedDict):
     skill_match: SkillMatch | None
-    focus_topics: list[FocusTopic]
     avoid_topics: list[str]
 
 
@@ -118,9 +111,9 @@ def _summarize_jd(jd: dict | None) -> str:
 
 
 async def run_fit_analysis(resume: dict | None, jd: dict | None) -> FitAnalysis:
-    """이력서↔JD Fit Analysis. skill_match는 코드, focus/avoid는 LLM.
+    """이력서↔JD Fit Analysis. skill_match는 코드, avoid_topics는 LLM.
 
-    LLM 실패 시 focus_topics/avoid_topics만 빈 배열로, skill_match는 반환.
+    LLM 실패 시 avoid_topics만 빈 배열로, skill_match는 반환.
     """
     resume_skills = (resume or {}).get("skills") or []
     jd_skills = _extract_jd_skills(jd)
@@ -133,22 +126,9 @@ async def run_fit_analysis(resume: dict | None, jd: dict | None) -> FitAnalysis:
         gap=", ".join(skill_match["gap"]) if skill_match else "(JD 없음)",
     )
 
-    focus_topics: list[FocusTopic] = []
     avoid_topics: list[str] = []
     try:
         result = await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.4)
-        raw_topics = result.get("focus_topics") or []
-        for t in raw_topics[:5]:
-            if not isinstance(t, dict):
-                continue
-            topic = (t.get("topic") or "").strip()
-            if not topic:
-                continue
-            focus_topics.append({
-                "topic": topic,
-                "why": (t.get("why") or "").strip(),
-                "priority": t.get("priority") if t.get("priority") in ("high", "medium", "low") else "medium",
-            })
         raw_avoid = result.get("avoid_topics") or []
         avoid_topics = [str(s).strip() for s in raw_avoid[:3] if str(s).strip()]
     except Exception:
@@ -156,6 +136,5 @@ async def run_fit_analysis(resume: dict | None, jd: dict | None) -> FitAnalysis:
 
     return {
         "skill_match": skill_match,
-        "focus_topics": focus_topics,
         "avoid_topics": avoid_topics,
     }
