@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from typing import Any
@@ -15,6 +16,12 @@ from app.prompts.job_posting import JOB_POSTING_ANALYSIS_PROMPT, COMPANY_ANALYSI
 logger = logging.getLogger(__name__)
 
 
+def _hash_raw_text(raw_text: str) -> str:
+    """raw_text를 정규화(trim) 후 sha256. 공백 차이로 캐시 미스 방지."""
+    normalized = raw_text.strip()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 # ---------------------------------------------------------------------------
 # Job posting analysis
 # ---------------------------------------------------------------------------
@@ -22,27 +29,42 @@ logger = logging.getLogger(__name__)
 async def analyze_job_posting(
     db: AsyncSession, *, user_id: str, raw_text: str
 ) -> dict[str, Any]:
-    """Create job posting record, parse with Claude, analyze company."""
+    """공고 분석. 동일 유저+동일 raw_text 해시면 캐시 hit (LLM 재호출 없음)."""
+    raw_text_hash = _hash_raw_text(raw_text)
+
+    # Cache lookup: (userId, rawTextHash)
+    cached = await db.execute(
+        select(JobPosting).where(
+            JobPosting.user_id == user_id,
+            JobPosting.raw_text_hash == raw_text_hash,
+            JobPosting.parsed_data.isnot(None),
+        )
+        .order_by(JobPosting.created_at.desc())
+        .limit(1)
+    )
+    hit = cached.scalar_one_or_none()
+    if hit is not None:
+        logger.info("job_posting cache hit: user=%s hash=%s", user_id, raw_text_hash[:8])
+        return _serialize_job_posting(hit)
+
+    # Cache miss: insert + analyze
     job_posting_id = str(uuid4())
     job_posting = JobPosting(
         id=job_posting_id,
         user_id=user_id,
         raw_text=raw_text,
+        raw_text_hash=raw_text_hash,
     )
     db.add(job_posting)
     await db.flush()
 
-    # Parse job posting
     parsed_data = await _parse_job_posting(raw_text)
-
-    # Analyze company
     company_analysis = await _analyze_company(
         company=parsed_data.get("company", ""),
         position=parsed_data.get("position", ""),
         tech_stack=parsed_data.get("techStack", []),
     )
 
-    # Update record
     await db.execute(
         update(JobPosting)
         .where(JobPosting.id == job_posting_id)
@@ -53,12 +75,11 @@ async def analyze_job_posting(
     )
     await db.commit()
 
-    # Re-fetch to return updated object
     result = await db.execute(
         select(JobPosting).where(JobPosting.id == job_posting_id)
     )
     updated = result.scalar_one()
-
+    logger.info("job_posting cache miss→stored: user=%s hash=%s", user_id, raw_text_hash[:8])
     return _serialize_job_posting(updated)
 
 
@@ -126,6 +147,7 @@ def _serialize_job_posting(jp: JobPosting) -> dict[str, Any]:
         "id": jp.id,
         "userId": jp.user_id,
         "rawText": jp.raw_text,
+        "rawTextHash": jp.raw_text_hash,
         "parsedData": jp.parsed_data,
         "companyAnalysis": jp.company_analysis or {},
         "createdAt": jp.created_at.isoformat() if jp.created_at else None,
