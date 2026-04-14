@@ -106,3 +106,72 @@ def test_skipped_answers_excluded():
     ]
     out = aggregate_evaluations(history)
     assert out["overallStats"]["count"] == 1
+
+
+def test_format_aggregate_renders_all_sections():
+    """format_aggregate_for_prompt 주요 섹션 헤더와 값이 텍스트에 포함."""
+    from app.agent.report_aggregator import format_aggregate_for_prompt
+    history = [
+        _turn("React에서 useMemo를 썼나요?", 80, demo=["useMemo", "의존성 배열"], miss=["useCallback"],
+              meta={"phase": "scan", "scanIdx": 0, "projectRef": "P1"}),
+        _turn("상태관리 라이브러리 선택 기준?", 50, demo=["Redux"], miss=["Context API", "Zustand"],
+              meta={"phase": "dive", "diveIdx": 0, "topicLabel": "상태관리", "angle": "weakness", "projectRef": "P1"}),
+    ]
+    agg = aggregate_evaluations(history)
+    text = format_aggregate_for_prompt(agg)
+    # 전체 헤더
+    assert "전체: 2개 답변" in text
+    # 역량별
+    assert "[역량별 평균/최저/최고]" in text
+    # 페이즈별
+    assert "[페이즈별 성과]" in text
+    assert "훑기(scan)" in text
+    assert "딥다이브(dive)" in text
+    # 딥다이브 주제별
+    assert "[딥다이브 주제별]" in text
+    assert "상태관리" in text
+    # 최고/최저
+    assert "[최고/최저 답변]" in text
+    # 키워드
+    assert "[답변에서 잘 다룬 기술 키워드" in text
+    assert "useMemo" in text
+    assert "[답변에서 빠진 핵심 기술 키워드" in text
+    assert "Context API" in text
+
+
+def test_format_aggregate_empty_returns_default():
+    from app.agent.report_aggregator import format_aggregate_for_prompt
+    text = format_aggregate_for_prompt(aggregate_evaluations([]))
+    # 빈 집계도 전체 라인은 항상 출력 (기존 동작)
+    assert "전체: 0개 답변" in text
+
+
+def test_qidx_uses_question_number_when_present():
+    """사용자가 Q2를 스킵한 상황: history엔 2개지만 qIdx는 1,3이어야 함."""
+    history = [
+        {
+            "question": "Q1",
+            "answer": "답",
+            "question_number": 1,
+            "evaluation": {
+                "scores": {"clarity": 80, "accuracy": 80, "practicality": 80, "depth": 80, "completeness": 80},
+                "overallScore": 80,
+                "meta": {"phase": "scan"},
+            },
+        },
+        {
+            "question": "Q3",
+            "answer": "답",
+            "question_number": 3,
+            "evaluation": {
+                "scores": {"clarity": 50, "accuracy": 50, "practicality": 50, "depth": 50, "completeness": 50},
+                "overallScore": 50,
+                "meta": {"phase": "dive", "topicLabel": "X", "angle": "weakness"},
+            },
+        },
+    ]
+    agg = aggregate_evaluations(history)
+    assert agg["extremes"]["best"]["qIdx"] == 1
+    assert agg["extremes"]["worst"]["qIdx"] == 3
+    assert agg["phaseAnalysis"]["scan"]["qIndices"] == [1]
+    assert agg["phaseAnalysis"]["dive"]["qIndices"] == [3]

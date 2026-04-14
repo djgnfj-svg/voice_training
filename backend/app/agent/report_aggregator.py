@@ -12,7 +12,11 @@ _KEYWORD_TOP = 10
 
 
 def _iter_valid_turns(conversation_history: list[dict]):
-    """유효 평가가 있는 턴만 (qIdx, turn) yield. qIdx는 1부터."""
+    """유효 평가가 있는 턴만 (qIdx, turn) yield.
+
+    qIdx는 저장된 question_number 우선, 없으면 순서 인덱스.
+    스킵된 질문이 히스토리에서 빠져도 프론트의 Q번호와 일치하도록 보장.
+    """
     for i, turn in enumerate(conversation_history, start=1):
         if turn.get("answer") == "(건너뜀)":
             continue
@@ -22,7 +26,9 @@ def _iter_valid_turns(conversation_history: list[dict]):
         scores = ev.get("scores")
         if not isinstance(scores, dict) or not scores:
             continue
-        yield i, turn
+        q_num = turn.get("question_number")
+        q_idx = q_num if isinstance(q_num, int) and q_num > 0 else i
+        yield q_idx, turn
 
 
 def _avg(values: list[float]) -> int:
