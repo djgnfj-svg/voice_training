@@ -239,7 +239,11 @@ overallScore는 넣지 마세요 — 서버 코드가 가중 평균(clarity 0.30
   "weaknessDetected": "새로 발견된 약점 (없으면 null)"
 }}"""
 
-REPORT_PROMPT = """다음 면접 세션의 전체 대화를 분석하여 종합 리포트를 생성하세요.
+REPORT_PROMPT = """다음 면접 세션의 대화와 **집계 수치**를 분석하여 종합 리포트를 생성하세요.
+
+<집계 수치>
+{aggregate_block}
+</집계 수치>
 
 <conversation_history>
 {conversation_history}
@@ -250,14 +254,40 @@ REPORT_PROMPT = """다음 면접 세션의 전체 대화를 분석하여 종합 
 약점: {weaknesses}
 </user_profile>
 
+분석 원칙 (반드시 준수):
+1. 강점/개선점은 반드시 **구체적 질문 번호(Q1, Q3 등)와 기술 키워드**로 근거를 대세요. 추상 표현 금지 ("이해 부족" X → "분산 트랜잭션에서 Saga/2PC 미언급" O).
+2. `technicalDiagnosis.weakTopics[].studyHint`에는 학습 키워드를 구체적으로 제시하세요 (예: "Saga 패턴 + 보상 트랜잭션의 실패 시나리오").
+3. `questionHighlights.best/worst`는 집계의 "최고/최저 답변"과 일치해야 하며, reason에 해당 답변의 구체적 강약점을 인용하세요.
+4. `phaseInsight`는 훑기 vs 딥다이브 성과 비교를 1~2문장으로. 둘 중 하나만 있으면 그쪽만 언급.
+5. `strengths[]`와 `improvements[]`의 각 항목은 반드시 `questionRefs`에 해당 Q번호를 1개 이상 포함.
+
+overallScore는 집계의 전체 평균(소수점 반올림)과 일치시키세요.
+
 반드시 다음 JSON만 반환하세요:
 {{
   "overallScore": 0,
-  "summary": "전체 면접 종합 평가 (3-5문장)",
-  "strengths": ["이번 면접에서 보여준 강점 1", "강점 2"],
-  "improvements": ["개선이 필요한 부분 1", "부분 2"],
+  "summary": "전체 면접 종합 평가 3-5문장. 점수 근거와 기술 키워드 포함",
+  "strengths": [
+    {{ "text": "강점 서술 (기술 키워드 인용)", "questionRefs": [1, 2] }}
+  ],
+  "improvements": [
+    {{ "text": "개선점 서술 (구체적 기술 개념 지적)", "questionRefs": [3] }}
+  ],
   "growthNotes": "이전 프로필 대비 성장한 부분 (프로필 데이터가 없으면 null)",
-  "recommendations": ["다음 면접을 위한 구체적 추천 1", "추천 2"]
+  "recommendations": ["다음 면접을 위한 구체적 학습 키워드 1", "키워드 2"],
+  "questionHighlights": {{
+    "best": {{ "qIdx": 0, "reason": "해당 답변이 강했던 구체적 이유" }},
+    "worst": {{ "qIdx": 0, "reason": "해당 답변이 약했던 구체적 이유" }}
+  }},
+  "phaseInsight": "훑기 vs 딥다이브 성과 비교 1-2문장 (둘 중 하나만이면 그것만)",
+  "technicalDiagnosis": {{
+    "strongTopics": [
+      {{ "keyword": "잘 다룬 기술", "evidence": "Q2, Q4" }}
+    ],
+    "weakTopics": [
+      {{ "keyword": "빠진 기술 개념", "reason": "어느 Q에서 어떻게 빠졌는지", "studyHint": "구체적 학습 키워드" }}
+    ]
+  }}
 }}"""
 
 FIT_ANALYSIS_PROMPT = """당신은 면접 설계 전문가입니다. 지원자 이력서와 채용공고를 비교하여 면접에서 피해야 할 주제(avoid_topics)만 선정하세요.

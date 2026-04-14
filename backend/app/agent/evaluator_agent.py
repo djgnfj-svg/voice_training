@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 
+from app.agent.report_aggregator import aggregate_evaluations, format_aggregate_for_prompt
 from app.config import settings
 from app.lib.llm_client import call_llm_json
 from app.prompts.agent import EVALUATOR_PROMPT, REPORT_PROMPT
@@ -164,25 +165,47 @@ async def generate_report(
     conversation_history: list[dict],
     user_profile: dict,
 ) -> dict:
-    """Generate overall interview report."""
+    """Generate overall interview report with aggregated metrics injected."""
+    aggregate = aggregate_evaluations(conversation_history)
+    aggregate_block = format_aggregate_for_prompt(aggregate)
+
     history_parts = []
-    for entry in conversation_history:
-        history_parts.append(f"Q: {entry.get('question', '')}")
+    for i, entry in enumerate(conversation_history, start=1):
+        history_parts.append(f"[Q{i}] {entry.get('question', '')}")
         if entry.get("answer"):
             history_parts.append(f"A: {entry['answer']}")
-        if entry.get("evaluation"):
-            ev = entry["evaluation"]
-            history_parts.append(f"점수: {ev.get('overallScore', '?')}, 피드백: {ev.get('briefFeedback', '')}")
+        ev = entry.get("evaluation") or {}
+        if ev:
+            demo = ev.get("demonstratedKeywords") or []
+            miss = ev.get("missingKeywords") or []
+            extra = []
+            if demo:
+                extra.append(f"다룸: {', '.join(demo)}")
+            if miss:
+                extra.append(f"누락: {', '.join(miss)}")
+            kw_str = " | ".join(extra)
+            history_parts.append(
+                f"점수: {ev.get('overallScore', '?')}" + (f" | {kw_str}" if kw_str else "")
+            )
         history_parts.append("---")
 
     prompt = REPORT_PROMPT.format(
+        aggregate_block=aggregate_block,
         conversation_history="\n".join(history_parts),
         strengths="\n".join(user_profile.get("strengths", [])) or "데이터 없음",
         weaknesses="\n".join(user_profile.get("weaknesses", [])) or "데이터 없음",
     )
 
-    return await call_llm_json(
+    report = await call_llm_json(
         prompt,
         model=settings.AGENT_MODEL,
         temperature=0.3,
     )
+
+    # 서버 계산 집계를 리포트에 병합 (프론트에서 시각화 재계산 없도록)
+    report["categoryBreakdown"] = aggregate["categoryBreakdown"]
+    report["phaseAnalysis"] = aggregate["phaseAnalysis"]
+    report["diveTopicAnalysis"] = aggregate["diveTopicAnalysis"]
+    report["keywordStats"] = aggregate["keywordStats"]
+
+    return report
