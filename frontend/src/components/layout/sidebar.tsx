@@ -16,6 +16,7 @@ import {
   Sun,
   Monitor,
   BookOpen,
+  Coins,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import { useMobileSidebar } from '@/hooks/useMobileSidebar';
 const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { href: '/interview/setup', label: '면접 연습', icon: Mic },
+  { href: '/credits', label: '크레딧', icon: Coins },
 ];
 
 const adminNavItems = [
