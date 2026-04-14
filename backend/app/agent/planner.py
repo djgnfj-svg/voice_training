@@ -112,3 +112,127 @@ def build_scan_plan(resume: dict, fit_analysis: dict) -> list[ScanItem]:
             "reason": "jd_match" if score > 0 else "jd_unmatched",
         })
     return plan
+
+
+def _topic_label(project_ref: str, angle: str) -> str:
+    if angle == "weakness":
+        return f"{project_ref} 한계/개선점"
+    return f"{project_ref} 핵심 의사결정"
+
+
+def build_dive_plan(
+    scan_plan: list[ScanItem],
+    scan_evaluations: list[dict],
+    fit_analysis: dict,
+) -> list[DiveTopic]:
+    """딥다이브 2주제 선정.
+
+    - JD 있음 → scan_plan에서 reason=='jd_match'만 후보
+    - JD 없음 → 전체 scan 후보
+    - 후보 중 depth 최저 → weakness, 최고 → strength
+    - 후보가 1개뿐 → 같은 프로젝트 2각도 (topic 라벨만 다르게)
+    - scan_plan 비어있으면 []
+    """
+    if not scan_plan:
+        return []
+
+    skill_match = (fit_analysis or {}).get("skill_match")
+    has_jd = bool(skill_match and skill_match.get("matched"))
+
+    # 후보 인덱스 (scan_plan 기준)
+    if has_jd:
+        candidate_idx = [i for i, s in enumerate(scan_plan) if s["reason"] == "jd_match"]
+        if not candidate_idx:
+            candidate_idx = list(range(len(scan_plan)))
+    else:
+        candidate_idx = list(range(len(scan_plan)))
+
+    def _depth(i: int) -> int:
+        if i >= len(scan_evaluations):
+            return 50
+        ev = scan_evaluations[i] or {}
+        scores = ev.get("scores") or {}
+        try:
+            return int(scores.get("depth", 50))
+        except (TypeError, ValueError):
+            return 50
+
+    scored = [(i, _depth(i)) for i in candidate_idx]
+
+    # 후보 1개 → 같은 프로젝트 2각도 (scan_plan 전체가 1개인 경우는 1주제)
+    if len(scored) == 1:
+        i = scored[0][0]
+        s = scan_plan[i]
+        # scan_plan 전체가 1개라면 1주제만 반환
+        if len(scan_plan) == 1:
+            return [{
+                "topic": _topic_label(s["project_ref"], "strength"),
+                "project_ref": s["project_ref"],
+                "angle": "strength",
+                "scan_question_idx": i,
+                "query": s["query"],
+            }]
+        # JD 필터로 후보가 1개로 줄어든 경우 → 2각도
+        return [
+            {
+                "topic": _topic_label(s["project_ref"], "weakness"),
+                "project_ref": s["project_ref"],
+                "angle": "weakness",
+                "scan_question_idx": i,
+                "query": s["query"],
+            },
+            {
+                "topic": _topic_label(s["project_ref"], "strength"),
+                "project_ref": s["project_ref"],
+                "angle": "strength",
+                "scan_question_idx": i,
+                "query": s["query"],
+            },
+        ]
+
+    weakness_i, _ = min(scored, key=lambda x: x[1])
+    strength_i, _ = max(scored, key=lambda x: x[1])
+
+    if weakness_i == strength_i:
+        others = [s for s in scored if s[0] != weakness_i]
+        if others:
+            strength_i = max(others, key=lambda x: x[1])[0]
+
+    if weakness_i == strength_i:
+        # 후보 1개뿐 또는 모두 동점 → 같은 프로젝트 2각도
+        s = scan_plan[weakness_i]
+        return [
+            {
+                "topic": _topic_label(s["project_ref"], "weakness"),
+                "project_ref": s["project_ref"],
+                "angle": "weakness",
+                "scan_question_idx": weakness_i,
+                "query": s["query"],
+            },
+            {
+                "topic": _topic_label(s["project_ref"], "strength"),
+                "project_ref": s["project_ref"],
+                "angle": "strength",
+                "scan_question_idx": weakness_i,
+                "query": s["query"],
+            },
+        ]
+
+    w_s = scan_plan[weakness_i]
+    s_s = scan_plan[strength_i]
+    return [
+        {
+            "topic": _topic_label(w_s["project_ref"], "weakness"),
+            "project_ref": w_s["project_ref"],
+            "angle": "weakness",
+            "scan_question_idx": weakness_i,
+            "query": w_s["query"],
+        },
+        {
+            "topic": _topic_label(s_s["project_ref"], "strength"),
+            "project_ref": s_s["project_ref"],
+            "angle": "strength",
+            "scan_question_idx": strength_i,
+            "query": s_s["query"],
+        },
+    ]
