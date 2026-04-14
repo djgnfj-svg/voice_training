@@ -196,6 +196,111 @@ export default function AgentInterviewSessionPage() {
             </Card>
           )}
 
+          {/* Technical Diagnosis */}
+          {((report?.technicalDiagnosis as { strongTopics?: unknown[]; weakTopics?: unknown[] } | undefined)?.strongTopics?.length || (report?.technicalDiagnosis as { strongTopics?: unknown[]; weakTopics?: unknown[] } | undefined)?.weakTopics?.length) ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  기술 진단
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {(() => {
+                  const td = report.technicalDiagnosis as {
+                    strongTopics?: { keyword: string; evidence?: string }[];
+                    weakTopics?: { keyword: string; reason?: string; studyHint?: string }[];
+                  };
+                  return (
+                    <>
+                      {td.strongTopics && td.strongTopics.length > 0 && (
+                        <div>
+                          <div className="mb-2 text-sm font-medium text-green-600 dark:text-green-400">잘 다룬 기술</div>
+                          <div className="flex flex-wrap gap-2">
+                            {td.strongTopics.map((t, i) => (
+                              <Badge key={i} variant="outline" className="border-green-500/40 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300">
+                                {t.keyword}{t.evidence ? ` · ${t.evidence}` : ''}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {td.weakTopics && td.weakTopics.length > 0 && (
+                        <div>
+                          <div className="mb-2 text-sm font-medium text-red-600 dark:text-red-400">보완이 필요한 기술</div>
+                          <ul className="space-y-3">
+                            {td.weakTopics.map((t, i) => (
+                              <li key={i} className="rounded-md border border-red-500/20 bg-red-50/50 p-3 dark:bg-red-950/20">
+                                <div className="font-medium text-red-700 dark:text-red-300">{t.keyword}</div>
+                                {t.reason && <div className="mt-1 text-sm text-muted-foreground">{t.reason}</div>}
+                                {t.studyHint && <div className="mt-1 text-xs text-muted-foreground">학습: {t.studyHint}</div>}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {/* Question Highlights */}
+          {(() => {
+            const qh = report?.questionHighlights as { best?: { qIdx: number; reason: string }; worst?: { qIdx: number; reason: string } } | undefined;
+            if (!qh?.best && !qh?.worst) return null;
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle>질문별 하이라이트</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-3 sm:grid-cols-2">
+                  {qh.best && (
+                    <div className="rounded-md border border-green-500/30 bg-green-50/50 p-3 dark:bg-green-950/20">
+                      <div className="text-xs font-medium text-green-600 dark:text-green-400">최고 답변 · Q{qh.best.qIdx}</div>
+                      <div className="mt-1 text-sm">{qh.best.reason}</div>
+                    </div>
+                  )}
+                  {qh.worst && (
+                    <div className="rounded-md border border-red-500/30 bg-red-50/50 p-3 dark:bg-red-950/20">
+                      <div className="text-xs font-medium text-red-600 dark:text-red-400">개선 필요 · Q{qh.worst.qIdx}</div>
+                      <div className="mt-1 text-sm">{qh.worst.reason}</div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Phase Insight */}
+          {(report?.phaseInsight || report?.phaseAnalysis) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>페이즈별 분석</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {report?.phaseInsight && <p className="text-sm leading-relaxed">{report.phaseInsight as string}</p>}
+                {report?.phaseAnalysis && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {(['scan', 'dive'] as const).map((k) => {
+                      const pa = report.phaseAnalysis as Record<string, { avg: number; count: number }>;
+                      const p = pa[k];
+                      if (!p || p.count === 0) return null;
+                      return (
+                        <div key={k} className="rounded-md border bg-muted/30 p-3">
+                          <div className="text-xs text-muted-foreground">{k === 'scan' ? '훑기' : '딥다이브'}</div>
+                          <div className={cn('text-2xl font-bold', scoreText(p.avg))}>{p.avg}</div>
+                          <div className="text-xs text-muted-foreground">{p.count}개 답변</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Average Scores */}
           {Object.keys(avgScores).length > 0 && (
             <Card>
@@ -228,14 +333,23 @@ export default function AgentInterviewSessionPage() {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {report.strengths.map((s: string, i: number) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                        {i + 1}
-                      </span>
-                      {s}
-                    </li>
-                  ))}
+                  {report.strengths.map((s: string | { text: string; questionRefs?: number[] }, i: number) => {
+                    const text = typeof s === 'string' ? s : s.text;
+                    const refs = typeof s === 'string' ? [] : (s.questionRefs || []);
+                    return (
+                      <li key={i} className="flex items-start gap-2 text-sm">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          {i + 1}
+                        </span>
+                        <div className="flex-1">
+                          <span>{text}</span>
+                          {refs.length > 0 && (
+                            <span className="ml-2 text-xs text-muted-foreground">(Q{refs.join(', Q')})</span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </CardContent>
             </Card>
@@ -374,14 +488,23 @@ export default function AgentInterviewSessionPage() {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {report.improvements.map((item: string, i: number) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
-                        {i + 1}
-                      </span>
-                      {item}
-                    </li>
-                  ))}
+                  {report.improvements.map((item: string | { text: string; questionRefs?: number[] }, i: number) => {
+                    const text = typeof item === 'string' ? item : item.text;
+                    const refs = typeof item === 'string' ? [] : (item.questionRefs || []);
+                    return (
+                      <li key={i} className="flex items-start gap-2 text-sm">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                          {i + 1}
+                        </span>
+                        <div className="flex-1">
+                          <span>{text}</span>
+                          {refs.length > 0 && (
+                            <span className="ml-2 text-xs text-muted-foreground">(Q{refs.join(', Q')})</span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </CardContent>
             </Card>
