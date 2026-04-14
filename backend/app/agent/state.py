@@ -1,7 +1,21 @@
 # backend/app/agent/state.py
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Literal, TypedDict
+
+
+class ScanItem(TypedDict):
+    project_ref: str
+    query: str
+    reason: Literal["jd_match", "jd_unmatched", "project_order"]
+
+
+class DiveTopic(TypedDict):
+    topic: str
+    project_ref: str
+    angle: Literal["weakness", "strength"]
+    scan_question_idx: int
+    query: str
 
 
 class InterviewState(TypedDict, total=False):
@@ -20,14 +34,13 @@ class InterviewState(TypedDict, total=False):
     current_question: str
     current_answer: str
     question_count: int
-    follow_up_round: int
     max_questions: int
 
     # 평가 에이전트가 채움
     current_evaluation: dict
 
     # 면접관 에이전트가 채움
-    next_action: str  # "follow_up" | "next_question" | "end"
+    next_action: str
 
     # 대화 히스토리
     conversation_history: list[dict]
@@ -36,17 +49,26 @@ class InterviewState(TypedDict, total=False):
     overall_report: dict | None
 
     # 에이전트 루프
-    profile_context: list[dict]   # 능동적 프로필 RAG 검색 결과
-    loop_count: int                # 현재 루프 횟수 (최대 3)
-    actions_taken: list[str]       # 수행한 행동 목록
+    profile_context: list[dict]
+    loop_count: int
+    actions_taken: list[str]
 
-    # SSE 이벤트 큐 (노드가 이벤트를 여기에 쌓으면 라우터가 SSE로 전송)
+    # SSE 이벤트 큐
     pending_events: list[dict]
 
-    # Fit Analysis (시작 시 1회 산출, 모든 질문에 재사용)
-    fit_analysis: dict | None  # {skill_match, focus_topics, avoid_topics} — fit_analyzer.FitAnalysis
+    # Fit Analysis (skill_match + avoid_topics만)
+    fit_analysis: dict | None
 
-    # 이력서 RAG (Spec D5/D6)
-    resume_id: str | None              # search_resume에 필요
-    has_resume_embeddings: bool        # SLIM/FALLBACK 프롬프트 분기 판정
-    current_resume_chunks: list[dict]  # 매 질문 직전 search_resume 결과 (top_k=3)
+    # 이력서 RAG
+    resume_id: str | None
+    has_resume_embeddings: bool
+    current_resume_chunks: list[dict]
+
+    # Scan + Dive 페이즈 (신규)
+    phase: Literal["scan", "dive", "done"]
+    scan_plan: list[ScanItem]
+    dive_plan: list[DiveTopic]
+    scan_evaluations: list[dict]
+    current_scan_idx: int
+    current_dive_idx: int
+    current_dive_depth: int
