@@ -5,25 +5,27 @@
 - `backend/` — FastAPI 백엔드 (API, 서비스, 프롬프트, AI 로직 전부)
 - `tts/` — OpenAI TTS 래퍼 서비스 (FastAPI + gpt-4o-mini-tts)
 - `db/` — DB 초기화 스크립트
-- `docker-compose.yml` — 로컬 Docker. **Dev와 Prod 동시 기동** (포트 81 = dev, 포트 82 = prod). DB는 Supabase 호스팅
-  - Dev: `nginx` + `frontend` (target: development, `next dev`)
-  - Prod: `nginx-prod` + `frontend-prod` (target: production, 최적화 빌드, DevTools 숨김)
-  - 공유: `backend`, `tts`
+- `docker-compose.yml` — **Dev 전용** (프로젝트명 `voice_training`, 포트 81). nginx + frontend(`next dev`) + backend(`--reload` + volume mount) + tts
+- `docker-compose.prod.yml` — **Prod 전용** (프로젝트명 `voiceprep-prod`, 포트 82). nginx + frontend(production 빌드) + backend(volume mount 없이 빌드된 이미지) + tts
+- Dev/Prod 완전 격리: 컨테이너 이름, 네트워크, 볼륨 모두 분리. 공유되는 건 Supabase DB + OpenAI 쿼터 + `.env` 파일뿐. DB는 Supabase 호스팅
 - `nginx/` — nginx 리버스 프록시 (`/api/auth` → frontend, `/api/*` → backend, 나머지 → frontend)
 
 ## 개발 규칙
-- 개발 환경은 `docker compose up -d`로 띄움 (dev: nginx:81 + frontend / prod: nginx-prod:82 + frontend-prod / 공유: backend:8000 + tts:8080). DB는 Supabase 호스팅.
+- Dev 기동: `docker compose up -d` (nginx:81 + frontend[dev] + backend[reload+mount] + tts).
+- Prod 기동: `docker compose -f docker-compose.prod.yml up -d` (nginx:82 + frontend[prod build] + backend[baked image] + tts).
+- Dev/Prod 동시 기동 가능 (프로젝트/네트워크/볼륨 격리). 내릴 때도 각 파일에 `-f` 명시하여 `down`.
 - 접속: **dev = `http://localhost:81`**, **prod = `http://localhost:82`**. frontend/backend/tts는 외부 포트 노출 없이 Docker 내부 네트워크만 사용.
 - Cloudflare Tunnel은 `~/.cloudflared/config.yml` 에서 `jachana.com` → `http://localhost:82` (prod)로 라우팅 권장. dev는 로컬 확인용.
 - 프로덕션 빌드는 `NEXT_PUBLIC_*` 환경변수를 빌드 타임에 번들에 인라인. **루트 `.env`** 에 값 둠 (docker-compose `args` 로 빌드 스테이지에 전달). `frontend/.env`와 동기화 필요.
 - 로컬 직접 실행 시: `cd frontend && PORT=3001 npm run dev` / `cd backend && uvicorn app.main:app --reload --port 8000`
 - prisma 명령 실행 시 `cd frontend && set -a && source .env && set +a` 후 실행.
 - `node.exe` 프로세스를 함부로 죽이지 말 것 (dev 서버가 꺼짐).
-- 프론트 소스 수정 시 **이미지 rebuild 필수** (둘 다 필요 시): `docker compose build frontend frontend-prod && docker compose up -d frontend frontend-prod`. Dev만 테스트할 거면 `frontend`만 빌드.
+- Dev 프론트 수정: `docker compose build frontend && docker compose up -d frontend`. Prod 프론트 수정: `docker compose -f docker-compose.prod.yml build frontend && docker compose -f docker-compose.prod.yml up -d frontend`.
+- **Dev 백엔드**는 `./backend` 볼륨 마운트 + `--reload`라 코드 수정 시 자동 반영 (rebuild 불필요). **Prod 백엔드**는 baked image라 배포 시 매번 rebuild: `docker compose -f docker-compose.prod.yml build backend && docker compose -f docker-compose.prod.yml up -d backend`.
 - NEXT_PUBLIC_* 환경변수 변경 시:
-  - `frontend/.env` (dev용, 런타임 로드) + 루트 `.env` (prod 빌드 args용) 둘 다 수정
-  - 컨테이너 **force-recreate**: `docker compose up -d --force-recreate frontend frontend-prod`
-  - Prod는 빌드 타임 인라인이라 **rebuild 필수**: `docker compose build frontend-prod`
+  - `frontend/.env` (dev 런타임) + 루트 `.env` (prod 빌드 args) 둘 다 수정
+  - Dev: `docker compose up -d --force-recreate frontend`
+  - Prod는 빌드 타임 인라인이라 **rebuild 필수**: `docker compose -f docker-compose.prod.yml build frontend && docker compose -f docker-compose.prod.yml up -d frontend`
 - 인증 필요 페이지는 `src/app/(authenticated)/layout.tsx` 의 `export const dynamic = 'force-dynamic'`로 프로덕션 빌드 시 prerender 회피.
 
 ## 코드 규칙
@@ -91,14 +93,19 @@
   - 3개 에이전트: 프로필(RAG) + 면접관(질문생성/흐름결정) + 평가(답변평가/리포트)
   - 오케스트레이터: LangGraph 상태 머신 (규칙 기반 분기, LLM 호출 없음)
   - 프로필 RAG: pgvector + OpenAI Embeddings, 강점/약점/패턴/맥락 카테고리
-  - **이력서 RAG (2026-04-13 신규)**: `resume_embeddings` 테이블 (chunk_type: summary/project/experience/education). 이력서 저장 시 BackgroundTask로 자동 청킹+임베딩. 매 질문 직전 focus_topics 기반 query로 top-3 retrieve
-  - **Fit Analysis (2026-04-13 신규)**: 면접 시작 시 1회 산출 → `agent_interview_sessions.fit_analysis` JSONB 영속화. answer/skip 흐름에서 재사용. skill_match(코드) + focus_topics(LLM, 3~5개) + avoid_topics
-  - **프롬프트 분기**: `INTERVIEWER_QUESTION_PROMPT_SLIM` (임베딩 있을 때) / `_FALLBACK` (없을 때 JSON 통째)
-  - 완전 동적 질문: 미리 생성하지 않고 대화 흐름에 따라 1개씩 생성
-  - 꼬리질문: depth < 80이면 자동 생성 (최대 2회)
-  - SSE 스트림: 프론트에 실시간 질문/평가 전달. 이벤트 `phase: loading_profile → profile_loaded → fit_analyzing → fit_analyzed → generating_question → question`
+  - **이력서 RAG (2026-04-13 신규)**: `resume_embeddings` 테이블 (chunk_type: summary/project/experience/education). 이력서 저장 시 BackgroundTask로 자동 청킹+임베딩. 매 질문 직전 scan/dive 플랜의 project_ref+techStack 쿼리로 top-3 retrieve
+  - **Scan+Dive 2페이즈 (2026-04-14 신규)**: 실제 면접관처럼 훑기→딥다이브 구조로 전환.
+    - **Phase 1 (Scan)**: `build_scan_plan` 순수 코드가 이력서 프로젝트 3개 선정. JD 있음 → 매칭 상위 2 + 비매칭 1(JD 필터로 놓치던 영역 강제 커버). JD 없음 → projects[0..2] 순서. projects 부족시 experience로 보충
+    - **Phase 2 (Dive)**: `build_dive_plan`이 훑기 답변의 depth 점수로 약점(최저) + 강점(최고) 2주제 선정. JD 매칭 프로젝트 내에서만 선별. 주제당 1~3질문 적응형 (depth<70이면 계속 파기, depth>=3이면 next_topic 강제). 주제가 같으면 weakness/strength 각도로 분리
+    - 총 질문 수 가변 (projects 수에 따라 3~9). 프론트에 `max_questions` SSE event로 전달
+    - SSE `question` event에 `phase: "scan"|"dive"`, `phaseLabel` (예: "훑기 2/3 · 크롤링") 포함 → UI 배지
+    - 세션 영속화: `agent_interview_sessions`에 `phase`, `scan_plan`, `dive_plan`, `scan_evaluations` JSONB + `current_scan_idx`/`current_dive_idx`/`current_dive_depth` 정수 3컬럼
+  - **Fit Analysis (2026-04-13 도입, 2026-04-14 축소)**: 면접 시작 시 1회 산출 → `agent_interview_sessions.fit_analysis` JSONB 영속화. **skill_match(코드) + avoid_topics**만 반환 (focus_topics는 planner로 이관). 플래너가 skill_match로 scan 선정
+  - **프롬프트 분기**: `INTERVIEWER_QUESTION_PROMPT_SLIM` (임베딩 있을 때, `current_topic_plan` 블록에 scan/dive 플랜 주입) / `_FALLBACK` (임베딩 없을 때)
+  - 완전 동적 질문: 플래너가 주제는 결정, LLM이 문장 생성
+  - SSE 스트림: `phase` 값 `loading_profile → profile_loaded → fit_analyzing → fit_analyzed → scan_plan_ready → generating_question → question → evaluating → dive_plan_ready → ...`
   - 세션 종료 시 프로필 자동 업데이트 (인사이트 추출 → RAG 저장)
-  - 코드: `backend/app/agent/` (state, nodes, profile_agent, interviewer_agent, evaluator_agent, embeddings, **resume_rag**, **fit_analyzer**)
+  - 코드: `backend/app/agent/` (state, nodes, planner, profile_agent, interviewer_agent, evaluator_agent, embeddings, resume_rag, fit_analyzer)
   - 프롬프트: `backend/app/prompts/agent.py`
   - API: `/api/agent-interview/{start,answer,skip,end,{id}}`, `/api/profile`, `/api/profile/context`
   - UI: `frontend/src/components/agent-interview/`, `frontend/src/app/(authenticated)/agent-interview/`
@@ -106,7 +113,7 @@
     - EVALUATOR_PROMPT: 각 역량 0~100 독립 채점 + 저품질 답변 규칙(반복/무관/포기/단답에 카테고리별 0~40 cap 명시)
     - `evaluator_agent._normalize_evaluation(evaluation, answer)`: scores 0~100 clamp + `_quality_cap(answer)` 후처리(char_ratio/token unique_ratio 기반) + **overallScore = Σ(score_i × weight_i) 서버 강제 계산** (LLM 출력 무시)
     - 가중치: clarity 30%, accuracy 25%, practicality 25%, depth 15%, completeness 5%
-  - **꼬리질문 제어**: `nodes.MAX_FOLLOW_UP_ROUND = 1`, `decide_next`가 LLM 출력 후 한계치 강제(question_count >= max 또는 follow_up_round >= 1이면 end/next_question). DECIDE 임계 depth < 70
+  - **페이즈/주제 제어 (Scan+Dive)**: `nodes.MAX_DIVE_DEPTH = 3`. `decide_in_topic_node`가 LLM 결정 후 한계치 강제(depth >= 3 → next_topic, 마지막 주제면 end). DECIDE 임계 depth < 70. 훑기 간 전환은 `scan_next`가 코드로 처리(LLM 없음)
   - **답변 가드**: 프론트 `lib/transcript.ts`의 `hasMeaningfulContent`(정규화 후 10자/3 유니크 토큰) + 인라인 경고 UI, 백엔드 `_is_meaningful_answer`로 400 반환 (우회 방어). `SILENCE_TIMEOUT_MS = 30000`
   - **모바일 중복 입력 방어**: `useSpeechRecognition.appendWithOverlap`으로 prev 끝과 새 final overlap 제거 (Android Chrome 동일 final 반복 emit 대응). `transcript.ts`의 `collapseImmediateRepeats`/`collapseRepeatedPhrases`
   - **/end 핸들러**: 수동 종료도 `update_profile` + `generate_report` 호출 후 reportData 저장. 프론트 `endAgentInterview`는 `AbortSignal.timeout(30000)`
@@ -223,7 +230,7 @@
 - `LearningAgentSession` — 학습 에이전트 세션 (userId, topic, status, llmCallCount, creditDeducted)
 - `LearningAgentMessage` — 학습 대화 메시지 (sessionId, messageIndex, role, content, phase, assessment)
 - `DailyProgress` — 일별 진도 (userId+date unique)
-- `AgentInterviewSession` — 에이전트 면접 세션 (resumeId, jobPostingId, maxQuestions, status, reportData)
+- `AgentInterviewSession` — 에이전트 면접 세션 (resumeId, jobPostingId, maxQuestions, status, reportData, fitAnalysis JSONB, phase/scanPlan/divePlan/scanEvaluations JSONB, currentScanIdx/currentDiveIdx/currentDiveDepth Int)
 - `AgentInterviewMessage` — 에이전트 면접 메시지 (sessionId, messageIndex, role, content, evaluation JSON)
 - `UserProfileEmbedding` — 사용자 프로필 벡터 (userId, category, content, embedding VECTOR(1536), metadata)
 - `JournalSession` — 저널 세션 (userId, status, messageCount, freeMessagesUsed, creditsCharged, summary)
@@ -236,14 +243,14 @@
 ## 배포
 - **방식**: 로컬 PC + Cloudflare Tunnel (PC 로그인 상태에서만 서비스)
 - **도메인**: `jachana.com` (Cloudflare 관리)
-- **배포 설정**: `docker compose up -d` → `cloudflared tunnel run`
+- **배포 설정**: `docker compose -f docker-compose.prod.yml up -d` → `cloudflared tunnel run` (터널은 prod:82만 바라봄. dev:81은 로컬 확인용)
 - **터널 config**: `~/.cloudflared/config.yml` — `jachana.com` → `http://localhost:82` (prod). 로컬 dev는 `http://localhost:81` 직접 접속
 - **CI**: `.github/workflows/ci.yml` — PR/push 시 프론트엔드 lint/typecheck/build + 백엔드 import smoke test
 - **nginx**: `/api/auth` rate limit 5r/s, `/api/` rate limit 10r/s
-- **음성 파일**: Docker named volume (`audio-storage`)
+- **음성 파일**: Docker named volume — dev/prod 각각 별도 (`voice_training_audio-storage`, `voiceprep-prod_audio-storage`)
 
 ### 자동 시작 (로그인 시 자동 기동)
-- **Docker Desktop**: `%APPDATA%\Docker\settings-store.json`의 `AutoStart: true`로 로그인 시 자동 실행. 컨테이너 3개는 `docker-compose.yml`의 `restart: unless-stopped`로 자동 복구
+- **Docker Desktop**: `%APPDATA%\Docker\settings-store.json`의 `AutoStart: true`로 로그인 시 자동 실행. 모든 컨테이너는 `restart: unless-stopped`로 자동 복구. 다만 prod 컴포즈 프로젝트는 한 번이라도 `docker compose -f docker-compose.prod.yml up -d`로 띄운 이력이 있어야 Docker Desktop이 재기동. 따라서 prod를 `down`으로 내린 뒤엔 반드시 다시 `up -d`로 기동해둘 것 (재부팅 시 자동 복구되도록)
 - **Cloudflared**: Windows Startup 폴더에 VBS 스크립트 배치 — 콘솔창 없이 백그라운드 실행
   - 경로: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VoicePrep-Cloudflared.vbs`
   - 내용: `WshShell.Run """...\cloudflared.exe"" tunnel run", 0, False` (창 숨김 + 비동기)
