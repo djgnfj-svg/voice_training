@@ -61,8 +61,39 @@ def _quality_cap(answer: str) -> int | None:
     return None
 
 
+_DEMONSTRATED_MAX = 8
+_MISSING_MAX = 5
+
+
+def _normalize_keywords(raw, limit: int) -> list[str]:
+    """문자열만, trim, 빈값 제거, 대소문자 무시 dedupe, 최대 limit개."""
+    if not isinstance(raw, list):
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        stripped = item.strip()
+        if not stripped:
+            continue
+        key = stripped.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(stripped)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _normalize_evaluation(evaluation: dict, answer: str = "") -> dict:
-    """LLM 출력 후처리: scores 0~100 clamp + 저품질 답변 cap + overallScore 가중 평균 강제."""
+    """LLM 출력 후처리: scores 0~100 clamp + 저품질 답변 cap + overallScore 가중 평균 강제.
+
+    기술 키워드(demonstratedKeywords/missingKeywords)도 정규화한다:
+    문자열만 남기고 trim+dedupe(대소문자 무시)+size clamp. 저품질 답변(cap 발동)에서는
+    키워드를 신뢰할 수 없으므로 빈 배열로 비운다.
+    """
     raw_scores = evaluation.get("scores") or {}
     scores: dict[str, int] = {}
     for key in SCORE_WEIGHTS:
@@ -78,6 +109,20 @@ def _normalize_evaluation(evaluation: dict, answer: str = "") -> dict:
     overall = sum(scores[k] * w for k, w in SCORE_WEIGHTS.items())
     evaluation["scores"] = scores
     evaluation["overallScore"] = int(round(overall))
+
+    # 기술 키워드 정규화
+    if cap is not None:
+        # 저품질 답변은 키워드 배열도 신뢰할 수 없음 → 비움
+        evaluation["demonstratedKeywords"] = []
+        evaluation["missingKeywords"] = []
+    else:
+        evaluation["demonstratedKeywords"] = _normalize_keywords(
+            evaluation.get("demonstratedKeywords"), _DEMONSTRATED_MAX
+        )
+        evaluation["missingKeywords"] = _normalize_keywords(
+            evaluation.get("missingKeywords"), _MISSING_MAX
+        )
+
     return evaluation
 
 
