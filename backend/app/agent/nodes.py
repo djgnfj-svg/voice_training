@@ -6,17 +6,18 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.state import InterviewState
-from app.agent import profile_agent, interviewer_agent, evaluator_agent, interview_planner, resume_rag, fit_analyzer
+from app.agent import profile_agent, interviewer_agent, evaluator_agent, resume_rag, fit_analyzer, planner
 
 logger = logging.getLogger(__name__)
 
 MAX_ACTIONS = 3
+MAX_DIVE_DEPTH = 3
 
 
-# ── 에이전트 루프 ──────────────────────────────────────────
+# ── 답변 처리 루프 ──────────────────────────────────────────
 
 async def agent_loop(state: InterviewState, db: AsyncSession) -> InterviewState:
-    """Main agent loop for answer processing: plan → action → plan → ... → decide."""
+    """답변 처리 루프: 평가 → 페이즈별 결정 → 다음 질문 생성 또는 종료."""
     state = {
         **state,
         "loop_count": 0,
@@ -24,51 +25,31 @@ async def agent_loop(state: InterviewState, db: AsyncSession) -> InterviewState:
         "profile_context": list(state.get("profile_context", [])),
     }
 
-    while state.get("loop_count", 0) < MAX_ACTIONS:
-        plan_result = await interview_planner.plan_next_action(
-            current_question=state.get("current_question", ""),
-            current_answer=state.get("current_answer", ""),
-            question_count=state.get("question_count", 0),
-            max_questions=state.get("max_questions", 7),
-            follow_up_round=state.get("follow_up_round", 0),
-            profile_context=state.get("profile_context", []),
-            evaluation=state.get("current_evaluation") or None,
-            actions_taken=state.get("actions_taken", []),
-        )
+    # 1) 평가
+    if not state.get("current_evaluation"):
+        state = await evaluate_answer(state, db)
 
-        action = plan_result["action"]
-        state["loop_count"] = state.get("loop_count", 0) + 1
-
-        if action == "search_profile":
-            state = await search_profile_node(state, db, plan_result.get("search_query", ""))
-        elif action == "evaluate":
-            state = await evaluate_answer(state, db)
-        elif action == "decide":
-            state = await decide_next(state, db)
-            # decide 이후 질문 생성/종료 처리
-            next_action = state.get("next_action", "end")
-            if next_action == "follow_up":
-                state = await generate_followup(state, db)
-            elif next_action == "next_question":
-                state = await generate_question(state, db)
-            else:  # end
-                state = await update_profile(state, db)
-                state = await generate_report(state, db)
-            break
+    # 2) 페이즈별 결정
+    phase = state.get("phase", "scan")
+    if phase == "scan":
+        state = await scan_next(state, db)
+    elif phase == "dive":
+        state = await decide_in_topic_node(state, db)
     else:
-        # 루프 초과 → 강제 evaluate + decide
-        logger.warning("Interview agent loop exceeded MAX_ACTIONS (%d)", MAX_ACTIONS)
-        if not state.get("current_evaluation"):
-            state = await evaluate_answer(state, db)
-        state = await decide_next(state, db)
-        next_action = state.get("next_action", "end")
-        if next_action == "follow_up":
-            state = await generate_followup(state, db)
-        elif next_action == "next_question":
-            state = await generate_question(state, db)
-        else:
-            state = await update_profile(state, db)
-            state = await generate_report(state, db)
+        state = {**state, "next_action": "end"}
+
+    # 3) 다음 액션 실행
+    next_action = state.get("next_action", "end")
+    if next_action == "scan_ask":
+        state = await scan_ask(state, db)
+    elif next_action == "build_dive_plan":
+        state = await build_dive_plan_node(state, db)
+        state = await dive_ask(state, db)
+    elif next_action == "dive_ask":
+        state = await dive_ask(state, db)
+    elif next_action == "end":
+        state = await update_profile(state, db)
+        state = await generate_report(state, db)
 
     return state
 
@@ -98,7 +79,7 @@ async def search_profile_node(
     }
 
 
-# ── 기존 노드 ──────────────────────────────────────────────
+# ── 초기 세팅 노드 ──────────────────────────────────────────
 
 
 async def load_profile(state: InterviewState, db: AsyncSession) -> InterviewState:
@@ -119,7 +100,7 @@ async def load_profile(state: InterviewState, db: AsyncSession) -> InterviewStat
 
 
 async def fit_analysis_node(state: InterviewState, db: AsyncSession) -> InterviewState:
-    """이력서↔JD Fit Analysis. 면접 시작 시 1회 호출. has_resume_embeddings도 같이 판정."""
+    """이력서↔JD Fit Analysis. 면접 시작 시 1회 호출."""
     events = list(state.get("pending_events", []))
     events.append({"event": "status", "data": {"phase": "fit_analyzing"}})
 
@@ -134,7 +115,6 @@ async def fit_analysis_node(state: InterviewState, db: AsyncSession) -> Intervie
         "event": "status",
         "data": {
             "phase": "fit_analyzed",
-            "focus_topics_count": len(fa.get("focus_topics", [])),
             "has_resume_embeddings": has_emb,
         },
     })
@@ -148,42 +128,68 @@ async def fit_analysis_node(state: InterviewState, db: AsyncSession) -> Intervie
     }
 
 
-async def generate_question(state: InterviewState, db: AsyncSession) -> InterviewState:
-    """Generate next interview question. RAG 검색 후 SLIM/FALLBACK 분기."""
+# ── Scan 페이즈 ─────────────────────────────────────────────
+
+
+async def build_scan_plan_node(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """훑기 플랜 확정. fit_analysis_node 직후 호출."""
+    scan_plan = planner.build_scan_plan(state["resume"], state.get("fit_analysis") or {})
     events = list(state.get("pending_events", []))
-    events.append({"event": "status", "data": {"phase": "generating_question"}})
+    events.append({
+        "event": "status",
+        "data": {
+            "phase": "scan_plan_ready",
+            "scan_count": len(scan_plan),
+            "max_questions": len(scan_plan) + 6,
+        },
+    })
+    return {
+        **state,
+        "phase": "scan",
+        "scan_plan": scan_plan,
+        "scan_evaluations": [],
+        "current_scan_idx": 0,
+        "current_dive_idx": 0,
+        "current_dive_depth": 0,
+        "pending_events": events,
+    }
 
-    # 1) 검색 query 산출 (Spec D5): focus_topics → current_answer → summary 순으로 fallback
-    fa = state.get("fit_analysis") or {}
-    focus_topics = fa.get("focus_topics") or []
-    i = state.get("question_count", 0)
-    current_focus_topic = ""
-    if focus_topics:
-        ft = focus_topics[i % len(focus_topics)]
-        current_focus_topic = ft.get("topic", "")
-    query = current_focus_topic or state.get("current_answer") or (state["resume"] or {}).get("summary") or "주요 경험"
 
-    # 2) RAG 검색 (임베딩 있을 때만)
+async def scan_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """훑기 페이즈 질문 생성."""
+    events = list(state.get("pending_events", []))
+    scan_plan = state.get("scan_plan", [])
+    idx = state.get("current_scan_idx", 0)
+
+    if idx >= len(scan_plan):
+        logger.warning("scan_ask called with exhausted scan_plan")
+        return state
+
+    scan_item = scan_plan[idx]
+    events.append({"event": "status", "data": {"phase": "generating_question", "phaseKind": "scan"}})
+
     chunks: list[dict] = []
     has_emb = state.get("has_resume_embeddings", False)
     rid = state.get("resume_id")
     if has_emb and rid:
         try:
-            chunks = await resume_rag.search_resume(db, state["user_id"], rid, query, top_k=3)
+            chunks = await resume_rag.search_resume(db, state["user_id"], rid, scan_item["query"], top_k=3)
         except Exception:
-            logger.exception("search_resume failed; falling back to no chunks")
+            logger.exception("search_resume failed in scan_ask")
             chunks = []
 
-    # 3) 질문 생성 (chunks 있으면 SLIM, 없으면 FALLBACK)
-    result = await interviewer_agent.generate_question(
+    avoid_topics = (state.get("fit_analysis") or {}).get("avoid_topics") or []
+
+    result = await interviewer_agent.generate_scan_question(
         resume=state["resume"],
         job_posting=state.get("job_posting"),
-        user_profile=state["user_profile"],
+        user_profile=state.get("user_profile", {}),
         conversation_history=state.get("conversation_history", []),
-        fit_analysis=fa or None,
+        scan_item=scan_item,
+        scan_idx=idx,
+        total_scans=len(scan_plan),
         resume_chunks=chunks,
-        has_embeddings=has_emb and bool(chunks),
-        current_focus_topic=current_focus_topic,
+        avoid_topics=avoid_topics,
     )
 
     question = result.get("question", "")
@@ -194,7 +200,8 @@ async def generate_question(state: InterviewState, db: AsyncSession) -> Intervie
         "data": {
             "question": question,
             "questionNumber": question_count,
-            "followUpRound": 0,
+            "phase": "scan",
+            "phaseLabel": f"훑기 {idx + 1}/{len(scan_plan)} · {scan_item['project_ref']}",
             "targetArea": result.get("targetArea", ""),
             "difficulty": result.get("difficulty", "medium"),
         },
@@ -205,39 +212,177 @@ async def generate_question(state: InterviewState, db: AsyncSession) -> Intervie
         "current_question": question,
         "current_resume_chunks": chunks,
         "question_count": question_count,
-        "follow_up_round": 0,
         "pending_events": events,
     }
 
 
-async def generate_followup(state: InterviewState, db: AsyncSession) -> InterviewState:
-    """Generate follow-up question."""
-    events = list(state.get("pending_events", []))
-    events.append({"event": "status", "data": {"phase": "generating_followup"}})
+async def scan_next(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """훑기 페이즈에서 답변 평가 후: 다음 scan or dive 전환."""
+    scan_evals = list(state.get("scan_evaluations", []))
+    scan_evals.append(state.get("current_evaluation") or {})
 
-    result = await interviewer_agent.generate_followup(
-        state.get("conversation_history", []),
-        state.get("current_evaluation", {}),
+    scan_plan = state.get("scan_plan", [])
+    new_scan_idx = state.get("current_scan_idx", 0) + 1
+
+    if new_scan_idx >= len(scan_plan):
+        return {
+            **state,
+            "scan_evaluations": scan_evals,
+            "current_scan_idx": new_scan_idx,
+            "next_action": "build_dive_plan",
+        }
+    else:
+        return {
+            **state,
+            "scan_evaluations": scan_evals,
+            "current_scan_idx": new_scan_idx,
+            "next_action": "scan_ask",
+        }
+
+
+# ── Dive 페이즈 ─────────────────────────────────────────────
+
+
+async def build_dive_plan_node(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """딥다이브 플랜 확정. 훑기 3답변 끝난 직후 호출."""
+    dive_plan = planner.build_dive_plan(
+        state.get("scan_plan", []),
+        state.get("scan_evaluations", []),
+        state.get("fit_analysis") or {},
     )
+    events = list(state.get("pending_events", []))
+    events.append({
+        "event": "status",
+        "data": {
+            "phase": "dive_plan_ready",
+            "dive_topics": [
+                {"topic": t["topic"], "angle": t["angle"], "project_ref": t["project_ref"]}
+                for t in dive_plan
+            ],
+        },
+    })
+    return {
+        **state,
+        "phase": "dive",
+        "dive_plan": dive_plan,
+        "current_dive_idx": 0,
+        "current_dive_depth": 0,
+        "pending_events": events,
+    }
+
+
+async def dive_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """딥다이브 페이즈 질문 생성."""
+    events = list(state.get("pending_events", []))
+    dive_plan = state.get("dive_plan", [])
+    idx = state.get("current_dive_idx", 0)
+    depth = state.get("current_dive_depth", 0)
+
+    if idx >= len(dive_plan):
+        logger.warning("dive_ask called with exhausted dive_plan")
+        return state
+
+    topic = dive_plan[idx]
+    events.append({"event": "status", "data": {"phase": "generating_question", "phaseKind": "dive"}})
+
+    chunks: list[dict] = []
+    has_emb = state.get("has_resume_embeddings", False)
+    rid = state.get("resume_id")
+    if has_emb and rid:
+        try:
+            chunks = await resume_rag.search_resume(db, state["user_id"], rid, topic["query"], top_k=3)
+        except Exception:
+            logger.exception("search_resume failed in dive_ask")
+            chunks = []
+
+    avoid_topics = (state.get("fit_analysis") or {}).get("avoid_topics") or []
+
+    if depth == 0:
+        result = await interviewer_agent.generate_dive_question(
+            resume=state["resume"],
+            job_posting=state.get("job_posting"),
+            user_profile=state.get("user_profile", {}),
+            conversation_history=state.get("conversation_history", []),
+            dive_topic=topic,
+            current_depth=depth,
+            resume_chunks=chunks,
+            avoid_topics=avoid_topics,
+        )
+    else:
+        result = await interviewer_agent.generate_dig_deeper(
+            state.get("conversation_history", []),
+            state.get("current_evaluation", {}),
+        )
 
     question = result.get("question", "")
-    follow_up_round = state.get("follow_up_round", 0) + 1
+    question_count = state.get("question_count", 0) + 1
+    new_depth = depth + 1
 
     events.append({
         "event": "question",
         "data": {
             "question": question,
-            "questionNumber": state.get("question_count", 1),
-            "followUpRound": follow_up_round,
+            "questionNumber": question_count,
+            "phase": "dive",
+            "phaseLabel": f"딥다이브 · {topic['topic']} ({new_depth}/{MAX_DIVE_DEPTH})",
+            "targetArea": result.get("targetArea", ""),
+            "difficulty": result.get("difficulty", "medium"),
         },
     })
 
     return {
         **state,
         "current_question": question,
-        "follow_up_round": follow_up_round,
+        "current_resume_chunks": chunks,
+        "question_count": question_count,
+        "current_dive_depth": new_depth,
         "pending_events": events,
     }
+
+
+async def decide_in_topic_node(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """딥다이브 중 결정: dig_deeper / next_topic / end."""
+    dive_plan = state.get("dive_plan", [])
+    dive_idx = state.get("current_dive_idx", 0)
+    depth = state.get("current_dive_depth", 0)
+
+    if dive_idx >= len(dive_plan):
+        return {**state, "next_action": "end"}
+
+    topic = dive_plan[dive_idx]
+    remaining = len(dive_plan) - dive_idx
+
+    result = await interviewer_agent.decide_in_topic(
+        project_ref=topic["project_ref"],
+        angle=topic["angle"],
+        current_depth=depth,
+        last_evaluation=state.get("current_evaluation") or {},
+        remaining_topics=remaining,
+    )
+    action = result.get("action", "next_topic")
+
+    # 한계치 강제
+    if depth >= MAX_DIVE_DEPTH:
+        action = "next_topic"
+    if action == "next_topic" and dive_idx + 1 >= len(dive_plan):
+        action = "end"
+    if action == "end" and dive_idx + 1 < len(dive_plan):
+        action = "next_topic"
+
+    if action == "next_topic":
+        return {
+            **state,
+            "next_action": "dive_ask",
+            "current_dive_idx": dive_idx + 1,
+            "current_dive_depth": 0,
+        }
+    elif action == "dig_deeper":
+        return {**state, "next_action": "dive_ask"}
+    else:
+        return {**state, "next_action": "end", "phase": "done"}
+
+
+# ── 평가 / 프로필 업데이트 / 리포트 ─────────────────────────
 
 
 async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewState:
@@ -254,14 +399,12 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
         state.get("conversation_history", []),
     )
 
-    # Append to conversation history
     history = list(state.get("conversation_history", []))
     history.append({
         "question": state["current_question"],
         "answer": state["current_answer"],
         "evaluation": evaluation,
         "question_number": state.get("question_count", 1),
-        "follow_up_round": state.get("follow_up_round", 0),
     })
 
     events.append({
@@ -281,45 +424,6 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
         "conversation_history": history,
         "actions_taken": actions,
         "pending_events": events,
-    }
-
-
-MAX_FOLLOW_UP_ROUND = 1  # 피드백: 꼬리질문이 너무 자주/중복 → main당 최대 1회
-
-
-async def decide_next(state: InterviewState, db: AsyncSession) -> InterviewState:
-    """Decide next action after evaluation. LLM이 제시한 후, 한계치를 코드가 강제."""
-    question_count = state.get("question_count", 0)
-    max_questions = state.get("max_questions", 7)
-    follow_up_round = state.get("follow_up_round", 0)
-
-    result = await interviewer_agent.decide_next_action(
-        state.get("conversation_history", []),
-        state.get("current_evaluation", {}),
-        question_count,
-        max_questions,
-        follow_up_round,
-    )
-    action = result.get("action", "next_question")
-
-    # ── 한계치 강제 (LLM이 규칙을 무시해도 흐름 보장) ───────
-    at_max_questions = question_count >= max_questions
-    followups_exhausted = follow_up_round >= MAX_FOLLOW_UP_ROUND
-
-    if at_max_questions and followups_exhausted:
-        action = "end"
-    elif followups_exhausted and action == "follow_up":
-        # 꼬리 한도 소진 → 남은 main 있으면 다음으로, 없으면 end
-        action = "end" if at_max_questions else "next_question"
-    elif at_max_questions and action == "next_question":
-        # main 한도 소진 → end
-        action = "end"
-    # at_max + !followups_exhausted + follow_up 은 의도된 케이스 (마지막 질문의 꼬리 1회 허용)
-
-    return {
-        **state,
-        "next_action": action,
-        "pending_events": state.get("pending_events", []),
     }
 
 
