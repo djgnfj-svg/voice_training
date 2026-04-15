@@ -8,7 +8,7 @@ import re
 import edge_tts
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.dependencies import AuthUser, get_current_user
@@ -27,33 +27,14 @@ class TTSRequest(BaseModel):
     persona: str | None = None
     speed: float | None = Field(default=None, ge=0.25, le=4.0)
     model: str | None = None
+    format: str | None = None
 
 
-async def _tts_synthesize(
-    text: str, voice: str | None, persona: str | None, speed: float | None, model: str | None
-) -> tuple[bytes, str]:
-    payload: dict = {"text": text}
-    if voice:
-        payload["voice"] = voice
-    if persona:
-        payload["persona"] = persona
-    if speed is not None:
-        payload["speed"] = speed
-    if model:
-        payload["model"] = model
-    async with httpx.AsyncClient(timeout=TTS_TIMEOUT) as client:
-        res = await client.post(f"{TTS_SERVICE_URL}/synthesize", json=payload)
-        res.raise_for_status()
-        return res.content, res.headers.get("content-type", "audio/mpeg")
-
-
-async def _edge_fallback(text: str) -> tuple[bytes, str]:
+async def _edge_stream(text: str):
     communicate = edge_tts.Communicate(text, "ko-KR-HyunsuNeural")
-    chunks: list[bytes] = []
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
-            chunks.append(chunk["data"])
-    return b"".join(chunks), "audio/mpeg"
+            yield chunk["data"]
 
 
 @router.post("/api/tts")
@@ -65,20 +46,46 @@ async def text_to_speech(
     if not cleaned:
         raise HTTPException(400, "No speakable text")
 
+    payload: dict = {"text": cleaned}
+    if body.voice:
+        payload["voice"] = body.voice
+    if body.persona:
+        payload["persona"] = body.persona
+    if body.speed is not None:
+        payload["speed"] = body.speed
+    if body.model:
+        payload["model"] = body.model
+    if body.format:
+        payload["format"] = body.format
+
+    client = httpx.AsyncClient(timeout=TTS_TIMEOUT)
+    upstream = None
     try:
-        audio, media_type = await _tts_synthesize(cleaned, body.voice, body.persona, body.speed, body.model)
+        req = client.build_request("POST", f"{TTS_SERVICE_URL}/synthesize", json=payload)
+        upstream = await client.send(req, stream=True)
+        upstream.raise_for_status()
     except Exception as e:
         logger.warning("OpenAI TTS failed (%s), falling back to edge-tts", type(e).__name__)
+        if upstream is not None:
+            await upstream.aclose()
+        await client.aclose()
         try:
-            audio, media_type = await _edge_fallback(cleaned)
+            return StreamingResponse(_edge_stream(cleaned), media_type="audio/mpeg")
         except Exception:
             raise HTTPException(500, "TTS generation failed")
 
-    return Response(
-        content=audio,
-        media_type=media_type,
-        headers={"Content-Length": str(len(audio))},
-    )
+    media_type = upstream.headers.get("content-type", "audio/mpeg")
+
+    async def passthrough():
+        try:
+            async for chunk in upstream.aiter_raw():
+                if chunk:
+                    yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(passthrough(), media_type=media_type)
 
 
 @router.post("/api/transcribe")

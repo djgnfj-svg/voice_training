@@ -5,7 +5,7 @@ import os
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,15 @@ MODEL = os.environ.get("TTS_MODEL", "gpt-4o-mini-tts")
 DEFAULT_VOICE = os.environ.get("TTS_DEFAULT_VOICE", "sage")
 DEFAULT_FORMAT = os.environ.get("TTS_FORMAT", "mp3")
 DEFAULT_SPEED = float(os.environ.get("TTS_SPEED", "2.0"))
+
+FORMAT_MEDIA_TYPES = {
+    "mp3": "audio/mpeg",
+    "opus": "audio/ogg",
+    "aac": "audio/aac",
+    "flac": "audio/flac",
+    "wav": "audio/wav",
+    "pcm": "audio/L16",
+}
 
 # 페르소나별 instructions (gpt-4o-mini-tts 전용)
 PERSONA_INSTRUCTIONS = {
@@ -59,11 +68,12 @@ class SynthesizeRequest(BaseModel):
     persona: Optional[str] = None
     speed: Optional[float] = None
     model: Optional[str] = None
+    format: Optional[str] = None
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": MODEL, "voice": DEFAULT_VOICE}
+    return {"status": "ok", "model": MODEL, "voice": DEFAULT_VOICE, "format": DEFAULT_FORMAT}
 
 
 @app.get("/voices")
@@ -82,52 +92,46 @@ async def synthesize(req: SynthesizeRequest):
     instructions = PERSONA_INSTRUCTIONS.get(persona, PERSONA_INSTRUCTIONS["default"])
     speed = req.speed if req.speed is not None else DEFAULT_SPEED
     model = req.model or MODEL
+    fmt = (req.format or DEFAULT_FORMAT).lower()
+    media_type = FORMAT_MEDIA_TYPES.get(fmt, "audio/mpeg")
 
-    try:
-        kwargs: dict = dict(
-            model=model,
-            voice=voice,
-            input=req.text,
-            response_format=DEFAULT_FORMAT,
-        )
-        if model == "gpt-4o-mini-tts":
-            # gpt-4o-mini-tts: speed 파라미터 무시 → instructions로 속도 강도 세분화
-            if speed >= 1.7:
-                pace_hint = " Speak very fast, almost rushed — like giving urgent news."
-            elif speed >= 1.4:
-                pace_hint = " Speak noticeably fast and energetic."
-            elif speed >= 1.2:
-                pace_hint = " Speak at a brisk, slightly fast pace."
-            elif speed <= 0.7:
-                pace_hint = " Speak very slowly and deliberately, with long pauses."
-            elif speed <= 0.85:
-                pace_hint = " Speak at a slow, calm pace."
-            else:
-                pace_hint = ""
-            kwargs["instructions"] = instructions + pace_hint
-            # gpt-4o-mini-tts도 speed 파라미터 받기는 받음 (약하게나마 적용)
-            kwargs["speed"] = max(0.25, min(4.0, speed))
+    kwargs: dict = dict(
+        model=model,
+        voice=voice,
+        input=req.text,
+        response_format=fmt,
+    )
+    if model == "gpt-4o-mini-tts":
+        if speed >= 1.7:
+            pace_hint = " Speak very fast, almost rushed — like giving urgent news."
+        elif speed >= 1.4:
+            pace_hint = " Speak noticeably fast and energetic."
+        elif speed >= 1.2:
+            pace_hint = " Speak at a brisk, slightly fast pace."
+        elif speed <= 0.7:
+            pace_hint = " Speak very slowly and deliberately, with long pauses."
+        elif speed <= 0.85:
+            pace_hint = " Speak at a slow, calm pace."
         else:
-            kwargs["speed"] = max(0.25, min(4.0, speed))
+            pace_hint = ""
+        kwargs["instructions"] = instructions + pace_hint
+        kwargs["speed"] = max(0.25, min(4.0, speed))
+    else:
+        kwargs["speed"] = max(0.25, min(4.0, speed))
 
-        async with client.audio.speech.with_streaming_response.create(**kwargs) as resp:
-            chunks = []
-            async for chunk in resp.iter_bytes():
-                chunks.append(chunk)
-        audio = b"".join(chunks)
+    cm = client.audio.speech.with_streaming_response.create(**kwargs)
+    try:
+        resp = await cm.__aenter__()
     except Exception as e:
-        logger.exception("OpenAI TTS failed")
+        logger.exception("OpenAI TTS open failed")
         raise HTTPException(500, f"TTS failed: {type(e).__name__}")
 
-    media_type = {
-        "mp3": "audio/mpeg",
-        "wav": "audio/wav",
-        "opus": "audio/opus",
-        "flac": "audio/flac",
-    }.get(DEFAULT_FORMAT, "audio/mpeg")
+    async def generate():
+        try:
+            async for chunk in resp.iter_bytes():
+                if chunk:
+                    yield chunk
+        finally:
+            await cm.__aexit__(None, None, None)
 
-    return Response(
-        content=audio,
-        media_type=media_type,
-        headers={"Content-Length": str(len(audio))},
-    )
+    return StreamingResponse(generate(), media_type=media_type)
