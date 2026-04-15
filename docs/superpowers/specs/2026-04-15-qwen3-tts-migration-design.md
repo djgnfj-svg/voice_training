@@ -49,15 +49,22 @@
 
 ### 4.1 모델 선정
 
-- **모델**: `Qwen/Qwen3-TTS-12Hz-1.7B-Base`
-- **이유**: VoiceDesign(자연어 보이스 지시) 지원, 16GB VRAM에 여유 있음. 0.6B 변종은 품질 저하 우려로 미채택
+- **모델**: `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`
+- **이유**:
+  - CustomVoice는 9개 프리셋 중 **"Sohee"**가 한국어 네이티브(따뜻하고 풍부한 감정의 여성 보이스)로 제공됨 — 면접관/저널 친구/상담사/튜터 톤 전체를 감당 가능
+  - `speaker="Sohee"` + `instruct="...톤 지시..."` 조합으로 프리셋 안정성 + 페르소나 뉘앙스 둘 다 확보
+  - `Base` 모델은 VoiceDesign 미지원(레퍼런스 오디오 필수)이라 제외
+  - `VoiceDesign` 모델은 한국어 네이티브 프리셋이 없어 튜닝 부담 큼
 - **라이선스**: Apache 2.0 (상업 사용 무제한)
+- **하드웨어**: FP16/BF16 기준 VRAM 약 6~8GB 예상. RTX 5070 Ti 16GB 여유 있음
 
 ### 4.2 의존성
 
-- 베이스 이미지: `nvidia/cuda:12.4.0-runtime-ubuntu22.04`
-- Python 3.12, `torch` (CUDA 12.x 빌드), `transformers`, `fastapi`, `uvicorn`, `soundfile`, `pydantic`
-- Qwen3-TTS 공식 레포 또는 PyPI 패키지 설치 — 정확한 설치 명령은 구현 단계에서 `https://github.com/QwenLM/Qwen3-TTS` README 확인 후 Dockerfile에 고정
+- 베이스 이미지: `nvidia/cuda:12.4.0-devel-ubuntu22.04` (flash-attn 빌드 필요 시 devel 필요)
+- Python 3.12
+- PyPI 패키지: `qwen-tts`, `torch` (CUDA 12.x 빌드), `fastapi`, `uvicorn`, `soundfile`, `pydantic`, `numpy`
+- **FlashAttention 2**: `flash-attn` — RTX 5070 Ti(Blackwell, sm_120) 호환성 이슈 가능. 설치 실패 시 `attn_implementation="sdpa"`로 폴백(품질 영향 없음, 속도만 약간 감소)
+- MP3 인코딩: `ffmpeg` 시스템 패키지 (apt-get) + `pydub` 또는 `soundfile`+`ffmpeg` 서브프로세스
 
 ### 4.3 엔드포인트 (기존 `tts` 시그니처 호환)
 
@@ -78,19 +85,38 @@ POST /warmup
   (컨테이너 시작 직후 1회 호출하여 첫 요청 지연 감소)
 ```
 
-### 4.4 페르소나 처리 (VoiceDesign 방식)
+### 4.4 페르소나 처리 (CustomVoice + instruct 방식)
 
-- 기존 `tts/main.py`의 `PERSONA_INSTRUCTIONS` 영문 지시를 **그대로 재사용**
-- 기존 속도 힌트 로직(`Speak very fast`, `Speak slowly` 등)도 유지
-- Qwen3 호출 예: `generate_voice_design(text, voice_prompt=instructions, language="ko")`
-- 반환 PCM/WAV을 MP3로 인코딩(기존 응답 포맷 유지) — `ffmpeg` 런타임 필요
+- 기본 speaker: `"Sohee"` (한국어 여성, 따뜻하고 감정 풍부) — 모든 페르소나 공용
+- 페르소나별 톤 차이는 `instruct` 파라미터로 부여
+- 기존 `tts/main.py`의 영문 `PERSONA_INSTRUCTIONS` 딕셔너리를 **한국어 번역본으로 변환**하여 `PERSONA_INSTRUCT_KO` 로 이식 (한국어 TTS에는 한국어 instruct가 더 효과적). 속도 힌트도 한국어로 변환
+- 호출 예:
+  ```python
+  wavs, sr = model.generate_custom_voice(
+      text=req.text,
+      language="Korean",
+      speaker="Sohee",
+      instruct=PERSONA_INSTRUCT_KO[persona] + pace_hint_ko(speed),
+  )
+  ```
+- 반환값: `(numpy float32 PCM, 24000)` → soundfile로 WAV 버퍼 생성 → ffmpeg으로 MP3 인코딩 (기존 응답 포맷 유지)
 
 ### 4.5 모델 로딩
 
-- 첫 시작 시 HuggingFace Hub에서 가중치 다운로드
-- Docker named volume `qwen3-models` 에 캐시 (재다운로드 방지, ~4GB)
-- FP16, CUDA 상주 로드 (예상 VRAM 4~6GB)
-- `/warmup` 엔드포인트로 초기 지연 완화
+```python
+model = Qwen3TTSModel.from_pretrained(
+    "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    device_map="cuda:0",
+    dtype=torch.bfloat16,
+    attn_implementation=os.environ.get("QWEN3_ATTN", "flash_attention_2"),
+)
+```
+
+- 첫 시작 시 HuggingFace Hub에서 가중치 다운로드 (~4GB)
+- Docker named volume `qwen3-models` 에 캐시 (HF_HOME=/models)
+- bfloat16, CUDA 상주 로드 (예상 VRAM 6~8GB)
+- `QWEN3_ATTN` 환경변수로 어텐션 구현 선택 (flash-attn 실패 시 `sdpa`)
+- `/warmup` 엔드포인트: 컨테이너 기동 직후 1회 호출하여 JIT 컴파일 및 CUDA 커널 워밍업
 
 ### 4.6 폴백 전략
 
@@ -179,7 +205,8 @@ tts-qwen3:
 |---|---|
 | NVIDIA Container Toolkit 미설치 | 컨테이너 기동 실패 시 안내, 설치 가이드 문서화 |
 | Qwen3 첫 요청 지연 (모델 로드 15~30s) | `/warmup` 엔드포인트 + 컨테이너 헬스체크 후 warmup 자동 호출 |
-| 페르소나 영문 지시 → 한국어 TTS 적용 품질 | VoiceDesign 품질 미달 시 Qwen3가 제공하는 9개 CustomVoice 프리셋(Vivian/Ryan 등)으로 페르소나 1:1 매핑 재설계 |
+| Sohee 프리셋이 모든 페르소나(면접관/저널/상담사/튜터)에 적합하지 않을 가능성 | CustomVoice는 instruct로 톤 변조 가능. 심각할 경우 페르소나별로 9개 프리셋 중 재매핑 가능(Aiden/Ryan 등 영어 남성 프리셋도 한국어로 시도 가능) |
+| FlashAttention 2가 RTX 5070 Ti(Blackwell)에서 빌드 실패 | `QWEN3_ATTN=sdpa` 환경변수로 즉시 전환. 품질 동일, 속도 약 20% 감소 예상 |
 | VRAM 부족 (다른 프로세스와 경쟁) | FP16 기본, 최악의 경우 INT8 양자화 옵션 |
 | 빌드 시간 (CUDA 이미지 + PyTorch) | named volume으로 모델 캐시, Docker layer 캐시 활용 |
 
