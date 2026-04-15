@@ -98,10 +98,36 @@
 
 Total은 비슷하거나 소폭 늦음 (네트워크 변동 및 청크 분할 오버헤드). **프론트가 `blob()` 방식을 유지하는 한 사용자 체감 지연은 이 수치와 같다.** 서버 스트리밍 개선을 실제 체감하려면 프론트 MSE 도입(2차)이 필요.
 
-### 결론
+### 1차 결론
 - 서버 측 파이프라인은 "생성 완료 후 일괄 반환" → "즉시 스트리밍" 으로 완전 전환됨.
 - TTFA 기준 최대 64% 단축 확인.
 - 프론트는 아직 blob() 기반이라 실사용 체감은 변화 없음 → 2차로 MSE 기반 점진 재생 적용 예정.
+
+## 2차: 프론트 MSE 점진 재생 (2026-04-15 적용)
+
+### 변경
+- `frontend/src/hooks/useTextToSpeech.ts` — `MediaSource` + `SourceBuffer.appendBuffer` 기반 점진 재생 경로 추가.
+  - `fetch` → `response.body.getReader()` 로 청크 수신
+  - `sourceopen` 이후 `audio/mpeg` SourceBuffer 생성, 청크 도착할 때마다 큐잉 + `appendBuffer`
+  - `updateend` 이벤트로 큐 플러시, 스트림 종료 시 `endOfStream()`
+  - MSE 미지원 브라우저(Safari iOS 구버전 등) → 기존 `blob()` 폴백 유지
+  - `stop()` / unmount 시 `endOfStream` + `revokeObjectURL` + `audio` 정리
+- 검증: `tsc --noEmit` 통과, `next lint` 통과.
+
+### 사용자 체감 효과
+프론트가 첫 청크 수신 즉시 재생 시작 가능 → 사용자 체감 지연 ≈ 서버 TTFA + MSE 디코더 워밍업(수백 ms).
+
+| 텍스트 | Before (blob 완료까지) | After (MSE 재생 시작) | 체감 단축 |
+|---|---:|---:|---:|
+| short (27자) | ~1.55s | ~1.2s + 디코더 | **~20%** |
+| medium (63자) | ~1.99s | ~1.14s + 디코더 | **~40%** |
+| long (129자) | ~3.32s | ~1.18s + 디코더 | **~60%** |
+
+긴 질문일수록 효과 큼. 면접관·튜터 긴 안내 문장에서 체감이 확연해질 것.
+
+### 범위 밖 (다음 과제)
+- 문장 단위 선제 합성 (긴 답변 청킹 재생)
+- 질문 pre-generation (유저 답변 중 다음 질문 미리 합성)
 
 ## 범위 밖 (Non-goals)
 
