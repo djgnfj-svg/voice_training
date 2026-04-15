@@ -25,14 +25,12 @@ const SILENCE_TIMEOUT_MS = 30000;
 interface AgentInterviewPanelProps {
   resumeId: string;
   jobPostingId?: string;
-  maxQuestions?: number;
   onComplete?: (sessionId: string) => void;
 }
 
 export function AgentInterviewPanel({
   resumeId,
   jobPostingId,
-  maxQuestions = 7,
   onComplete,
 }: AgentInterviewPanelProps) {
   const {
@@ -69,8 +67,8 @@ export function AgentInterviewPanel({
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    start({ resumeId, jobPostingId, maxQuestions, textMode: false });
-  }, [resumeId, jobPostingId, maxQuestions, start]);
+    start({ resumeId, jobPostingId, textMode: false });
+  }, [resumeId, jobPostingId, start]);
 
   // Auto-speak questions, then start listening
   useEffect(() => {
@@ -180,10 +178,16 @@ export function AgentInterviewPanel({
 
   const isProcessing = [
     'loading_profile',
+    'profile_loaded',
+    'fit_analyzing',
+    'fit_analyzed',
+    'scan_plan_ready',
+    'dive_plan_ready',
     'generating_question',
     'evaluating',
     'generating_followup',
     'generating_report',
+    'updating_profile',
   ].includes(phase);
 
   const progress = maxQ > 0 ? (questionCount / maxQ) * 100 : 0;
@@ -289,10 +293,16 @@ export function AgentInterviewPanel({
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">
                 {phase === 'loading_profile' && '프로필 분석 중...'}
+                {phase === 'profile_loaded' && '프로필 로드 완료, 적합도 분석 준비 중...'}
+                {phase === 'fit_analyzing' && '이력서와 공고 적합도 분석 중...'}
+                {phase === 'fit_analyzed' && '적합도 분석 완료, 질문 계획 수립 중...'}
+                {phase === 'scan_plan_ready' && '훑기 질문 계획 완료, 첫 질문 생성 중...'}
+                {phase === 'dive_plan_ready' && '딥다이브 계획 완료, 다음 질문 생성 중...'}
                 {phase === 'generating_question' && '질문 생성 중...'}
                 {phase === 'evaluating' && '답변을 평가하고 있습니다...'}
                 {phase === 'generating_followup' && '꼬리질문 생성 중...'}
                 {phase === 'generating_report' && '리포트 생성 중...'}
+                {phase === 'updating_profile' && '프로필 업데이트 중...'}
               </p>
             </div>
           )}

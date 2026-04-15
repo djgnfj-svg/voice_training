@@ -3,7 +3,6 @@
 export interface AgentStartParams {
   resumeId: string;
   jobPostingId?: string;
-  maxQuestions?: number;
   textMode?: boolean;
 }
 

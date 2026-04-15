@@ -38,6 +38,10 @@ async def agent_loop(state: InterviewState, db: AsyncSession) -> InterviewState:
     else:
         state = {**state, "next_action": "end"}
 
+    # 안전 게이트: 상한(무료체험 3/일반 9) 도달 시 강제 종료
+    if state.get("question_count", 0) >= state.get("max_questions", 9):
+        state = {**state, "next_action": "end", "phase": "done"}
+
     # 3) 다음 액션 실행
     next_action = state.get("next_action", "end")
     if next_action == "scan_ask":
@@ -135,12 +139,15 @@ async def build_scan_plan_node(state: InterviewState, db: AsyncSession) -> Inter
     """훑기 플랜 확정. fit_analysis_node 직후 호출."""
     scan_plan = planner.build_scan_plan(state["resume"], state.get("fit_analysis") or {})
     events = list(state.get("pending_events", []))
+    # 총 질문 상한: 세션 cap(무료체험 3/일반 9)과 plan 기반 상한(len(scan)+6) 중 작은 값
+    cap = state.get("max_questions", 9)
+    max_q = min(cap, len(scan_plan) + 6)
     events.append({
         "event": "status",
         "data": {
             "phase": "scan_plan_ready",
             "scan_count": len(scan_plan),
-            "max_questions": len(scan_plan) + 6,
+            "max_questions": max_q,
         },
     })
     return {

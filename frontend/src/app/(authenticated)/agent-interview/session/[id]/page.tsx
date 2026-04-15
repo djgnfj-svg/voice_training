@@ -14,6 +14,35 @@ import { scoreText } from '@/lib/score-colors';
 import { AgentInterviewPanel } from '@/components/agent-interview/agent-interview-panel';
 import { getAgentSession } from '@/lib/agent-interview-api';
 
+type InsightItem = string | { text: string; questionRefs?: number[] };
+
+function InsightList({ items, tone }: { items: InsightItem[]; tone: 'positive' | 'warning' }) {
+  const badgeClass = tone === 'positive'
+    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+    : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
+  return (
+    <ul className="space-y-2">
+      {items.map((item, i) => {
+        const text = typeof item === 'string' ? item : item.text;
+        const refs = typeof item === 'string' ? [] : (item.questionRefs || []);
+        return (
+          <li key={i} className="flex items-start gap-2 text-sm">
+            <span className={cn('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-medium', badgeClass)}>
+              {i + 1}
+            </span>
+            <div className="flex-1">
+              <span>{text}</span>
+              {refs.length > 0 && (
+                <span className="ml-2 text-xs text-muted-foreground">(Q{refs.join(', Q')})</span>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function AgentInterviewSessionPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -24,7 +53,6 @@ export default function AgentInterviewSessionPage() {
 
   const resumeId = searchParams.get('resumeId') || '';
   const jobPostingId = searchParams.get('jobPostingId') || undefined;
-  const maxQuestions = Number(searchParams.get('maxQuestions')) || 7;
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['agent-session', sessionId],
@@ -44,7 +72,6 @@ export default function AgentInterviewSessionPage() {
       <AgentInterviewPanel
         resumeId={resumeId}
         jobPostingId={jobPostingId}
-        maxQuestions={maxQuestions}
         onComplete={(sid) => {
           router.push(`/agent-interview/session/${sid}`);
         }}
@@ -197,7 +224,13 @@ export default function AgentInterviewSessionPage() {
           )}
 
           {/* Technical Diagnosis */}
-          {((report?.technicalDiagnosis as { strongTopics?: unknown[]; weakTopics?: unknown[] } | undefined)?.strongTopics?.length || (report?.technicalDiagnosis as { strongTopics?: unknown[]; weakTopics?: unknown[] } | undefined)?.weakTopics?.length) ? (
+          {(() => {
+            const td = report?.technicalDiagnosis as {
+              strongTopics?: { keyword: string; evidence?: string }[];
+              weakTopics?: { keyword: string; reason?: string; studyHint?: string }[];
+            } | undefined;
+            if (!td?.strongTopics?.length && !td?.weakTopics?.length) return null;
+            return (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -206,12 +239,6 @@ export default function AgentInterviewSessionPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {(() => {
-                  const td = report.technicalDiagnosis as {
-                    strongTopics?: { keyword: string; evidence?: string }[];
-                    weakTopics?: { keyword: string; reason?: string; studyHint?: string }[];
-                  };
-                  return (
                     <>
                       {td.strongTopics && td.strongTopics.length > 0 && (
                         <div>
@@ -240,11 +267,10 @@ export default function AgentInterviewSessionPage() {
                         </div>
                       )}
                     </>
-                  );
-                })()}
               </CardContent>
             </Card>
-          ) : null}
+            );
+          })()}
 
           {/* Question Highlights */}
           {(() => {
@@ -332,25 +358,7 @@ export default function AgentInterviewSessionPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
-                  {report.strengths.map((s: string | { text: string; questionRefs?: number[] }, i: number) => {
-                    const text = typeof s === 'string' ? s : s.text;
-                    const refs = typeof s === 'string' ? [] : (s.questionRefs || []);
-                    return (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                          {i + 1}
-                        </span>
-                        <div className="flex-1">
-                          <span>{text}</span>
-                          {refs.length > 0 && (
-                            <span className="ml-2 text-xs text-muted-foreground">(Q{refs.join(', Q')})</span>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <InsightList items={report.strengths as InsightItem[]} tone="positive" />
               </CardContent>
             </Card>
           )}
@@ -487,25 +495,7 @@ export default function AgentInterviewSessionPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
-                  {report.improvements.map((item: string | { text: string; questionRefs?: number[] }, i: number) => {
-                    const text = typeof item === 'string' ? item : item.text;
-                    const refs = typeof item === 'string' ? [] : (item.questionRefs || []);
-                    return (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
-                          {i + 1}
-                        </span>
-                        <div className="flex-1">
-                          <span>{text}</span>
-                          {refs.length > 0 && (
-                            <span className="ml-2 text-xs text-muted-foreground">(Q{refs.join(', Q')})</span>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <InsightList items={report.improvements as InsightItem[]} tone="warning" />
               </CardContent>
             </Card>
           )}

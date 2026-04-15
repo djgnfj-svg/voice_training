@@ -202,7 +202,7 @@ async def generate_report(
         temperature=0.3,
     )
 
-    # 서버 계산 수치로 overridde (LLM의 산술 오류 방지, 프론트 재계산 불필요)
+    # LLM 산술 오류 방지: 집계 수치는 서버가 계산한 값으로 덮어씀
     report["overallScore"] = aggregate["overallStats"]["avg"]
     report["categoryBreakdown"] = aggregate["categoryBreakdown"]
     report["phaseAnalysis"] = aggregate["phaseAnalysis"]

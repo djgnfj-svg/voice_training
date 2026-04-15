@@ -8,8 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
@@ -120,7 +118,6 @@ function InterviewTab() {
 
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [interviewMode, setInterviewMode] = useState<InterviewMode>('ai-coach');
-  const [maxQuestions, setMaxQuestions] = useState('7');
   const [showCreditsDialog, setShowCreditsDialog] = useState(false);
   const [showMicCheck, setShowMicCheck] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
@@ -377,21 +374,9 @@ function InterviewTab() {
                       <li>- 면접할수록 더 정확한 피드백</li>
                     </ul>
                   </div>
-                  <div className="mt-3 space-y-1.5">
-                    <Label className="text-sm">질문 수</Label>
-                    <Select value={maxQuestions} onValueChange={setMaxQuestions}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[1, 3, 5, 7, 10].map((n) => (
-                          <SelectItem key={n} value={String(n)}>
-                            {n}개{n === 1 ? ' (테스트)' : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    질문 수는 이력서 프로젝트와 답변 깊이에 맞춰 자동으로 결정됩니다 (3~9개).
+                  </p>
                 </>
               )}
 
@@ -440,7 +425,6 @@ function InterviewTab() {
           const params = new URLSearchParams({
             resumeId: selectedResumeId!,
             ...(jobPostingData?.id ? { jobPostingId: jobPostingData.id } : {}),
-            maxQuestions,
           });
           router.push(`/agent-interview/session/new?${params}`);
         }}

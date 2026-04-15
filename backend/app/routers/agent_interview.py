@@ -35,7 +35,6 @@ router = APIRouter()
 class StartRequest(BaseModel):
     resumeId: str
     jobPostingId: str | None = None
-    maxQuestions: int = Field(default=7, ge=1, le=15)
     textMode: bool = False
 
 
@@ -103,8 +102,9 @@ async def start_interview(
         if jp:
             job_posting_data = jp.parsed_data
 
-    # Free trial: cap questions to 3 (consistent with /api/interview/setup)
-    effective_max_questions = min(body.maxQuestions, 3) if using_free_trial else body.maxQuestions
+    # 질문 수는 이력서 프로젝트/답변 깊이로 동적 결정 (scan 3 + dive 최대 6 = 9).
+    # max_questions는 상한 가드로만 사용: 무료체험은 3(scan만), 일반은 9(scan+dive 전체).
+    effective_max_questions = 3 if using_free_trial else 9
 
     # Create session
     session_id = str(uuid4())
