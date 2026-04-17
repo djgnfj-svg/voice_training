@@ -1,138 +1,149 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { getLearningStatus, getLearningHistory } from '@/lib/learning-agent-api';
-import { MicCheckDialog } from '@/components/interview/mic-check-dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Moon, Clock, Loader2 } from 'lucide-react';
-import type { LearningSession } from '@/lib/learning-agent-api';
+import { Moon, Loader2 } from 'lucide-react';
+import {
+  getStatus,
+  startSession,
+  endSession,
+  type StartResponse,
+  type EndResponse,
+} from '@/lib/nightly-study-api';
+import { StreakBadge } from '@/components/nightly-study/streak-badge';
+import { SessionView } from '@/components/nightly-study/session-view';
+import { BriefingView } from '@/components/nightly-study/briefing-view';
+import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
+
+type View =
+  | { kind: 'landing' }
+  | { kind: 'session'; session: StartResponse }
+  | { kind: 'briefing'; result: EndResponse };
 
 export default function NightlyStudyPage() {
-  const router = useRouter();
-  const [showMicCheck, setShowMicCheck] = useState(false);
+  const [view, setView] = useState<View>({ kind: 'landing' });
+  const [showCreditDialog, setShowCreditDialog] = useState(false);
+  const qc = useQueryClient();
 
-  const { data: statusData, isLoading } = useQuery({
-    queryKey: ['learning-status'],
-    queryFn: getLearningStatus,
+  const { data: status, isLoading } = useQuery({
+    queryKey: ['ns-status'],
+    queryFn: getStatus,
+    enabled: view.kind === 'landing',
   });
 
-  const { data: history } = useQuery({
-    queryKey: ['learning-history'],
-    queryFn: getLearningHistory,
+  const startMut = useMutation({
+    mutationFn: startSession,
+    onSuccess: (s) => setView({ kind: 'session', session: s }),
+    onError: (e: Error) => {
+      if (e.message.includes('크레딧') || e.message.includes('INSUFFICIENT_CREDITS')) {
+        setShowCreditDialog(true);
+      }
+    },
   });
 
-  const dailyLimitReached = statusData?.dailyLimitReached ?? false;
-  const sessions = history ?? [];
+  const endMut = useMutation({
+    mutationFn: (sessionId: string) => endSession(sessionId),
+    onSuccess: (result) => {
+      setView({ kind: 'briefing', result });
+      qc.invalidateQueries({ queryKey: ['ns-status'] });
+    },
+  });
 
-  const handleMicConfirm = () => {
-    setShowMicCheck(false);
-    router.push('/nightly-study/session');
-  };
-
-  if (isLoading) {
+  if (view.kind === 'session') {
     return (
-      <div className="flex h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <SessionView
+        sessionId={view.session.sessionId}
+        firstMessage={view.session.firstMessage}
+        currentTopic={view.session.targetNode?.title ?? null}
+        onEnd={async () => {
+          await endMut.mutateAsync(view.session.sessionId);
+        }}
+      />
     );
   }
 
+  if (view.kind === 'briefing') {
+    return (
+      <BriefingView
+        result={view.result}
+        onClose={() => setView({ kind: 'landing' })}
+      />
+    );
+  }
+
+  // Landing
   return (
-    <div className="mx-auto max-w-lg space-y-6 p-6">
+    <div className="mx-auto max-w-md space-y-6 p-4 pt-6">
       <div className="text-center">
-        <Moon className="mx-auto h-12 w-12 text-primary" />
-        <h1 className="mt-4 text-2xl font-bold">오늘의 학습</h1>
-        <p className="mt-2 text-muted-foreground">
-          AI 튜터와 대화하며 기술 개념을 복습하세요
-        </p>
+        <Moon className="mx-auto h-10 w-10 text-primary" />
+        <h1 className="mt-3 text-xl font-bold">오늘의 학습</h1>
       </div>
 
-      {dailyLimitReached ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-12">
-            <Clock className="h-10 w-10 text-muted-foreground" />
-            <div className="text-center">
-              <p className="text-lg font-semibold">오늘은 이미 학습했어요!</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                내일 다시 만나요. 매일 꾸준히 하는 게 가장 중요해요.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {isLoading || !status ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
       ) : (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-8">
-            <div className="text-center space-y-2">
-              <p className="text-sm text-muted-foreground">
-                AI 튜터가 맞춤형 질문을 통해 학습을 도와줍니다
-              </p>
-              <Badge variant="secondary">첫 세션 무료</Badge>
+        <>
+          <StreakBadge
+            current={status.streak.current}
+            totalNodesLearned={status.streak.totalNodesLearned}
+          />
+
+          <Card>
+            <CardContent className="flex flex-col items-center gap-3 py-8">
+              {status.hasGoal && status.todayTargetNode ? (
+                <p className="text-sm text-muted-foreground">
+                  오늘은 <span className="font-semibold">{status.todayTargetNode.title}</span>
+                </p>
+              ) : !status.hasGoal ? (
+                <p className="text-sm text-muted-foreground text-center">
+                  처음이시네요. 시작하면 목표를 물어볼게요.
+                </p>
+              ) : null}
+
+              {!status.dailyFreeUsed ? (
+                <Badge variant="secondary">오늘 무료</Badge>
+              ) : (
+                <Badge variant="outline">추가 1코인 · 잔액 {status.creditBalance}</Badge>
+              )}
+
+              <Button
+                size="lg"
+                className="w-full h-14"
+                onClick={() => startMut.mutate()}
+                disabled={startMut.isPending}
+              >
+                {startMut.isPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>● 시작</>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {status.recentSessions.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold text-muted-foreground">지난 세션</h2>
+              {status.recentSessions.map((s) => (
+                <Card key={s.id}>
+                  <CardContent className="py-3">
+                    <p className="text-sm">{s.headline}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {s.startedAt ? new Date(s.startedAt).toLocaleDateString('ko-KR') : ''}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-            <Button
-              size="lg"
-              className="w-full max-w-xs"
-              onClick={() => setShowMicCheck(true)}
-            >
-              <Moon className="mr-2 h-5 w-5" />
-              학습 시작
-            </Button>
-          </CardContent>
-        </Card>
+          )}
+        </>
       )}
-
-      {sessions.length > 0 && (
-        <LearningHistorySection sessions={sessions} />
-      )}
-
-      <MicCheckDialog
-        open={showMicCheck}
-        onOpenChange={setShowMicCheck}
-        onConfirm={handleMicConfirm}
-        loading={false}
-      />
-    </div>
-  );
-}
-
-const HISTORY_PREVIEW_COUNT = 5;
-
-function LearningHistorySection({ sessions }: { sessions: LearningSession[] }) {
-  const [showAll, setShowAll] = useState(false);
-  const visible = showAll ? sessions : sessions.slice(0, HISTORY_PREVIEW_COUNT);
-
-  return (
-    <div className="space-y-3">
-      <h2 className="text-lg font-semibold">이전 세션</h2>
-      {visible.map((session) => (
-        <Card key={session.id}>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">
-                {new Date(session.createdAt).toLocaleDateString('ko-KR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  weekday: 'short',
-                })}
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <p className="text-sm text-muted-foreground">
-              {session.topic ?? '학습 세션'}
-            </p>
-          </CardContent>
-        </Card>
-      ))}
-      {!showAll && sessions.length > HISTORY_PREVIEW_COUNT && (
-        <Button variant="outline" className="w-full" onClick={() => setShowAll(true)}>
-          더보기 ({sessions.length - HISTORY_PREVIEW_COUNT}건)
-        </Button>
-      )}
+      <InsufficientCreditsDialog open={showCreditDialog} onOpenChange={setShowCreditDialog} />
     </div>
   );
 }

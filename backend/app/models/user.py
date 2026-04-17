@@ -29,8 +29,6 @@ class User(Base):
     activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
     coupon_usages = relationship("CouponUsage", back_populates="user", cascade="all, delete-orphan")
     answer_assist_sessions = relationship("AnswerAssistSession", back_populates="user", cascade="all, delete-orphan")
-    user_knowledge = relationship("UserKnowledge", back_populates="user", cascade="all, delete-orphan")
-    daily_progress = relationship("DailyProgress", back_populates="user", cascade="all, delete-orphan")
 
 
 class Account(Base):

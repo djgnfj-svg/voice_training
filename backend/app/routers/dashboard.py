@@ -9,7 +9,7 @@ from app.dependencies import AuthUser, get_current_user
 from app.models.user import User
 from app.models.agent_interview import AgentInterviewSession
 from app.models.journal import JournalSession
-from app.models.learning_agent import LearningAgentSession
+from app.models.nightly_study import LearningSession
 from app.models.activity import ActivityLog, ActivityItem
 from app.services.analytics import get_session_history, get_activity_history
 
@@ -51,8 +51,8 @@ async def dashboard(
     # Learning count
     learning_count_result = await db.execute(
         select(func.count()).where(
-            LearningAgentSession.user_id == user.id,
-            LearningAgentSession.status.in_(["completed", "timeout"]),
+            LearningSession.user_id == user.id,
+            LearningSession.status == "completed",
         )
     )
     learning_count = learning_count_result.scalar() or 0
@@ -105,22 +105,22 @@ async def dashboard(
 
     # Learning sessions
     learning_result = await db.execute(
-        select(LearningAgentSession)
+        select(LearningSession)
         .where(
-            LearningAgentSession.user_id == user.id,
-            LearningAgentSession.status.in_(["completed", "timeout"]),
+            LearningSession.user_id == user.id,
+            LearningSession.status == "completed",
         )
-        .order_by(LearningAgentSession.created_at.desc())
+        .order_by(LearningSession.started_at.desc())
         .limit(5)
     )
     learning_items = [
         {
             "kind": "learning",
-            "id": s.id,
+            "id": str(s.id),
             "title": "오늘의 학습",
-            "subtitle": s.topic or "학습 세션",
+            "subtitle": s.summary[:50] + "..." if s.summary and len(s.summary) > 50 else (s.summary or "학습 세션"),
             "status": s.status,
-            "createdAt": s.created_at.isoformat() if s.created_at else None,
+            "createdAt": s.started_at.isoformat() if s.started_at else None,
         }
         for s in learning_result.scalars().all()
     ]
