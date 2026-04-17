@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, Loader2, Send, X, Volume2 } from 'lucide-react';
+import { Mic, Loader2, X, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useNightlyStudyStream } from '@/hooks/useNightlyStudyStream';
@@ -186,11 +186,6 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
               <span className="text-sm text-muted-foreground">
                 {transcript.trim().length > 0 ? '말 멈추면 자동 전송' : '말씀하세요'}
               </span>
-              {transcript.trim().length > 0 ? (
-                <Button size="sm" variant="outline" onClick={() => handleSend()} className="ml-2">
-                  <Send className="h-4 w-4 mr-1" /> 지금 보내기
-                </Button>
-              ) : null}
             </>
           ) : (
             <Button size="sm" variant="outline" onClick={startListening}>
