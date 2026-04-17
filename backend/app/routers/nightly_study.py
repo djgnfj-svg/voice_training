@@ -135,7 +135,11 @@ async def start_session(
 
     # 5. Seed the first assistant message (non-LLM, fixed greeting for onboarding or learning)
     if initial_mode == "onboarding":
-        first_text = "어떤 개발자가 되고 싶으세요?"
+        first_text = (
+            "안녕하세요, 저는 CS 학습 어시스트예요. "
+            "먼저 간단히 자기소개 부탁드려요. "
+            "지금 어떤 일을 하시고 어떤 개발자가 되고 싶은지 편하게 말씀해주세요."
+        )
         first_node_id = None
     else:
         first_text = f"다시 오셨네요. 오늘은 '{target_node['title']}' 해볼까요?" if target_node else "오늘도 시작해볼까요?"

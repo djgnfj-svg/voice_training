@@ -25,15 +25,21 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
   ]);
   const [currentTopicLabel, setCurrentTopicLabel] = useState<string | null>(currentTopic);
   const [shouldSuggestEnd, setShouldSuggestEnd] = useState(false);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { isListening, startListening, stopListening, transcript, resetTranscript } = useSpeechRecognition();
+
+  const speak = (text: string) => {
+    setIsAiSpeaking(true);
+    playTTS(text, () => setIsAiSpeaking(false));
+  };
 
   const { isStreaming, sendTurn } = useNightlyStudyStream({
     sessionId,
     onText: (text) => {
       setMessages((prev) => [...prev, { role: 'assistant', content: text }]);
-      playTTS(text);
+      speak(text);
     },
     onMeta: (meta) => {
       if (meta.nodeChangedTo) setCurrentTopicLabel(meta.nodeChangedTo.title);
@@ -51,7 +57,9 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
 
   const firstMessageRef = useRef(firstMessage);
   useEffect(() => {
-    playTTS(firstMessageRef.current);
+    const text = firstMessageRef.current;
+    setIsAiSpeaking(true);
+    playTTS(text, () => setIsAiSpeaking(false));
   }, []);
 
   const handleSend = async () => {
@@ -63,24 +71,28 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     await sendTurn(text);
   };
 
+  const micDisabled = isStreaming || isAiSpeaking;
+
   return (
-    <div className="flex flex-col h-[100dvh]">
-      <header className="flex items-center justify-between border-b p-3">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col h-[100dvh]">
+      <header className="flex items-center justify-between border-b p-3 shrink-0">
         {currentTopicLabel ? (
           <Badge variant="secondary">{currentTopicLabel}</Badge>
         ) : (
-          <span className="text-sm text-muted-foreground">대화 중</span>
+          <span className="text-sm text-muted-foreground">
+            {isAiSpeaking ? 'AI가 말하는 중...' : '대화 중'}
+          </span>
         )}
         <Button variant="ghost" size="sm" onClick={onEnd}>
           <X className="h-4 w-4 mr-1" /> 종료
         </Button>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
+      <main className="flex-1 overflow-y-auto px-3 py-4 space-y-3 min-h-0">
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+            className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
               m.role === 'user'
                 ? 'ml-auto bg-primary text-primary-foreground'
                 : 'bg-muted'
@@ -98,19 +110,20 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
       </main>
 
       {shouldSuggestEnd ? (
-        <div className="bg-amber-50 border-t border-amber-200 p-2 text-xs text-center text-amber-900">
+        <div className="bg-amber-50 border-t border-amber-200 p-2 text-xs text-center text-amber-900 shrink-0">
           AI가 오늘 여기까지 정리하자고 제안했어요
         </div>
       ) : null}
 
-      <footer className="border-t p-3 flex items-center gap-2">
+      <footer className="border-t p-3 flex items-center gap-2 shrink-0 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
         {!isListening ? (
           <Button
             className="flex-1 h-14"
             onClick={startListening}
-            disabled={isStreaming}
+            disabled={micDisabled}
           >
-            <Mic className="mr-2 h-5 w-5" /> 말하기
+            <Mic className="mr-2 h-5 w-5" />
+            {isAiSpeaking ? 'AI가 말하는 중...' : '말하기'}
           </Button>
         ) : (
           <Button
@@ -128,7 +141,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
 
 let currentAudio: HTMLAudioElement | null = null;
 
-async function playTTS(text: string) {
+async function playTTS(text: string, onDone?: () => void) {
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;
@@ -139,17 +152,26 @@ async function playTTS(text: string) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, persona: 'tutor' }),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      onDone?.();
+      return;
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     currentAudio = audio;
-    await audio.play();
     audio.onended = () => {
       URL.revokeObjectURL(url);
       if (currentAudio === audio) currentAudio = null;
+      onDone?.();
     };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      if (currentAudio === audio) currentAudio = null;
+      onDone?.();
+    };
+    await audio.play();
   } catch {
-    // fail silently
+    onDone?.();
   }
 }
