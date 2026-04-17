@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Mic, BookOpen, Moon, Loader2, ArrowRight } from 'lucide-react';
+import { Mic, BookOpen, GraduationCap, Loader2, ArrowRight } from 'lucide-react';
 import { WelcomeDialog } from '@/components/onboarding/welcome-dialog';
 import { formatDate } from '@/lib/utils';
 
@@ -33,7 +33,7 @@ interface DashboardData {
 const kindConfig = {
   interview: { icon: Mic, label: '면접', color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/30', href: '/interview/setup' },
   journal: { icon: BookOpen, label: '저널', color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/30', href: '/journal' },
-  learning: { icon: Moon, label: '학습', color: 'text-violet-500', bg: 'bg-violet-100 dark:bg-violet-900/30', href: '/nightly-study' },
+  learning: { icon: GraduationCap, label: '학습', color: 'text-violet-500', bg: 'bg-violet-100 dark:bg-violet-900/30', href: '/nightly-study' },
 };
 
 export default function DashboardPage() {
@@ -124,10 +124,10 @@ export default function DashboardPage() {
           <Card className="transition-all hover:shadow-md hover:border-violet-300 dark:hover:border-violet-700">
             <CardContent className="flex items-center gap-4 py-5">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-100 dark:bg-violet-900/30">
-                <Moon className="h-6 w-6 text-violet-500" />
+                <GraduationCap className="h-6 w-6 text-violet-500" />
               </div>
               <div className="min-w-0">
-                <p className="font-semibold">오늘의 학습</p>
+                <p className="font-semibold">CS 학습 어시스트</p>
                 <p className="text-sm text-muted-foreground">{data.stats.learningCount}회 학습</p>
               </div>
             </CardContent>

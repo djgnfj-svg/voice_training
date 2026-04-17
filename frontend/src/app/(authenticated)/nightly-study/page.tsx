@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Moon, Loader2 } from 'lucide-react';
+import { GraduationCap, Loader2 } from 'lucide-react';
 import {
   getStatus,
   startSession,
@@ -78,8 +78,8 @@ export default function NightlyStudyPage() {
   return (
     <div className="mx-auto max-w-md space-y-6 p-4 pt-6">
       <div className="text-center">
-        <Moon className="mx-auto h-10 w-10 text-primary" />
-        <h1 className="mt-3 text-xl font-bold">오늘의 학습</h1>
+        <GraduationCap className="mx-auto h-10 w-10 text-primary" />
+        <h1 className="mt-3 text-xl font-bold">CS 학습 어시스트</h1>
       </div>
 
       {isLoading || !status ? (
