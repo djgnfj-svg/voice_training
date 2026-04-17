@@ -39,9 +39,15 @@ jobs:
           DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
           DIRECT_URL: postgresql://dummy:dummy@localhost:5432/dummy
           NEXTAUTH_SECRET: ci-dummy-secret
-          ANTHROPIC_API_KEY: sk-dummy
+          NEXTAUTH_URL: http://localhost:81
+          AUTH_TRUST_HOST: 'true'
           AUTH_GOOGLE_ID: dummy.apps.googleusercontent.com
           AUTH_GOOGLE_SECRET: dummy-secret
+          BACKEND_URL: http://localhost:8000
+          # 빌드 타임에 클라이언트 번들로 인라인되는 NEXT_PUBLIC_* 변수.
+          # 프로덕션은 루트 .env의 값을 docker-compose args로 주입하지만,
+          # CI는 실제 값이 없어도 빌드 경로가 통과하도록 빈 값을 명시.
+          NEXT_PUBLIC_ADMIN_EMAILS: ''
 
       # Backend validation
       - uses: actions/setup-python@v5
