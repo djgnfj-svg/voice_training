@@ -47,7 +47,15 @@ async def start_session(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # 0. Auto-close any existing active session for this user
+    # 0a. Serialize concurrent /start calls for this user via a row lock.
+    #     This prevents the SELECT-then-INSERT race that could create two
+    #     is_free_session=True sessions for the same KST day.
+    await db.execute(
+        text("SELECT id FROM users WHERE id=:u FOR UPDATE"),
+        {"u": user.id},
+    )
+
+    # 0b. Auto-close any existing active session for this user
     await db.execute(
         text("UPDATE learning_sessions SET status='completed', ended_at=NOW() WHERE user_id=:u AND status='active'"),
         {"u": user.id},

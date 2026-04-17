@@ -22,15 +22,18 @@ async def run_planner(
     turn_count: int,
 ) -> PlannerOutput:
     """Call planner LLM with current state. Returns structured action plan."""
-    user_prompt = PLANNER_USER_TEMPLATE.format(
-        user_utterance=user_utterance,
-        current_node_json=json.dumps(current_node, ensure_ascii=False) if current_node else "null",
-        current_mode=current_mode,
-        mastery_json=json.dumps(mastery, ensure_ascii=False) if mastery else "null",
-        recent_messages=_format_recent(recent_messages),
-        rag_hits_json=json.dumps(rag_hits, ensure_ascii=False),
-        curriculum_context_json=json.dumps(curriculum_context, ensure_ascii=False),
-        turn_count=turn_count,
+    # Use .replace() instead of .format() to avoid crashes when user-supplied
+    # strings (user_utterance, recent_messages) contain literal { or }.
+    user_prompt = (
+        PLANNER_USER_TEMPLATE
+        .replace("{current_node_json}", json.dumps(current_node, ensure_ascii=False) if current_node else "null")
+        .replace("{current_mode}", current_mode)
+        .replace("{mastery_json}", json.dumps(mastery, ensure_ascii=False) if mastery else "null")
+        .replace("{rag_hits_json}", json.dumps(rag_hits, ensure_ascii=False))
+        .replace("{curriculum_context_json}", json.dumps(curriculum_context, ensure_ascii=False))
+        .replace("{turn_count}", str(turn_count))
+        .replace("{recent_messages}", _format_recent(recent_messages))
+        .replace("{user_utterance}", user_utterance)
     )
 
     # call_llm_json takes prompt as first positional arg; combine system+user

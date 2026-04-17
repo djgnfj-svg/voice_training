@@ -52,7 +52,7 @@ async def dashboard(
     learning_count_result = await db.execute(
         select(func.count()).where(
             LearningSession.user_id == user.id,
-            LearningSession.status.in_(["completed", "ended"]),
+            LearningSession.status == "completed",
         )
     )
     learning_count = learning_count_result.scalar() or 0
@@ -108,7 +108,7 @@ async def dashboard(
         select(LearningSession)
         .where(
             LearningSession.user_id == user.id,
-            LearningSession.status.in_(["completed", "ended"]),
+            LearningSession.status == "completed",
         )
         .order_by(LearningSession.started_at.desc())
         .limit(5)
