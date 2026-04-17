@@ -352,7 +352,7 @@ async def status(
 
     # Credit balance
     cb_row = (await db.execute(
-        text('SELECT credit_balance FROM users WHERE id=:u'),
+        text('SELECT "creditBalance" AS credit_balance FROM users WHERE id=:u'),
         {"u": user.id},
     )).one()
     credit_balance = cb_row.credit_balance
