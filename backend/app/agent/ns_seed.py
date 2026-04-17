@@ -20,7 +20,8 @@ async def generate_and_insert_seed(
     Call LLM to generate seed curriculum, insert curriculum_nodes.
     Returns number of nodes inserted.
     """
-    prompt = SEED_CURRICULUM_PROMPT.format(goal_title=goal_title)
+    # .format() crashes if goal_title contains `{`; use .replace() for safety
+    prompt = SEED_CURRICULUM_PROMPT.replace("{goal_title}", goal_title)
     # call_llm_json takes prompt as first positional arg (no system param)
     data = await call_llm_json(prompt)
 
