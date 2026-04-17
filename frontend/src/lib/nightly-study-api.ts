@@ -53,7 +53,7 @@ export async function startSession(): Promise<StartResponse> {
   const res = await fetch('/api/nightly-study/start', { method: 'POST' });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || body.detail?.error || '세션을 시작할 수 없어요');
+    throw new Error(body.detail?.error || body.error || '세션을 시작할 수 없어요');
   }
   return res.json();
 }
