@@ -26,6 +26,7 @@ export default function MobileOnlyPage() {
       </div>
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-6">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           {qr ? <img src={qr} alt="QR" className="h-48 w-48" /> : null}
           <p className="text-sm text-muted-foreground break-all text-center">{url}</p>
         </CardContent>
