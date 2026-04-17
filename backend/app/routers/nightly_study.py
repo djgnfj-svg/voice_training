@@ -62,7 +62,7 @@ async def start_session(
     )
     await db.commit()
 
-    # 1. Daily free check (skip in dev)
+    # 1. Daily free check (skip in dev) — determine is_free WITHOUT deducting yet.
     midnight_utc = _kst_today_utc_midnight()
     is_free = False
     if settings.is_dev:
@@ -76,20 +76,7 @@ async def start_session(
             """),
             {"u": user.id, "m": midnight_utc},
         )).one_or_none()
-        if existing_free_row is None:
-            is_free = True
-        else:
-            # Need credit
-            try:
-                await deduct_for_feature(
-                    db=db, user_id=user.id, reference_id="nightly-study-extra",
-                    description="오늘의 학습 추가 세션", cost=EXTRA_COST, tx_type="FEATURE_DEBIT",
-                )
-            except InsufficientCreditsError:
-                raise HTTPException(
-                    status_code=402,
-                    detail={"error": "크레딧이 부족해요", "code": "INSUFFICIENT_CREDITS"},
-                )
+        is_free = existing_free_row is None
 
     # 2. Check goal
     goal_row = (await db.execute(
@@ -120,7 +107,7 @@ async def start_session(
         if tn_row:
             target_node = {"id": str(tn_row.id), "title": tn_row.title, "description": tn_row.description}
 
-    # 4. Create session
+    # 4. Create session FIRST so we have a stable reference_id for the credit tx
     result = await db.execute(
         text("""
             INSERT INTO learning_sessions (user_id, goal_id, is_free_session, credit_deducted, status)
@@ -133,7 +120,25 @@ async def start_session(
     session_id = str(row.id)
     await db.commit()
 
-    # 5. Seed the first assistant message (non-LLM, fixed greeting for onboarding or learning)
+    # 5. If paid extra session, deduct credit AFTER session exists. On failure, roll back session.
+    if not is_free:
+        try:
+            await deduct_for_feature(
+                db=db, user_id=user.id, reference_id=session_id,
+                description="오늘의 학습 추가 세션", cost=EXTRA_COST, tx_type="FEATURE_DEBIT",
+            )
+        except InsufficientCreditsError:
+            await db.execute(
+                text("DELETE FROM learning_sessions WHERE id=:s"),
+                {"s": session_id},
+            )
+            await db.commit()
+            raise HTTPException(
+                status_code=402,
+                detail={"error": "크레딧이 부족해요", "code": "INSUFFICIENT_CREDITS"},
+            )
+
+    # 6. Seed the first assistant message (non-LLM, fixed greeting for onboarding or learning)
     if initial_mode == "onboarding":
         first_text = (
             "안녕하세요, 저는 CS 학습 어시스트예요. "
