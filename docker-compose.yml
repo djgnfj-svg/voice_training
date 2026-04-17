@@ -1,3 +1,5 @@
+name: voice_training
+
 services:
   # ══════════ Dev (port 81) ══════════
   nginx:
