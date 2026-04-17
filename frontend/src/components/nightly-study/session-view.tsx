@@ -31,6 +31,51 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
   const bottomRef = useRef<HTMLDivElement>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastHeardRef = useRef<string>('');
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const playTTS = useCallback(async (text: string, onDone?: () => void) => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, persona: 'tutor' }),
+      });
+      if (!res.ok) {
+        onDone?.();
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      currentAudioRef.current = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        if (currentAudioRef.current === audio) currentAudioRef.current = null;
+        onDone?.();
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        if (currentAudioRef.current === audio) currentAudioRef.current = null;
+        onDone?.();
+      };
+      await audio.play();
+    } catch {
+      onDone?.();
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+    };
+  }, []);
 
   const {
     isListening,
@@ -82,7 +127,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     const text = firstMessageRef.current;
     setIsAiSpeaking(true);
     playTTS(text, () => setIsAiSpeaking(false));
-  }, []);
+  }, [playTTS]);
 
   // AI 발화 끝나면 자동 듣기 시작
   useEffect(() => {
@@ -197,39 +242,3 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
   );
 }
 
-let currentAudio: HTMLAudioElement | null = null;
-
-async function playTTS(text: string, onDone?: () => void) {
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio = null;
-  }
-  try {
-    const res = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, persona: 'tutor' }),
-    });
-    if (!res.ok) {
-      onDone?.();
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    currentAudio = audio;
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      if (currentAudio === audio) currentAudio = null;
-      onDone?.();
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      if (currentAudio === audio) currentAudio = null;
-      onDone?.();
-    };
-    await audio.play();
-  } catch {
-    onDone?.();
-  }
-}

@@ -30,7 +30,7 @@ export async function startJournalSession(): Promise<JournalStartResponse> {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ error: "세션 시작 실패" }));
-    throw new Error(data.error || "세션 시작 실패");
+    throw new Error(data.detail?.error || data.error || "세션 시작 실패");
   }
   return res.json();
 }
@@ -46,7 +46,7 @@ export async function endJournalSession(sessionId: string): Promise<JournalEndRe
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ error: "세션 종료 실패" }));
-    throw new Error(data.error || "세션 종료 실패");
+    throw new Error(data.detail?.error || data.error || "세션 종료 실패");
   }
   return res.json();
 }

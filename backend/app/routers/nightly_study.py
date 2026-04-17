@@ -15,7 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.config import settings
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
-from app.services.credit import deduct_for_feature, InsufficientCreditsError
+from app.services.credit import deduct_for_feature, get_credit_info, InsufficientCreditsError
 from app.agent.ns_orchestrator import run_turn
 from app.agent.ns_seed import generate_and_insert_seed, normalize_goal
 from app.agent.ns_summarizer import generate_session_summary, update_streak_after_session
@@ -360,11 +360,8 @@ async def status(
     daily_free_used = used_row is not None
 
     # Credit balance
-    cb_row = (await db.execute(
-        text('SELECT "creditBalance" AS credit_balance FROM users WHERE id=:u'),
-        {"u": user.id},
-    )).one()
-    credit_balance = cb_row.credit_balance
+    credit_info = await get_credit_info(db, user.id)
+    credit_balance = credit_info["balance"]
 
     # Streak
     s_row = (await db.execute(

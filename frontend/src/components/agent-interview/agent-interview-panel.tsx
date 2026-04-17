@@ -18,6 +18,7 @@ import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { normalizeTranscript, hasMeaningfulContent } from '@/lib/transcript';
 import { scoreBg, scoreText } from '@/lib/score-colors';
+import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 
 // 답변 중 침묵 자동 제출 타이머. 3s는 사용자가 잠깐 생각만 해도 제출되어 "급해서 연습 안 됨" 피드백의 원인. 30s로 완화.
 const SILENCE_TIMEOUT_MS = 30000;
@@ -41,6 +42,7 @@ export function AgentInterviewPanel({
     maxQuestions: maxQ,
     report,
     error,
+    errorCode,
     start,
     submitAnswer,
     skip,
@@ -57,6 +59,11 @@ export function AgentInterviewPanel({
   } = speech;
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [answerWarning, setAnswerWarning] = useState<string | null>(null);
+  const [showCreditsDialog, setShowCreditsDialog] = useState(false);
+
+  useEffect(() => {
+    if (errorCode === 'INSUFFICIENT_CREDITS') setShowCreditsDialog(true);
+  }, [errorCode]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
@@ -450,6 +457,8 @@ export function AgentInterviewPanel({
           </div>
         </DialogContent>
       </Dialog>
+
+      <InsufficientCreditsDialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog} />
 
       <div ref={messagesEndRef} />
     </div>

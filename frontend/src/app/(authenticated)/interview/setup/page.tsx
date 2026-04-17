@@ -18,7 +18,6 @@ import {
   ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
-import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 import { MicCheckDialog } from '@/components/interview/mic-check-dialog';
 import {
   AlertDialog,
@@ -118,7 +117,6 @@ function InterviewTab() {
 
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [interviewMode, setInterviewMode] = useState<InterviewMode>('ai-coach');
-  const [showCreditsDialog, setShowCreditsDialog] = useState(false);
   const [showMicCheck, setShowMicCheck] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
@@ -430,7 +428,6 @@ function InterviewTab() {
         }}
         loading={false}
       />
-      <InsufficientCreditsDialog open={showCreditsDialog} onOpenChange={setShowCreditsDialog} />
     </>
   );
 }

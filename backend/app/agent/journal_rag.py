@@ -40,6 +40,9 @@ async def search_journal(
         conditions.append('"createdAt" >= :since_date')
         params["since_date"] = since_date
 
+    # SAFETY: conditions contains only hardcoded SQL fragments (e.g. "category = :category").
+    # All values are passed via the parameterized `params` dict — never append
+    # user-supplied strings directly to conditions.
     where_clause = " AND ".join(conditions)
 
     result = await db.execute(
