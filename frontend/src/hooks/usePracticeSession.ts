@@ -43,7 +43,7 @@ export function usePracticeSession(sessionId: string) {
   const answerStartTimeRef = useRef<number>(0);
 
   const speech = useSpeechRecognition();
-  const tts = useTextToSpeech();
+  const tts = useTextToSpeech({ persona: 'interviewer' });
   const recorder = useAudioRecorder();
 
   const { data, isLoading, error } = useQuery<PracticeData>({

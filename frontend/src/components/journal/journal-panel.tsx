@@ -165,7 +165,10 @@ export function JournalPanel() {
       }
     };
 
-    tts.speak(ttsText).then(resumeListening).catch(resumeListening);
+    const persona = (lastMsg.mode ?? journal.mode) === "counseling"
+      ? "journal_counselor"
+      : "journal_friend";
+    tts.speak(ttsText, { persona }).then(resumeListening).catch(resumeListening);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [journal.messages]);
 

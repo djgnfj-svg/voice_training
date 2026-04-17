@@ -64,7 +64,7 @@ export function useInterviewSession() {
 
   const answerStartTimeRef = useRef<number>(0);
   const speech = useSpeechRecognition();
-  const tts = useTextToSpeech();
+  const tts = useTextToSpeech({ persona: 'interviewer' });
   const recorder = useAudioRecorder();
   const analytics = useSpeechAnalytics();
 

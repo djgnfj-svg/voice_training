@@ -36,7 +36,7 @@ export default function NightlyStudySessionPage() {
   const router = useRouter();
   const agent = useLearningAgent();
   const speech = useSpeechRecognition();
-  const tts = useTextToSpeech();
+  const tts = useTextToSpeech({ persona: 'tutor' });
 
   const startedRef = useRef(false);
   const [showExitDialog, setShowExitDialog] = useState(false);

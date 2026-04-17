@@ -47,7 +47,7 @@ export function AgentInterviewPanel({
     endEarly,
   } = useAgentInterview();
 
-  const tts = useTextToSpeech();
+  const tts = useTextToSpeech({ persona: 'interviewer' });
   const speech = useSpeechRecognition();
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [answerWarning, setAnswerWarning] = useState<string | null>(null);

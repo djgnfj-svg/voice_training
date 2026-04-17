@@ -2,13 +2,28 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
+export type TTSPersona =
+  | 'default'
+  | 'interviewer'
+  | 'journal_friend'
+  | 'journal_counselor'
+  | 'tutor';
+
+export interface TTSSpeakOptions {
+  persona?: TTSPersona;
+}
+
 interface TextToSpeechHook {
   isSpeaking: boolean;
   isSupported: boolean;
   volume: number;
   setVolume: (v: number) => void;
-  speak: (text: string) => Promise<void>;
+  speak: (text: string, options?: TTSSpeakOptions) => Promise<void>;
   stop: () => void;
+}
+
+export interface UseTextToSpeechOptions {
+  persona?: TTSPersona;
 }
 
 const MIME = 'audio/mpeg';
@@ -19,7 +34,8 @@ function mseSupported(): boolean {
   return !!MS && typeof MS.isTypeSupported === 'function' && MS.isTypeSupported(MIME);
 }
 
-export function useTextToSpeech(): TextToSpeechHook {
+export function useTextToSpeech(options: UseTextToSpeechOptions = {}): TextToSpeechHook {
+  const defaultPersona = options.persona;
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volume, setVolume] = useState(0.7);
   const volumeRef = useRef(0.7);
@@ -215,17 +231,21 @@ export function useTextToSpeech(): TextToSpeechHook {
   );
 
   const speak = useCallback(
-    async (text: string): Promise<void> => {
+    async (text: string, speakOptions: TTSSpeakOptions = {}): Promise<void> => {
       stop();
 
       const abortController = new AbortController();
       abortRef.current = abortController;
 
+      const persona = speakOptions.persona ?? defaultPersona;
+      const payload: Record<string, unknown> = { text };
+      if (persona) payload.persona = persona;
+
       try {
         const res = await fetch('/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify(payload),
           signal: abortController.signal,
         });
 
@@ -247,7 +267,7 @@ export function useTextToSpeech(): TextToSpeechHook {
         throw error;
       }
     },
-    [stop, cleanup, playStreaming, playBuffered]
+    [stop, cleanup, playStreaming, playBuffered, defaultPersona]
   );
 
   useEffect(() => {
