@@ -245,7 +245,6 @@
 - **도메인**: `jachana.com` (Cloudflare 관리)
 - **배포 설정**: `docker compose -f docker-compose.prod.yml up -d` → `cloudflared tunnel run` (터널은 prod:82만 바라봄. dev:81은 로컬 확인용)
 - **터널 config**: `~/.cloudflared/config.yml` — `jachana.com` → `http://localhost:82` (prod). 로컬 dev는 `http://localhost:81` 직접 접속
-- **CI**: `.github/workflows/ci.yml` — PR/push 시 프론트엔드 lint/typecheck/build + 백엔드 import smoke test
 - **nginx**: `/api/auth` rate limit 5r/s, `/api/` rate limit 10r/s
 - **음성 파일**: Docker named volume — dev/prod 각각 별도 (`voice_training_audio-storage`, `voiceprep-prod_audio-storage`)
 
