@@ -48,7 +48,7 @@ async def cunning_suggest(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(404, "\uc774\ub825\uc11c\ub97c \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(404, {"error": "이력서를 찾을 수 없습니다"})
 
     parsed_resume = (
         resume.parsed_data

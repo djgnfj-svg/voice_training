@@ -51,7 +51,7 @@ async def create_session(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(404, "\uc774\ub825\uc11c\ub97c \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(404, {"error": "이력서를 찾을 수 없습니다"})
 
     parsed_resume = (
         resume.parsed_data
@@ -69,11 +69,11 @@ async def create_session(
         )
     except Exception as e:
         logger.error("Question generation failed: %s", e)
-        raise HTTPException(500, "\uc9c8\ubb38 \uc0dd\uc131\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(500, {"error": "질문 생성에 실패했습니다"})
 
     questions = data.get("questions") if isinstance(data, dict) else None
     if not questions:
-        raise HTTPException(500, "AI \uc751\ub2f5 \ud30c\uc2f1\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(500, {"error": "AI 응답 파싱에 실패했습니다"})
 
     # Create session + items
     session_id = str(uuid4())
@@ -163,7 +163,7 @@ async def get_session(
     )
     assist_session = result.scalar_one_or_none()
     if not assist_session:
-        raise HTTPException(404, "\uc138\uc158\uc744 \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
     return {
         "id": assist_session.id,
@@ -208,7 +208,7 @@ async def chat_item(
     )
     assist_session = sess_result.scalar_one_or_none()
     if not assist_session:
-        raise HTTPException(404, "\uc138\uc158\uc744 \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
     # Verify item
     item_result = await db.execute(
@@ -219,7 +219,7 @@ async def chat_item(
     )
     item = item_result.scalar_one_or_none()
     if not item:
-        raise HTTPException(404, "\ud56d\ubaa9\uc744 \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(404, {"error": "항목을 찾을 수 없습니다"})
 
     # Append user message
     conversation: list[dict[str, str]] = list(item.conversation or [])
@@ -279,7 +279,7 @@ async def compile_item(
     )
     assist_session = sess_result.scalar_one_or_none()
     if not assist_session:
-        raise HTTPException(404, "\uc138\uc158\uc744 \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
     # Verify item
     item_result = await db.execute(
@@ -290,11 +290,11 @@ async def compile_item(
     )
     item = item_result.scalar_one_or_none()
     if not item:
-        raise HTTPException(404, "\ud56d\ubaa9\uc744 \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(404, {"error": "항목을 찾을 수 없습니다"})
 
     conversation: list[dict[str, str]] = list(item.conversation or [])
     if not conversation:
-        raise HTTPException(400, "\ub300\ud654 \ub0b4\uc6a9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4")
+        raise HTTPException(400, {"error": "대화 내용이 없습니다"})
 
     # Build prompt
     parsed_resume = (

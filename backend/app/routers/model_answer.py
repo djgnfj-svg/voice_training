@@ -59,19 +59,19 @@ async def generate_model_answer(
     from uuid import uuid4
 
     if not body.resumeId:
-        raise HTTPException(400, "resumeId is required")
+        raise HTTPException(400, {"error": "이력서 ID가 필요합니다"})
 
     res = await db.execute(
         select(Resume).where(Resume.id == body.resumeId, Resume.user_id == user.id)
     )
     resume = res.scalar_one_or_none()
     if not resume:
-        raise HTTPException(404, "Resume not found")
+        raise HTTPException(404, {"error": "이력서를 찾을 수 없습니다"})
 
     credit_check = await can_start_session(db, user.id)
     if not credit_check["allowed"]:
         raise HTTPException(
-            402, {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"}
+            402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"}
         )
 
     plan = await plan_interview(db, resume_id=body.resumeId, user_id=user.id)
@@ -108,10 +108,10 @@ async def generate_model_answer(
         questions = q_result.get("questions", [])
     except Exception:
         logger.exception("model-answer: question batch generation failed")
-        raise HTTPException(500, "AI 생성에 실패했습니다")
+        raise HTTPException(500, {"error": "AI 생성에 실패했습니다"})
 
     if not questions:
-        raise HTTPException(500, "AI 생성에 실패했습니다")
+        raise HTTPException(500, {"error": "AI 생성에 실패했습니다"})
 
     # Step 2: 모범답안 개별 병렬 생성
     use_rag = await has_resume_embeddings(db, body.resumeId)
@@ -157,7 +157,7 @@ async def generate_model_answer(
     merged = [r for r in results if r is not None and r.get("modelAnswer")]
 
     if not merged:
-        raise HTTPException(500, "AI 생성에 실패했습니다")
+        raise HTTPException(500, {"error": "AI 생성에 실패했습니다"})
 
     # 크레딧 차감
     using_free_trial = credit_check["usingFreeTrial"]
@@ -174,7 +174,7 @@ async def generate_model_answer(
         except InsufficientCreditsError:
             raise HTTPException(
                 402,
-                {"error": "INSUFFICIENT_CREDITS", "code": "INSUFFICIENT_CREDITS"},
+                {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"},
             )
     else:
         try:

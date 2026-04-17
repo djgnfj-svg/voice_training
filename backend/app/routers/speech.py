@@ -44,7 +44,7 @@ async def text_to_speech(
 ):
     cleaned = re.sub(r"[\(\[\{][^\)\]\}]*[\)\]\}]", "", body.text).strip()
     if not cleaned:
-        raise HTTPException(400, "No speakable text")
+        raise HTTPException(400, {"error": "발화 가능한 텍스트가 없습니다"})
 
     payload: dict = {"text": cleaned}
     if body.voice:
@@ -72,7 +72,7 @@ async def text_to_speech(
         try:
             return StreamingResponse(_edge_stream(cleaned), media_type="audio/mpeg")
         except Exception:
-            raise HTTPException(500, "TTS generation failed")
+            raise HTTPException(500, {"error": "TTS 생성에 실패했습니다"})
 
     media_type = upstream.headers.get("content-type", "audio/mpeg")
 
@@ -96,18 +96,18 @@ async def transcribe(
     from app.config import settings
 
     if not settings.OPENAI_API_KEY:
-        raise HTTPException(503, "Whisper API가 설정되지 않았습니다")
+        raise HTTPException(503, {"error": "Whisper API가 설정되지 않았습니다"})
 
     # 확장자 검증
     ALLOWED_EXTENSIONS = {".webm", ".wav", ".mp3", ".ogg", ".mp4", ".m4a"}
     filename = audio.filename or "recording.webm"
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(400, "지원하지 않는 오디오 형식입니다")
+        raise HTTPException(400, {"error": "지원하지 않는 오디오 형식입니다"})
 
     content = await audio.read()
     if len(content) > MAX_AUDIO_SIZE:
-        raise HTTPException(413, "오디오 파일이 너무 큽니다")
+        raise HTTPException(413, {"error": "오디오 파일이 너무 큽니다"})
 
     try:
         from openai import AsyncOpenAI
@@ -124,4 +124,4 @@ async def transcribe(
         )
         return {"transcript": result.text, "source": "whisper"}
     except Exception:
-        raise HTTPException(500, "전사에 실패했습니다")
+        raise HTTPException(500, {"error": "전사에 실패했습니다"})

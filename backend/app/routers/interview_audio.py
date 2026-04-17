@@ -39,24 +39,24 @@ async def upload_audio(
 ):
     # Validate sessionId
     if not UUID_RE.match(sessionId):
-        raise HTTPException(400, "Invalid sessionId")
+        raise HTTPException(400, {"error": "잘못된 세션 ID"})
 
     try:
         q_idx = int(questionIndex)
     except ValueError:
-        raise HTTPException(400, "Invalid questionIndex")
+        raise HTTPException(400, {"error": "잘못된 questionIndex"})
     if q_idx < 0:
-        raise HTTPException(400, "Invalid questionIndex")
+        raise HTTPException(400, {"error": "잘못된 questionIndex"})
 
     # Get extension
     ext = (audio.filename or "").rsplit(".", 1)[-1].lower() if audio.filename else ""
     if ext not in ALLOWED_EXTS:
-        raise HTTPException(400, f"Invalid file type: {ext}")
+        raise HTTPException(400, {"error": f"지원하지 않는 파일 형식: {ext}"})
 
     # Read and check size
     content = await audio.read()
     if len(content) > MAX_SIZE:
-        raise HTTPException(400, "File too large (max 10MB)")
+        raise HTTPException(400, {"error": "파일 크기가 너무 큽니다 (최대 10MB)"})
 
     # Verify session ownership
     result = await db.execute(
@@ -66,7 +66,7 @@ async def upload_audio(
         )
     )
     if not result.scalar_one_or_none():
-        raise HTTPException(404, "Session not found")
+        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
     # Save locally
     dir_path = AUDIO_DIR / sessionId
@@ -98,7 +98,7 @@ async def get_audio(
     db: AsyncSession = Depends(get_db),
 ):
     if not UUID_RE.match(sessionId):
-        raise HTTPException(400, "Invalid sessionId")
+        raise HTTPException(400, {"error": "잘못된 세션 ID"})
 
     # Verify ownership
     result = await db.execute(
@@ -108,7 +108,7 @@ async def get_audio(
         )
     )
     if not result.scalar_one_or_none():
-        raise HTTPException(404, "Session not found")
+        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
     # Find file
     dir_path = AUDIO_DIR / sessionId
@@ -119,4 +119,4 @@ async def get_audio(
                 str(file_path), media_type=MIME_MAP.get(ext, "audio/webm")
             )
 
-    raise HTTPException(404, "Audio not found")
+    raise HTTPException(404, {"error": "오디오 파일을 찾을 수 없습니다"})

@@ -35,7 +35,7 @@ async def analyze_job_posting(
         return result
     except Exception as e:
         logger.exception("Failed to analyze job posting")
-        raise HTTPException(500, "Internal server error")
+        raise HTTPException(500, {"error": "채용공고 분석에 실패했습니다"})
 
 
 @router.get("/api/job-posting")
