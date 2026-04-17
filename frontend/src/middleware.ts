@@ -20,6 +20,9 @@ export const config = {
     // Page routes only — API routes are proxied via next.config.ts rewrites
     '/dashboard/:path*',
     '/interview/:path*',
+    '/agent-interview/:path*',
+    '/journal/:path*',
+    '/nightly-study/:path*',
     '/profile/:path*',
     '/history/:path*',
     '/credits/:path*',
