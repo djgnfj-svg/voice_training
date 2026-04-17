@@ -177,7 +177,7 @@ async def get_activity(
     activity = result.scalar_one_or_none()
     if not activity:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Activity not found")
+        raise HTTPException(status_code=404, detail={"error": "활동을 찾을 수 없습니다."})
 
     return {
         "id": activity.id,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -124,21 +124,22 @@ function InterviewTab() {
     parsedData: ParsedJobPosting;
     companyAnalysis: CompanyAnalysis;
   } | null>(null);
-  const [inProgressSession, setInProgressSession] = useState<{
+  interface InProgressSession {
     id: string;
     type: string;
     totalQuestions: number;
     answeredCount: number;
-  } | null>(null);
+  }
 
-  useEffect(() => {
-    fetch('/api/interview/in-progress')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.session) setInProgressSession(data.session);
-      })
-      .catch(() => {});
-  }, []);
+  const { data: inProgressSession } = useQuery<InProgressSession | null>({
+    queryKey: ['interview-in-progress'],
+    queryFn: async () => {
+      const res = await fetch('/api/interview/in-progress');
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.session ?? null;
+    },
+  });
 
   const { data: historyItems } = useQuery<HistoryItem[]>({
     queryKey: ['history'],
@@ -555,7 +556,7 @@ function ResumeTab() {
   const { toast } = useToast();
 
   const { data: resumes, isLoading } = useQuery<ResumeListItem[]>({
-    queryKey: ['resumes-full'],
+    queryKey: ['resumes', { detail: true }],
     queryFn: async () => {
       const res = await fetch('/api/resume?detail=true');
       if (!res.ok) throw new Error('Failed to fetch resumes');
@@ -584,7 +585,6 @@ function ResumeTab() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['resumes-full'] });
       queryClient.invalidateQueries({ queryKey: ['resumes'] });
       toast({ title: '이력서가 업로드되었습니다' });
     },
@@ -604,7 +604,6 @@ function ResumeTab() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['resumes-full'] });
       queryClient.invalidateQueries({ queryKey: ['resumes'] });
       setRenamingId(null);
       toast({ title: '이름이 변경되었습니다' });
@@ -624,7 +623,6 @@ function ResumeTab() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['resumes-full'] });
       queryClient.invalidateQueries({ queryKey: ['resumes'] });
       toast({ title: '이력서가 삭제되었습니다' });
     },

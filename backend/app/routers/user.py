@@ -55,7 +55,7 @@ async def change_password(
     result = await db.execute(select(User).where(User.id == user.id))
     db_user = result.scalar_one_or_none()
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail={"error": "사용자를 찾을 수 없습니다."})
 
     if not db_user.hashed_password:
         raise HTTPException(status_code=400, detail={"error": "비밀번호가 설정되지 않은 계정입니다."})

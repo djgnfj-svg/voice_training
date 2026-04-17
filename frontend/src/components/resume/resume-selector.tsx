@@ -20,7 +20,7 @@ export function ResumeSelector({ selectedId, onSelect }: ResumeSelectorProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const { data: resumes, isLoading } = useQuery<ResumeItem[]>({
-    queryKey: ['resumes'],
+    queryKey: ['resumes', { detail: false }],
     queryFn: async () => {
       const res = await fetch('/api/resume');
       if (!res.ok) throw new Error('Failed to fetch resumes');
@@ -43,7 +43,7 @@ export function ResumeSelector({ selectedId, onSelect }: ResumeSelectorProps) {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['resumes'] });
+      queryClient.invalidateQueries({ queryKey: ['resumes'] }); // 모든 detail 변종 invalidate
       onSelect(data.id);
       toast({ title: '이력서가 업로드되었습니다' });
     },

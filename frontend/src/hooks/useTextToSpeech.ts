@@ -147,14 +147,15 @@ export function useTextToSpeech(options: UseTextToSpeechOptions = {}): TextToSpe
               settle(new Error('SourceBuffer error'))
             );
 
-            // eslint-disable-next-line no-constant-condition
-            while (true) {
+            let readerDone = false;
+            while (!readerDone) {
               if (signal.aborted) {
                 settle(new DOMException('Stopped', 'AbortError'));
                 return;
               }
               const { value, done } = await reader.read();
               if (done) {
+                readerDone = true;
                 streamEnded = true;
                 pump();
                 break;

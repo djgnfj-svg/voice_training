@@ -67,7 +67,7 @@ async def get_resume(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(status_code=404, detail="Resume not found")
+        raise HTTPException(status_code=404, detail={"error": "이력서를 찾을 수 없습니다."})
     return {
         "id": resume.id,
         "userId": resume.user_id,
@@ -158,7 +158,7 @@ async def update_resume(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(status_code=404, detail="Resume not found")
+        raise HTTPException(status_code=404, detail={"error": "이력서를 찾을 수 없습니다."})
 
     resume.name = body.name
     await db.commit()
@@ -188,7 +188,7 @@ async def delete_resume(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(status_code=404, detail="Resume not found")
+        raise HTTPException(status_code=404, detail={"error": "이력서를 찾을 수 없습니다."})
 
     try:
         await db.delete(resume)

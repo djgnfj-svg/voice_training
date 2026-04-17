@@ -66,11 +66,11 @@ async def get_current_user(request: Request) -> AuthUser:
             logging.error(f"JWT decode failed: {e}")
             # Fall through to dev mode or 401
 
-    raise HTTPException(status_code=401, detail="Unauthorized")
+    raise HTTPException(status_code=401, detail={"error": "로그인이 필요합니다."})
 
 
 async def get_admin_user(user: AuthUser = Depends(get_current_user)) -> AuthUser:
     """Require admin privileges."""
     if user.email and user.email.lower() in settings.admin_email_list:
         return user
-    raise HTTPException(status_code=403, detail="Forbidden")
+    raise HTTPException(status_code=403, detail={"error": "관리자 권한이 필요합니다."})
