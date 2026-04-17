@@ -207,6 +207,7 @@ async def scan_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
         "data": {
             "question": question,
             "questionNumber": question_count,
+            "followUpRound": 0,
             "phase": "scan",
             "phaseLabel": f"훑기 {idx + 1}/{len(scan_plan)} · {scan_item['project_ref']}",
             "targetArea": result.get("targetArea", ""),
@@ -330,6 +331,7 @@ async def dive_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
         "data": {
             "question": question,
             "questionNumber": question_count,
+            "followUpRound": depth,
             "phase": "dive",
             "phaseLabel": f"딥다이브 · {topic['topic']} ({new_depth}/{MAX_DIVE_DEPTH})",
             "targetArea": result.get("targetArea", ""),

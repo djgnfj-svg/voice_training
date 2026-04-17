@@ -103,6 +103,19 @@ export function useAgentInterview() {
         ]);
       });
 
+      source.addEventListener("action", (e: MessageEvent) => {
+        const data = JSON.parse(e.data);
+        if (typeof data.questionCount === "number") {
+          setQuestionCount(data.questionCount);
+        }
+        if (typeof data.maxQuestions === "number") {
+          setMaxQuestions(data.maxQuestions);
+        }
+        if (data.action === "end") {
+          setPhase("generating_report");
+        }
+      });
+
       source.addEventListener("complete", (e: MessageEvent) => {
         const data = JSON.parse(e.data);
         setReport(data.report);
