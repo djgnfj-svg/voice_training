@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.coupon import Coupon, CouponUsage
@@ -33,14 +34,15 @@ async def redeem_coupon(db: AsyncSession, user_id: str, code: str) -> dict:
     if coupon.max_uses and coupon.used_count >= coupon.max_uses:
         raise CouponRedeemError("MAX_USES_REACHED")
 
-    # Check if already used by this user
-    usage_result = await db.execute(
-        select(CouponUsage).where(
-            CouponUsage.coupon_id == coupon.id,
-            CouponUsage.user_id == user_id,
-        )
+    # Atomic usage claim: INSERT ... ON CONFLICT DO NOTHING
+    # 동시 요청이 같은 쿠폰을 redeem하려 할 때 유니크 제약(coupon_id+user_id)으로 단일 요청만 통과.
+    usage_stmt = (
+        pg_insert(CouponUsage)
+        .values(id=str(uuid4()), coupon_id=coupon.id, user_id=user_id)
+        .on_conflict_do_nothing(constraint="coupon_usages_couponId_userId_key")
     )
-    if usage_result.scalar_one_or_none():
+    usage_insert = await db.execute(usage_stmt)
+    if usage_insert.rowcount == 0:
         raise CouponRedeemError("ALREADY_USED")
 
     # Atomic: increment usedCount with optimistic lock
@@ -58,10 +60,6 @@ async def redeem_coupon(db: AsyncSession, user_id: str, code: str) -> dict:
             .where(Coupon.id == coupon.id)
             .values(used_count=Coupon.used_count + 1)
         )
-
-    # Create usage record
-    usage = CouponUsage(id=str(uuid4()), coupon_id=coupon.id, user_id=user_id)
-    db.add(usage)
 
     # Increment user balance and get new balance atomically
     bal_result = await db.execute(
