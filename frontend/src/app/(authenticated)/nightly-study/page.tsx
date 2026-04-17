@@ -16,6 +16,7 @@ import {
 import { StreakBadge } from '@/components/nightly-study/streak-badge';
 import { SessionView } from '@/components/nightly-study/session-view';
 import { BriefingView } from '@/components/nightly-study/briefing-view';
+import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 
 type View =
   | { kind: 'landing' }
@@ -24,6 +25,7 @@ type View =
 
 export default function NightlyStudyPage() {
   const [view, setView] = useState<View>({ kind: 'landing' });
+  const [showCreditDialog, setShowCreditDialog] = useState(false);
   const qc = useQueryClient();
 
   const { data: status, isLoading } = useQuery({
@@ -35,7 +37,11 @@ export default function NightlyStudyPage() {
   const startMut = useMutation({
     mutationFn: startSession,
     onSuccess: (s) => setView({ kind: 'session', session: s }),
-    onError: (e: Error) => alert(e.message),
+    onError: (e: Error) => {
+      if (e.message.includes('크레딧') || e.message.includes('INSUFFICIENT_CREDITS')) {
+        setShowCreditDialog(true);
+      }
+    },
   });
 
   const endMut = useMutation({
@@ -137,6 +143,7 @@ export default function NightlyStudyPage() {
           )}
         </>
       )}
+      <InsufficientCreditsDialog open={showCreditDialog} onOpenChange={setShowCreditDialog} />
     </div>
   );
 }

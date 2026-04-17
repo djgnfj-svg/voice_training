@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Smartphone } from 'lucide-react';
 
@@ -26,8 +27,7 @@ export default function MobileOnlyPage() {
       </div>
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {qr ? <img src={qr} alt="QR" className="h-48 w-48" /> : null}
+          {qr ? <Image src={qr} alt="QR" width={192} height={192} unoptimized /> : null}
           <p className="text-sm text-muted-foreground break-all text-center">{url}</p>
         </CardContent>
       </Card>

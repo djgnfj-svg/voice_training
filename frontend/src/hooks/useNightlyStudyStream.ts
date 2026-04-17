@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface TurnMeta {
   mode: string;
@@ -20,6 +20,18 @@ export function useNightlyStudyStream(opts: UseNightlyStudyStreamOptions) {
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Store callbacks in refs so sendTurn doesn't need them in its dep array
+  const onTextRef = useRef(opts.onText);
+  const onMetaRef = useRef(opts.onMeta);
+  const onErrorRef = useRef(opts.onError);
+  const onEndRef = useRef(opts.onEnd);
+  useEffect(() => {
+    onTextRef.current = opts.onText;
+    onMetaRef.current = opts.onMeta;
+    onErrorRef.current = opts.onError;
+    onEndRef.current = opts.onEnd;
+  });
+
   const sendTurn = useCallback(async (userUtterance: string) => {
     if (isStreaming) return;
     setIsStreaming(true);
@@ -35,7 +47,7 @@ export function useNightlyStudyStream(opts: UseNightlyStudyStreamOptions) {
       });
 
       if (!res.ok || !res.body) {
-        opts.onError('연결에 실패했어요');
+        onErrorRef.current('연결에 실패했어요');
         return;
       }
 
@@ -64,25 +76,25 @@ export function useNightlyStudyStream(opts: UseNightlyStudyStreamOptions) {
           try { payload = JSON.parse(data); } catch { continue; }
 
           if (event === 'text') {
-            opts.onText(typeof payload === 'string' ? payload : (payload as { text?: string }).text || String(payload));
+            onTextRef.current(typeof payload === 'string' ? payload : (payload as { text?: string }).text || String(payload));
           } else if (event === 'meta') {
-            opts.onMeta(payload as TurnMeta);
+            onMetaRef.current(payload as TurnMeta);
           } else if (event === 'error') {
-            opts.onError((payload as { error?: string })?.error || '에러');
+            onErrorRef.current((payload as { error?: string })?.error || '에러');
           } else if (event === 'end') {
-            opts.onEnd((payload as { turnCount?: number })?.turnCount ?? 0);
+            onEndRef.current((payload as { turnCount?: number })?.turnCount ?? 0);
           }
         }
       }
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
-        opts.onError('연결이 끊겼어요');
+        onErrorRef.current('연결이 끊겼어요');
       }
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [isStreaming, opts]);
+  }, [isStreaming, opts.sessionId]);
 
   const abort = useCallback(() => {
     abortRef.current?.abort();

@@ -49,9 +49,9 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const firstMessageRef = useRef(firstMessage);
   useEffect(() => {
-    playTTS(firstMessage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    playTTS(firstMessageRef.current);
   }, []);
 
   const handleSend = async () => {
@@ -126,7 +126,13 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
   );
 }
 
+let currentAudio: HTMLAudioElement | null = null;
+
 async function playTTS(text: string) {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
   try {
     const res = await fetch('/api/tts', {
       method: 'POST',
@@ -137,8 +143,12 @@ async function playTTS(text: string) {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
+    currentAudio = audio;
     await audio.play();
-    audio.onended = () => URL.revokeObjectURL(url);
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      if (currentAudio === audio) currentAudio = null;
+    };
   } catch {
     // fail silently
   }

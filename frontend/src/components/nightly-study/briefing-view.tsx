@@ -12,6 +12,11 @@ interface Props {
 }
 
 export function BriefingView({ result, onClose }: Props) {
+  const learned = result.highlights?.learned ?? [];
+  const improved = result.highlights?.improved ?? [];
+  const headline = result.highlights?.headline ?? '오늘도 수고하셨어요';
+  const streak = result.streakUpdated ?? { current: 0, longest: 0, totalSessions: 0, totalNodesLearned: 0, isNewRecord: false };
+
   useEffect(() => {
     const text = result.voiceBriefing;
     if (!text) return;
@@ -43,7 +48,7 @@ export function BriefingView({ result, onClose }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-base">{result.highlights.headline}</p>
+          <p className="text-base">{headline}</p>
         </CardContent>
       </Card>
 
@@ -54,20 +59,20 @@ export function BriefingView({ result, onClose }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {result.highlights.learned.length === 0 ? (
+          {learned.length === 0 ? (
             <p className="text-sm text-muted-foreground">—</p>
           ) : (
             <ul className="text-sm space-y-1">
-              {result.highlights.learned.map((item, i) => (
+              {learned.map((item, i) => (
                 <li key={i}>• {item}</li>
               ))}
             </ul>
           )}
-          {result.highlights.improved.length > 0 && (
+          {improved.length > 0 && (
             <div className="pt-2 border-t mt-2">
               <p className="text-xs font-medium text-muted-foreground mb-1">개선 포인트</p>
               <ul className="text-sm space-y-1">
-                {result.highlights.improved.map((item, i) => (
+                {improved.map((item, i) => (
                   <li key={i}>• {item}</li>
                 ))}
               </ul>
@@ -80,14 +85,14 @@ export function BriefingView({ result, onClose }: Props) {
         <CardContent className="flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
             <Flame className="h-6 w-6 text-orange-500" />
-            <span className="text-lg font-bold">{result.streakUpdated.current}일</span>
-            {result.streakUpdated.isNewRecord && (
+            <span className="text-lg font-bold">{streak.current}일</span>
+            {streak.isNewRecord && (
               <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">최고 기록</span>
             )}
           </div>
           <div className="text-right text-xs text-muted-foreground">
-            <div>총 {result.streakUpdated.totalSessions}회 학습</div>
-            <div>{result.streakUpdated.totalNodesLearned}개 토픽 마스터</div>
+            <div>총 {streak.totalSessions}회 학습</div>
+            <div>{streak.totalNodesLearned}개 토픽 마스터</div>
           </div>
         </CardContent>
       </Card>
