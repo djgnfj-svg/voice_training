@@ -11,6 +11,14 @@ from app.services.coupon import CouponRedeemError, redeem_coupon
 router = APIRouter()
 
 
+COUPON_ERROR_MESSAGES = {
+    "INVALID_COUPON": "유효하지 않은 쿠폰입니다.",
+    "EXPIRED_COUPON": "만료된 쿠폰입니다.",
+    "MAX_USES_REACHED": "쿠폰 사용 한도에 도달했습니다.",
+    "ALREADY_USED": "이미 사용한 쿠폰입니다.",
+}
+
+
 class RedeemRequest(BaseModel):
     code: str = Field(min_length=1, max_length=50)
 
@@ -29,7 +37,8 @@ async def redeem(
             "message": f"{result['credits']} 크레딧이 지급되었습니다.",
         }
     except CouponRedeemError as e:
+        message = COUPON_ERROR_MESSAGES.get(e.code, "쿠폰 사용에 실패했습니다.")
         raise HTTPException(
             status_code=400,
-            detail={"error": str(e.code), "code": e.code},
+            detail={"error": message, "code": e.code},
         )

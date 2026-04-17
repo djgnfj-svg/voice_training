@@ -118,7 +118,8 @@ export default function CreditsPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast({ title: data.error || '쿠폰 사용 실패', variant: 'destructive' });
+        const message = data.detail?.error || data.error || '쿠폰 사용 실패';
+        toast({ title: message, variant: 'destructive' });
         return;
       }
 
