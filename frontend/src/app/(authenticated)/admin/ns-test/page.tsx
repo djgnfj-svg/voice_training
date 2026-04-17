@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/useToast';
 
 type Hit = {
   id: string;
@@ -32,6 +34,30 @@ type SeedNode = {
 
 const CATEGORIES = ['misconception', 'explanation', 'connection', 'question'] as const;
 
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = data.detail?.error || data.error || `요청 실패 (${res.status})`;
+    throw new Error(message);
+  }
+  return data as T;
+}
+
+async function getJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = data.detail?.error || data.error || `요청 실패 (${res.status})`;
+    throw new Error(message);
+  }
+  return data as T;
+}
+
 export default function NsTestPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
@@ -53,28 +79,23 @@ export default function NsTestPage() {
 function InsertCard() {
   const [category, setCategory] = useState<typeof CATEGORIES[number]>('explanation');
   const [content, setContent] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const toast = useToast((s) => s.toast);
 
-  const submit = async () => {
-    if (!content.trim()) return;
-    setLoading(true);
-    setResult(null);
-    try {
-      const res = await fetch('/api/admin/ns-test/insert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, content }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(JSON.stringify(data));
-      setResult(`저장됨: ${data.id}`);
+  const mutation = useMutation({
+    mutationFn: (body: { category: string; content: string }) =>
+      postJson<{ id: string }>('/api/admin/ns-test/insert', body),
+    onSuccess: (data) => {
+      toast({ title: `저장됨: ${data.id}` });
       setContent('');
-    } catch (e) {
-      setResult(`실패: ${(e as Error).message}`);
-    } finally {
-      setLoading(false);
-    }
+    },
+    onError: (e: Error) => {
+      toast({ title: '저장 실패', description: e.message, variant: 'destructive' });
+    },
+  });
+
+  const submit = () => {
+    if (!content.trim()) return;
+    mutation.mutate({ category, content });
   };
 
   return (
@@ -101,12 +122,9 @@ function InsertCard() {
           placeholder="내용 입력 (예: '유저가 이벤트 루프에서 콜스택과 태스크 큐를 헷갈려함')"
           rows={3}
         />
-        <Button onClick={submit} disabled={loading || !content.trim()}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+        <Button onClick={submit} disabled={mutation.isPending || !content.trim()}>
+          {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
         </Button>
-        {result && (
-          <p className="text-xs text-muted-foreground break-all">{result}</p>
-        )}
       </CardContent>
     </Card>
   );
@@ -115,29 +133,22 @@ function InsertCard() {
 function SearchCard() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-  const [hits, setHits] = useState<Hit[] | null>(null);
+  const toast = useToast((s) => s.toast);
 
-  const submit = async () => {
+  const mutation = useMutation({
+    mutationFn: (body: { query: string; category: string | null }) =>
+      postJson<{ hits: Hit[] }>('/api/admin/ns-test/search', body),
+    onError: (e: Error) => {
+      toast({ title: '검색 실패', description: e.message, variant: 'destructive' });
+    },
+  });
+
+  const submit = () => {
     if (!query.trim()) return;
-    setLoading(true);
-    setHits(null);
-    try {
-      const res = await fetch('/api/admin/ns-test/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, category: category || null }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(JSON.stringify(data));
-      setHits(data.hits);
-    } catch (e) {
-      setHits([]);
-      alert(`실패: ${(e as Error).message}`);
-    } finally {
-      setLoading(false);
-    }
+    mutation.mutate({ query, category: category || null });
   };
+
+  const hits = mutation.data?.hits ?? null;
 
   return (
     <Card>
@@ -170,8 +181,8 @@ function SearchCard() {
           placeholder="검색 쿼리 (예: '이벤트 루프')"
           onKeyDown={(e) => e.key === 'Enter' && submit()}
         />
-        <Button onClick={submit} disabled={loading || !query.trim()}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : '검색'}
+        <Button onClick={submit} disabled={mutation.isPending || !query.trim()}>
+          {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '검색'}
         </Button>
         {hits !== null && (
           <div className="space-y-2 pt-2">
@@ -198,22 +209,20 @@ function SearchCard() {
 }
 
 function MyEmbeddingsCard() {
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<EmbRow[] | null>(null);
+  const [enabled, setEnabled] = useState(false);
+  const toast = useToast((s) => s.toast);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/admin/ns-test/my-embeddings');
-      const data = await res.json();
-      if (!res.ok) throw new Error(JSON.stringify(data));
-      setRows(data.rows);
-    } catch (e) {
-      alert(`실패: ${(e as Error).message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const query = useQuery({
+    queryKey: ['ns-test', 'my-embeddings'],
+    queryFn: () => getJson<{ rows: EmbRow[] }>('/api/admin/ns-test/my-embeddings'),
+    enabled,
+  });
+
+  if (query.error && enabled) {
+    toast({ title: '불러오기 실패', description: (query.error as Error).message, variant: 'destructive' });
+  }
+
+  const rows = query.data?.rows ?? null;
 
   return (
     <Card>
@@ -221,8 +230,15 @@ function MyEmbeddingsCard() {
         <CardTitle className="text-base">3. 내 임베딩 목록 (최신 20)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <Button onClick={load} disabled={loading} variant="outline">
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : '불러오기'}
+        <Button
+          onClick={() => {
+            if (enabled) query.refetch();
+            else setEnabled(true);
+          }}
+          disabled={query.isFetching}
+          variant="outline"
+        >
+          {query.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : '불러오기'}
         </Button>
         {rows !== null && (
           <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -250,35 +266,24 @@ function MyEmbeddingsCard() {
 
 function SeedPreviewCard() {
   const [title, setTitle] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [nodes, setNodes] = useState<SeedNode[] | null>(null);
-  const [raw, setRaw] = useState<string>('');
+  const toast = useToast((s) => s.toast);
 
-  const submit = async () => {
+  const mutation = useMutation({
+    mutationFn: (body: { title: string }) =>
+      postJson<{ data: { nodes?: SeedNode[] } }>('/api/admin/ns-test/seed-preview', body),
+    onError: (e: Error) => {
+      toast({ title: '생성 실패', description: e.message, variant: 'destructive' });
+    },
+  });
+
+  const submit = () => {
     if (!title.trim()) return;
-    setLoading(true);
-    setNodes(null);
-    setRaw('');
-    try {
-      const res = await fetch('/api/admin/ns-test/seed-preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(JSON.stringify(data));
-      const arr = data.data?.nodes;
-      if (Array.isArray(arr)) {
-        setNodes(arr);
-      } else {
-        setRaw(JSON.stringify(data.data, null, 2));
-      }
-    } catch (e) {
-      alert(`실패: ${(e as Error).message}`);
-    } finally {
-      setLoading(false);
-    }
+    mutation.mutate({ title });
   };
+
+  const arr = mutation.data?.data?.nodes;
+  const nodes = Array.isArray(arr) ? arr : null;
+  const raw = mutation.data && !nodes ? JSON.stringify(mutation.data.data, null, 2) : '';
 
   return (
     <Card>
@@ -295,8 +300,8 @@ function SeedPreviewCard() {
           placeholder="목표 (예: 백엔드 엔지니어, AI Agent 엔지니어)"
           onKeyDown={(e) => e.key === 'Enter' && submit()}
         />
-        <Button onClick={submit} disabled={loading || !title.trim()}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : '생성'}
+        <Button onClick={submit} disabled={mutation.isPending || !title.trim()}>
+          {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '생성'}
         </Button>
         {nodes && (
           <div className="space-y-2 pt-2">
