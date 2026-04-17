@@ -8,7 +8,7 @@ export function AuthenticatedContent({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const isFullscreenSession =
     pathname.startsWith('/interview/session/') ||
-    pathname === '/agent-interview/session/new';
+    pathname.startsWith('/agent-interview/session/');
 
   if (isFullscreenSession) {
     return (
