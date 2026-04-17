@@ -95,8 +95,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
       resetTranscript();
       lastHeardRef.current = '';
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAiSpeaking, isStreaming]);
+  }, [isAiSpeaking, isStreaming, isListening, startListening, stopListening, resetTranscript]);
 
   // 무음 감지 → 자동 전송
   useEffect(() => {

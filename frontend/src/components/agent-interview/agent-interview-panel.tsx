@@ -49,6 +49,12 @@ export function AgentInterviewPanel({
 
   const tts = useTextToSpeech({ persona: 'interviewer' });
   const speech = useSpeechRecognition();
+  const { speak: ttsSpeak, stop: ttsStop } = tts;
+  const {
+    startListening: speechStart,
+    stopListening: speechStop,
+    resetTranscript: speechReset,
+  } = speech;
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [answerWarning, setAnswerWarning] = useState<string | null>(null);
 
@@ -81,25 +87,25 @@ export function AgentInterviewPanel({
 
     (async () => {
       try {
-        await tts.speak(lastMsg.content);
+        await ttsSpeak(lastMsg.content);
       } catch {}
       // Start listening after TTS finishes
-      speech.resetTranscript();
+      speechReset();
       setAnswerWarning(null);
-      speech.startListening();
+      speechStart();
     })();
-  }, [phase, messages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, messages, ttsSpeak, speechReset, speechStart]);
 
   // Stop listening when leaving waiting_answer phase
   useEffect(() => {
     if (phase !== 'waiting_answer' && speech.isListening) {
-      speech.stopListening();
+      speechStop();
     }
     if (phase !== 'waiting_answer' && silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
-  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, speech.isListening, speechStop]);
 
   // Silence auto-submit: N초간 transcript 변화 없으면 자동 제출
   useEffect(() => {
@@ -129,10 +135,10 @@ export function AgentInterviewPanel({
         return;
       }
       setAnswerWarning(null);
-      tts.stop();
-      speech.stopListening();
+      ttsStop();
+      speechStop();
       submitAnswer(text);
-      speech.resetTranscript();
+      speechReset();
       lastTranscriptRef.current = '';
     }, SILENCE_TIMEOUT_MS);
 
@@ -142,7 +148,17 @@ export function AgentInterviewPanel({
         silenceTimerRef.current = null;
       }
     };
-  }, [speech.transcript, speech.interimTranscript, speech.isListening, phase, tts.isSpeaking]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    speech.transcript,
+    speech.interimTranscript,
+    speech.isListening,
+    phase,
+    tts.isSpeaking,
+    ttsStop,
+    speechStop,
+    speechReset,
+    submitAnswer,
+  ]);
 
   const handleSubmit = () => {
     const transcript = normalizeTranscript(speech.transcript);

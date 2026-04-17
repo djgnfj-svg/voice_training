@@ -88,7 +88,7 @@ export default function InterviewSessionPage() {
         window.history.back();
       }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [interview.phase]);
 
   const handleExitConfirm = useCallback(() => {
     interview.tts.stop();

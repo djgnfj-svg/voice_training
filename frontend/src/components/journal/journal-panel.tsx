@@ -146,31 +146,35 @@ export function JournalPanel() {
   }, [speech.transcript, speech.interimTranscript, speech.isListening, speech, tts.isSpeaking, journal, inactivity]);
 
   // ── AI 응답 → TTS → 끝나면 리스닝 재개 ──
+  const journalModeRef = useRef(journal.mode);
+  journalModeRef.current = journal.mode;
+  const { stopListening: speechStop, startListening: speechStart, resetTranscript: speechReset } = speech;
+  const { speak: ttsSpeak } = tts;
+
   useEffect(() => {
     const lastMsg = journal.messages[journal.messages.length - 1];
     if (!lastMsg || lastMsg.role !== "assistant") return;
     if (lastMsg.content === lastAiMessageRef.current) return;
     lastAiMessageRef.current = lastMsg.content;
 
-    speech.stopListening();
+    speechStop();
 
     const ttsText = stripEmoji(lastMsg.content);
     if (!ttsText) return;
 
     const resumeListening = () => {
       if (journalPhaseRef.current === "active" && micCheckedRef.current) {
-        speech.resetTranscript();
+        speechReset();
         lastTranscriptRef.current = "";
-        speech.startListening();
+        speechStart();
       }
     };
 
-    const persona = (lastMsg.mode ?? journal.mode) === "counseling"
+    const persona = (lastMsg.mode ?? journalModeRef.current) === "counseling"
       ? "journal_counselor"
       : "journal_friend";
-    tts.speak(ttsText, { persona }).then(resumeListening).catch(resumeListening);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [journal.messages]);
+    ttsSpeak(ttsText, { persona }).then(resumeListening).catch(resumeListening);
+  }, [journal.messages, speechStop, speechStart, speechReset, ttsSpeak]);
 
   // ══════════════════════════════════════
   // 렌더링
