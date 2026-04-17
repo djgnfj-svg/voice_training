@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Mic, StopCircle, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Mic, Loader2, Send, X, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useNightlyStudyStream } from '@/hooks/useNightlyStudyStream';
@@ -19,6 +19,8 @@ interface Props {
   onEnd: () => Promise<void>;
 }
 
+const SILENCE_MS = 2500; // 2.5초 무음 시 자동 전송
+
 export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: firstMessage },
@@ -27,19 +29,24 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
   const [shouldSuggestEnd, setShouldSuggestEnd] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHeardRef = useRef<string>('');
 
-  const { isListening, startListening, stopListening, transcript, resetTranscript } = useSpeechRecognition();
-
-  const speak = (text: string) => {
-    setIsAiSpeaking(true);
-    playTTS(text, () => setIsAiSpeaking(false));
-  };
+  const {
+    isListening,
+    startListening,
+    stopListening,
+    transcript,
+    interimTranscript,
+    resetTranscript,
+  } = useSpeechRecognition();
 
   const { isStreaming, sendTurn } = useNightlyStudyStream({
     sessionId,
     onText: (text) => {
       setMessages((prev) => [...prev, { role: 'assistant', content: text }]);
-      speak(text);
+      setIsAiSpeaking(true);
+      playTTS(text, () => setIsAiSpeaking(false));
     },
     onMeta: (meta) => {
       if (meta.nodeChangedTo) setCurrentTopicLabel(meta.nodeChangedTo.title);
@@ -51,10 +58,25 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     onEnd: () => {},
   });
 
+  const handleSend = useCallback(async (textOverride?: string) => {
+    const text = (textOverride ?? transcript).trim();
+    if (!text || isStreaming) return;
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    lastHeardRef.current = '';
+    setMessages((prev) => [...prev, { role: 'user', content: text }]);
+    resetTranscript();
+    stopListening();
+    await sendTurn(text);
+  }, [transcript, isStreaming, resetTranscript, stopListening, sendTurn]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, interimTranscript]);
 
+  // 첫 메시지 TTS 재생
   const firstMessageRef = useRef(firstMessage);
   useEffect(() => {
     const text = firstMessageRef.current;
@@ -62,16 +84,44 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     playTTS(text, () => setIsAiSpeaking(false));
   }, []);
 
-  const handleSend = async () => {
-    const text = transcript.trim();
-    if (!text || isStreaming) return;
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
-    resetTranscript();
-    stopListening();
-    await sendTurn(text);
-  };
+  // AI 발화 끝나면 자동 듣기 시작
+  useEffect(() => {
+    if (!isAiSpeaking && !isListening && !isStreaming) {
+      startListening();
+    }
+    // AI가 다시 말하기 시작하면 듣기 중지
+    if (isAiSpeaking && isListening) {
+      stopListening();
+      resetTranscript();
+      lastHeardRef.current = '';
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAiSpeaking, isStreaming]);
 
-  const micDisabled = isStreaming || isAiSpeaking;
+  // 무음 감지 → 자동 전송
+  useEffect(() => {
+    if (!isListening) return;
+    const combined = transcript + interimTranscript;
+    if (combined === lastHeardRef.current) return;
+    lastHeardRef.current = combined;
+
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    if (transcript.trim().length > 0) {
+      silenceTimerRef.current = setTimeout(() => {
+        handleSend();
+      }, SILENCE_MS);
+    }
+  }, [transcript, interimTranscript, isListening, handleSend]);
+
+  // 언마운트 시 정리
+  useEffect(() => {
+    return () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    };
+  }, []);
+
+  const showInterim = isListening && (transcript || interimTranscript);
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col h-[100dvh]">
@@ -80,7 +130,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
           <Badge variant="secondary">{currentTopicLabel}</Badge>
         ) : (
           <span className="text-sm text-muted-foreground">
-            {isAiSpeaking ? 'AI가 말하는 중...' : '대화 중'}
+            {isAiSpeaking ? 'AI가 말하는 중...' : isListening ? '듣는 중...' : '대화 중'}
           </span>
         )}
         <Button variant="ghost" size="sm" onClick={onEnd}>
@@ -101,9 +151,12 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
             {m.content}
           </div>
         ))}
-        {isListening && transcript ? (
+        {showInterim ? (
           <div className="max-w-[85%] ml-auto rounded-lg px-3 py-2 text-sm bg-primary/20 text-primary">
             {transcript}
+            {interimTranscript ? (
+              <span className="opacity-60">{transcript ? ' ' : ''}{interimTranscript}</span>
+            ) : null}
           </div>
         ) : null}
         <div ref={bottomRef} />
@@ -115,25 +168,36 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
         </div>
       ) : null}
 
-      <footer className="border-t p-3 flex items-center gap-2 shrink-0 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-        {!isListening ? (
-          <Button
-            className="flex-1 h-14"
-            onClick={startListening}
-            disabled={micDisabled}
-          >
-            <Mic className="mr-2 h-5 w-5" />
-            {isAiSpeaking ? 'AI가 말하는 중...' : '말하기'}
-          </Button>
-        ) : (
-          <Button
-            className="flex-1 h-14"
-            variant="destructive"
-            onClick={handleSend}
-          >
-            <StopCircle className="mr-2 h-5 w-5" /> 완료
-          </Button>
-        )}
+      <footer className="border-t p-3 shrink-0 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+        <div className="flex items-center justify-center gap-3 h-14">
+          {isAiSpeaking ? (
+            <>
+              <Volume2 className="h-5 w-5 text-primary animate-pulse" />
+              <span className="text-sm text-muted-foreground">AI가 말하는 중...</span>
+            </>
+          ) : isStreaming ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">생각 중...</span>
+            </>
+          ) : isListening ? (
+            <>
+              <Mic className="h-5 w-5 text-primary animate-pulse" />
+              <span className="text-sm text-muted-foreground">
+                {transcript.trim().length > 0 ? '말 멈추면 자동 전송' : '말씀하세요'}
+              </span>
+              {transcript.trim().length > 0 ? (
+                <Button size="sm" variant="outline" onClick={() => handleSend()} className="ml-2">
+                  <Send className="h-4 w-4 mr-1" /> 지금 보내기
+                </Button>
+              ) : null}
+            </>
+          ) : (
+            <Button size="sm" variant="outline" onClick={startListening}>
+              <Mic className="h-4 w-4 mr-1" /> 듣기 시작
+            </Button>
+          )}
+        </div>
       </footer>
     </div>
   );
