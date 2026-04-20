@@ -15,10 +15,14 @@ async def generate_and_insert_seed(
     db: AsyncSession,
     goal_id: str,
     goal_title: str,
+    commit: bool = True,
 ) -> int:
     """
     Call LLM to generate seed curriculum, insert curriculum_nodes.
     Returns number of nodes inserted.
+
+    If commit=False, caller is responsible for committing the transaction,
+    enabling callers to bundle seed INSERTs with surrounding writes atomically.
     """
     # .format() crashes if goal_title contains `{`; use .replace() for safety
     prompt = SEED_CURRICULUM_PROMPT.replace("{goal_title}", goal_title)
@@ -58,7 +62,8 @@ async def generate_and_insert_seed(
         row = result.one()
         title_to_id[node["title"]] = str(row.id)
 
-    await db.commit()
+    if commit:
+        await db.commit()
     return len(nodes)
 
 

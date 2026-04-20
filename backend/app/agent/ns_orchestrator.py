@@ -13,6 +13,7 @@ from app.agent.ns_tools import (
     tool_retrieve_memory, tool_explain_concept, tool_quiz,
     tool_ask_probing, tool_suggest_end, tool_pivot_topic,
     tool_extend_curriculum, tool_evaluate_answer,
+    tool_propose_goal_change, tool_confirm_goal_change,
 )
 from app.agent.ns_seed import generate_and_insert_seed, normalize_goal
 
@@ -76,6 +77,7 @@ async def run_turn(
 
     # 5. Execute actions
     node_changed_to = None
+    goal_swap_confirmed = False
     rag_hits = []
     assistant_reply_parts: list[str] = []
 
@@ -116,7 +118,6 @@ async def run_turn(
                 assistant_reply_parts.append(text_out)
 
             elif tool == "propose_goal_change" and planner_out.get("goal_change_proposed"):
-                from app.agent.ns_tools import tool_propose_goal_change
                 reply, _pending = await tool_propose_goal_change(
                     db=db,
                     session_id=session_id,
@@ -127,7 +128,6 @@ async def run_turn(
                 assistant_reply_parts.append(reply)
 
             elif tool == "confirm_goal_change":
-                from app.agent.ns_tools import tool_confirm_goal_change
                 confirm = bool(planner_out.get("goal_change_confirm"))
                 reply, new_node = await tool_confirm_goal_change(
                     db=db,
@@ -139,6 +139,7 @@ async def run_turn(
                 assistant_reply_parts.append(reply)
                 if new_node:
                     node_changed_to = new_node
+                    goal_swap_confirmed = True
 
             elif tool == "pivot_topic" and state["goal_id"]:
                 target = args.get("target") or planner_out.get("pivot_target") or ""
@@ -244,8 +245,10 @@ async def run_turn(
     if latest_pending and latest_pending.get("type") == "goal_change":
         awaiting_goal_confirm = {"proposedGoal": latest_pending.get("proposedGoal")}
 
+    # goal_changed_to는 실제 swap이 성공한 경우(tool이 new_node 반환)에만 설정.
+    # Stale pending/rollback/부정 응답에서 planner intent만 confirm이어도 엉뚱한 값 내보내지 않도록.
     goal_changed_to = None
-    if planner_out.get("intent") == "confirm" and bool(planner_out.get("goal_change_confirm")):
+    if goal_swap_confirmed:
         g_row = (await db.execute(
             text("""
                 SELECT lg.id, lg.title FROM learning_sessions ls

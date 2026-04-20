@@ -239,6 +239,21 @@ async def tool_confirm_goal_change(
         await db.commit()
         return ("네, 계속 이어가죠.", None)
 
+    # Server-side TTL guard — planner prompt says 5 min, but prompt-only rules can silently weaken.
+    proposed_at_str = pending_action.get("proposedAt")
+    if proposed_at_str:
+        try:
+            proposed_at = datetime.fromisoformat(proposed_at_str)
+            if (datetime.now(timezone.utc) - proposed_at).total_seconds() > 300:
+                await db.execute(
+                    text("UPDATE learning_sessions SET pending_action=NULL WHERE id=:s"),
+                    {"s": session_id},
+                )
+                await db.commit()
+                return ("요청이 오래돼서 다시 확인이 필요해요. 목표를 바꾸고 싶으시면 한 번 더 말씀해주세요.", None)
+        except ValueError:
+            pass
+
     new_goal_text = (pending_action.get("proposedGoal") or "").strip()
 
     if not confirm or not new_goal_text:
@@ -249,76 +264,57 @@ async def tool_confirm_goal_change(
         await db.commit()
         return ("알겠습니다. 원래 주제 계속 이어가죠.", None)
 
-    # Archive current active goal
-    await db.execute(
-        text("UPDATE learning_goals SET status='archived' WHERE user_id=:u AND status='active'"),
-        {"u": user_id},
-    )
-    # Insert new active goal
-    result = await db.execute(
-        text("""
-            INSERT INTO learning_goals (user_id, title, normalized_goal, status)
-            VALUES (:u, :t, :n, 'active')
-            RETURNING id
-        """),
-        {"u": user_id, "t": new_goal_text, "n": normalize_goal(new_goal_text)},
-    )
-    new_goal_id = str(result.one().id)
-    await db.commit()
-
-    # Regenerate seed curriculum (sync — user is waiting)
+    # Atomic goal swap: archive → insert → seed → first node → session swap in one transaction.
+    # Any failure → rollback → leaves the previous active goal intact (no manual revert needed).
     try:
-        await generate_and_insert_seed(db, new_goal_id, new_goal_text)
-    except Exception:
-        logger.exception("seed re-generation failed on goal swap")
-        # Revert: archive the new (failed) goal and resurrect the most recent archived one
         await db.execute(
-            text("UPDATE learning_goals SET status='archived' WHERE id=:g"),
-            {"g": new_goal_id},
+            text("UPDATE learning_goals SET status='archived' WHERE user_id=:u AND status='active'"),
+            {"u": user_id},
         )
+        result = await db.execute(
+            text("""
+                INSERT INTO learning_goals (user_id, title, normalized_goal, status)
+                VALUES (:u, :t, :n, 'active')
+                RETURNING id
+            """),
+            {"u": user_id, "t": new_goal_text, "n": normalize_goal(new_goal_text)},
+        )
+        new_goal_id = str(result.one().id)
+
+        await generate_and_insert_seed(db, new_goal_id, new_goal_text, commit=False)
+
+        first_node_row = (await db.execute(
+            text("""
+                SELECT id, title FROM curriculum_nodes
+                WHERE goal_id=:g
+                ORDER BY depth_level ASC, title ASC LIMIT 1
+            """),
+            {"g": new_goal_id},
+        )).one_or_none()
+
+        new_node = None
+        if first_node_row:
+            new_node = {"id": str(first_node_row.id), "title": first_node_row.title}
+
         await db.execute(
             text("""
-                UPDATE learning_goals
-                SET status='active'
-                WHERE id = (
-                    SELECT id FROM learning_goals
-                    WHERE user_id=:u AND status='archived' AND id <> :g
-                    ORDER BY created_at DESC NULLS LAST LIMIT 1
-                )
+                UPDATE learning_sessions
+                SET goal_id=:g, pending_action=NULL
+                WHERE id=:s
             """),
-            {"u": user_id, "g": new_goal_id},
+            {"g": new_goal_id, "s": session_id},
         )
+        await db.commit()
+    except Exception:
+        logger.exception("goal swap failed; rolling back")
+        await db.rollback()
+        # Fresh transaction to clear pending so the user isn't stuck in confirm loop.
         await db.execute(
             text("UPDATE learning_sessions SET pending_action=NULL WHERE id=:s"),
             {"s": session_id},
         )
         await db.commit()
         return ("커리큘럼을 다시 만드는 데 실패했어요. 잠시 후 다시 시도해주세요.", None)
-
-    # Pick first seed node
-    first_node_row = (await db.execute(
-        text("""
-            SELECT id, title FROM curriculum_nodes
-            WHERE goal_id=:g
-            ORDER BY depth_level ASC, title ASC LIMIT 1
-        """),
-        {"g": new_goal_id},
-    )).one_or_none()
-
-    new_node = None
-    if first_node_row:
-        new_node = {"id": str(first_node_row.id), "title": first_node_row.title}
-
-    # Swap session's goal_id + clear pending
-    await db.execute(
-        text("""
-            UPDATE learning_sessions
-            SET goal_id=:g, pending_action=NULL
-            WHERE id=:s
-        """),
-        {"g": new_goal_id, "s": session_id},
-    )
-    await db.commit()
 
     first_title = new_node["title"] if new_node else "새 주제"
     reply = f"좋아요, 목표를 '{new_goal_text}'로 바꿨어요. 먼저 '{first_title}'부터 시작해볼게요."
