@@ -151,11 +151,12 @@ async def start_session(
             f"다시 오셨네요. 오늘은 '{target_node['title']}' 해볼까요?"
             if target_node else "오늘도 시작해볼까요?"
         )
-        # 재방문: 과거 completed 세션이 있으면 RAG 기반 이어가기 인사 생성
+        # 재방문: 실질 내용이 있는 과거 세션이 있으면 RAG 기반 이어가기 인사.
+        # summary NULL인 자동 종료 세션(예: /start 직후 중단)은 제외.
         past_count_row = (await db.execute(
             text("""
                 SELECT COUNT(*) AS c FROM learning_sessions
-                WHERE user_id=:u AND status='completed'
+                WHERE user_id=:u AND status='completed' AND summary IS NOT NULL
             """),
             {"u": user.id},
         )).one()

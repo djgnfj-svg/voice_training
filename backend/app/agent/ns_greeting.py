@@ -12,7 +12,8 @@ from app.prompts.nightly_study import CONTINUATION_GREETING_PROMPT
 
 logger = logging.getLogger(__name__)
 
-_GREETING_TIMEOUT_SEC = 3.0
+_GREETING_LLM_TIMEOUT_SEC = 3.0
+_GREETING_CONTEXT_TIMEOUT_SEC = 2.0
 
 
 async def generate_continuation_greeting(
@@ -27,7 +28,10 @@ async def generate_continuation_greeting(
     Returns `fallback` string on any failure / timeout / empty context.
     """
     try:
-        ctx = await _collect_context(db, user_id, goal_id, target_node)
+        ctx = await asyncio.wait_for(
+            _collect_context(db, user_id, goal_id, target_node),
+            timeout=_GREETING_CONTEXT_TIMEOUT_SEC,
+        )
         if not ctx["has_anything"]:
             return fallback
 
@@ -39,7 +43,7 @@ async def generate_continuation_greeting(
             .replace("{target_node}", (target_node or {}).get("title") or "(미정)")
         )
 
-        text_out = await asyncio.wait_for(call_llm(prompt), timeout=_GREETING_TIMEOUT_SEC)
+        text_out = await asyncio.wait_for(call_llm(prompt), timeout=_GREETING_LLM_TIMEOUT_SEC)
         text_out = (text_out or "").strip()
         if not text_out:
             return fallback
