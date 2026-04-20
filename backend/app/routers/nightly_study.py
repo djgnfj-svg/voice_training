@@ -307,7 +307,8 @@ async def end_session(
         text("""
             UPDATE learning_sessions
             SET status='completed', ended_at=NOW(),
-                summary=:sum, highlights=CAST(:h AS jsonb), voice_briefing=:vb
+                summary=:sum, highlights=CAST(:h AS jsonb), voice_briefing=:vb,
+                pending_action=NULL
             WHERE id=:s
         """),
         {

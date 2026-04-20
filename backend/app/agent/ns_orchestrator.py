@@ -54,6 +54,7 @@ async def run_turn(
             rag_hits=[],  # will be filled if retrieve_memory runs
             curriculum_context=state["curriculum_context"],
             turn_count=state["turn_count"],
+            pending_action=state.get("pending_action"),
         )
     except Exception as e:
         logger.exception("planner failed")
@@ -113,6 +114,31 @@ async def run_turn(
                     state["mastery"]["proficiency"] if state["mastery"] else 0,
                 )
                 assistant_reply_parts.append(text_out)
+
+            elif tool == "propose_goal_change" and planner_out.get("goal_change_proposed"):
+                from app.agent.ns_tools import tool_propose_goal_change
+                reply, _pending = await tool_propose_goal_change(
+                    db=db,
+                    session_id=session_id,
+                    user_id=user_id,
+                    new_goal=planner_out["goal_change_proposed"],
+                    current_goal_title=state.get("goal_title"),
+                )
+                assistant_reply_parts.append(reply)
+
+            elif tool == "confirm_goal_change":
+                from app.agent.ns_tools import tool_confirm_goal_change
+                confirm = bool(planner_out.get("goal_change_confirm"))
+                reply, new_node = await tool_confirm_goal_change(
+                    db=db,
+                    session_id=session_id,
+                    user_id=user_id,
+                    confirm=confirm,
+                    pending_action=state.get("pending_action"),
+                )
+                assistant_reply_parts.append(reply)
+                if new_node:
+                    node_changed_to = new_node
 
             elif tool == "pivot_topic" and state["goal_id"]:
                 target = args.get("target") or planner_out.get("pivot_target") or ""
@@ -208,6 +234,29 @@ async def run_turn(
     await db.commit()
 
     # 8. meta event
+    latest_pending_row = (await db.execute(
+        text("SELECT pending_action FROM learning_sessions WHERE id=:s"),
+        {"s": session_id},
+    )).one_or_none()
+    latest_pending = latest_pending_row.pending_action if latest_pending_row else None
+
+    awaiting_goal_confirm = None
+    if latest_pending and latest_pending.get("type") == "goal_change":
+        awaiting_goal_confirm = {"proposedGoal": latest_pending.get("proposedGoal")}
+
+    goal_changed_to = None
+    if planner_out.get("intent") == "confirm" and bool(planner_out.get("goal_change_confirm")):
+        g_row = (await db.execute(
+            text("""
+                SELECT lg.id, lg.title FROM learning_sessions ls
+                JOIN learning_goals lg ON lg.id = ls.goal_id
+                WHERE ls.id=:s
+            """),
+            {"s": session_id},
+        )).one_or_none()
+        if g_row:
+            goal_changed_to = {"id": str(g_row.id), "title": g_row.title}
+
     yield {
         "type": "meta",
         "data": {
@@ -219,6 +268,8 @@ async def run_turn(
             ),
             "proficiencyAfter": proficiency_after,
             "shouldSuggestEnd": planner_out["should_suggest_end"],
+            "awaitingGoalConfirm": awaiting_goal_confirm,
+            "goalChangedTo": goal_changed_to,
         },
     }
 
@@ -238,7 +289,7 @@ async def _run_seed_bg(goal_id: str, goal_title: str) -> None:
 async def _load_turn_state(db: AsyncSession, session_id: str) -> dict | None:
     """Load everything planner needs: session, goal, current_node candidate, mastery, history."""
     sess_row = (await db.execute(
-        text("SELECT user_id, goal_id, turn_count FROM learning_sessions WHERE id=:s AND status='active'"),
+        text("SELECT user_id, goal_id, turn_count, pending_action FROM learning_sessions WHERE id=:s AND status='active'"),
         {"s": session_id},
     )).one_or_none()
     if sess_row is None:
@@ -247,6 +298,7 @@ async def _load_turn_state(db: AsyncSession, session_id: str) -> dict | None:
     user_id = sess_row.user_id
     goal_id = str(sess_row.goal_id) if sess_row.goal_id else None
     turn_count = sess_row.turn_count
+    pending_action = sess_row.pending_action
 
     # Last assistant message index
     last_idx_row = (await db.execute(
@@ -378,6 +430,7 @@ async def _load_turn_state(db: AsyncSession, session_id: str) -> dict | None:
         "turn_count": turn_count,
         "next_index": next_index,
         "briefing_notes": briefing_notes,
+        "pending_action": pending_action,
     }
 
 

@@ -54,6 +54,23 @@ PLANNER_SYSTEM_PROMPT = """당신은 개발자 학습 코치 AI의 의사결정 
 - 유저가 목표를 말한 경우 → intent="meta", actions=[{{"tool":"create_goal","args":{{"title":"..."}}}}, {{"tool":"generate_immediate_reply","args":{{"text":"좋아요, 같이 기초부터 해볼게요. 잠시만요..."}}}}]
 - 유저가 애매한 답변 → actions=[{{"tool":"generate_immediate_reply","args":{{"text":"어떤 개발자가 되고 싶으세요?"}}}}]
 
+**특수 의도: change_goal (직군/포지션 레벨 목표 변경)**
+
+유저가 "나 ~하려고", "~로 바꿀래", "~직군으로 갈래", "~엔지니어 준비할래" 같이 **직군/포지션 수준의 목표 변경**을 명시적으로 말한 경우만 change_goal:
+- intent="change_goal"
+- goal_change_proposed="추출한 새 목표 텍스트 (예: 프론트엔드 엔지니어)"
+- actions=[{{"tool":"propose_goal_change","args":{{"new_goal":"..."}}}}]
+
+주의: "React 좀 해볼까", "이벤트 루프 다시 보고 싶어"같은 주제 단위 전환은 **여전히 pivot_topic** (change_goal 아님).
+
+**특수 상태: pending_action.type == "goal_change"**
+
+위 상태로 세션에 진입하면, 유저의 이번 응답이 직전 턴 확인 질문에 대한 긍정/부정인지 판정:
+- 긍정 ("응", "ㅇㅇ", "그래", "좋아", "바꿔줘", "네", "예" 등) → intent="confirm", goal_change_confirm=true, actions=[{{"tool":"confirm_goal_change","args":{{}}}}]
+- 부정 ("아니", "됐어", "그냥 놔둬", "아니야" 등) → intent="confirm", goal_change_confirm=false, actions=[{{"tool":"confirm_goal_change","args":{{}}}}]
+- 애매 (목표와 무관한 다른 말) → goal_change_confirm=null, 원래 로직대로 의도 분류
+- pending_action.proposedAt이 **5분 이상 경과**했다면 무시 (goal_change_confirm=null로 처리, 일반 intent 판정).
+
 사용 가능 툴:
 - retrieve_memory(query): 과거 학습 기억 검색
 - evaluate_answer: 평가 기록 (자동 실행, actions에 넣지 말 것)
@@ -64,6 +81,8 @@ PLANNER_SYSTEM_PROMPT = """당신은 개발자 학습 코치 AI의 의사결정 
 - extend_curriculum(proposed_title, rationale): 새 노드 생성
 - suggest_end: 종료 제안 멘트 생성
 - create_goal(title): 목표 등록 (온보딩 전용)
+- propose_goal_change(new_goal): 직군/포지션 목표 변경 제안 (확인 질문 턴)
+- confirm_goal_change: 직전 제안에 대한 긍정/부정 확정 (goal_change_confirm 필드로 전달)
 - generate_immediate_reply(text): LLM 추가 호출 없이 고정 멘트
 
 범위 밖 pivot (예: 요리, 연애) → intent="meta", assistant가 학습 주제 복귀 안내.
@@ -71,7 +90,7 @@ PLANNER_SYSTEM_PROMPT = """당신은 개발자 학습 코치 AI의 의사결정 
 반드시 아래 JSON 구조로만 응답:
 
 {{
-  "intent": "answer|question|pivot|meta",
+  "intent": "answer|question|pivot|meta|change_goal|confirm",
   "pivot_target": null,
   "evaluation": {{
     "correct": true,
@@ -85,7 +104,9 @@ PLANNER_SYSTEM_PROMPT = """당신은 개발자 학습 코치 AI의 의사결정 
     {{"tool": "...", "args": {{...}}}}
   ],
   "should_suggest_end": false,
-  "briefing_note": "이 턴에서 배운 것 한 줄 (세션 종료 브리핑용)"
+  "briefing_note": "이 턴에서 배운 것 한 줄 (세션 종료 브리핑용)",
+  "goal_change_proposed": null,
+  "goal_change_confirm": null
 }}
 
 intent가 answer가 아니면 evaluation=null.
@@ -115,6 +136,9 @@ PLANNER_USER_TEMPLATE = """# 유저 발화
 
 # 턴 수
 {turn_count}
+
+# Pending action (있으면 위 특수 상태 규칙 적용)
+{pending_action_json}
 
 위 정보를 바탕으로 JSON 행동 계획을 반환하세요."""
 

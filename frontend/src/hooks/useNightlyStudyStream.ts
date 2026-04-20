@@ -6,6 +6,8 @@ export interface TurnMeta {
   nodeChangedTo: { id: string; title: string } | null;
   proficiencyAfter: number | null;
   shouldSuggestEnd: boolean;
+  awaitingGoalConfirm: { proposedGoal: string } | null;
+  goalChangedTo: { id: string; title: string } | null;
 }
 
 export type StreamPhase = 'thinking' | 'retrieving' | 'generating';

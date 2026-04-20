@@ -20,6 +20,7 @@ async def run_planner(
     rag_hits: list[dict],
     curriculum_context: dict,
     turn_count: int,
+    pending_action: dict | None = None,
 ) -> PlannerOutput:
     """Call planner LLM with current state. Returns structured action plan."""
     # Use .replace() instead of .format() to avoid crashes when user-supplied
@@ -34,6 +35,10 @@ async def run_planner(
         .replace("{turn_count}", str(turn_count))
         .replace("{recent_messages}", _format_recent(recent_messages))
         .replace("{user_utterance}", user_utterance)
+        .replace(
+            "{pending_action_json}",
+            json.dumps(pending_action, ensure_ascii=False) if pending_action else "null",
+        )
     )
 
     # call_llm_json takes prompt as first positional arg; combine system+user
@@ -56,7 +61,7 @@ def _validate_planner_output(raw: Any) -> PlannerOutput:
         raise ValueError(f"planner did not return dict: {raw}")
 
     intent = raw.get("intent")
-    if intent not in ("answer", "question", "pivot", "meta"):
+    if intent not in ("answer", "question", "pivot", "meta", "change_goal", "confirm"):
         intent = "meta"
 
     next_mode = raw.get("next_mode")
@@ -67,6 +72,15 @@ def _validate_planner_output(raw: Any) -> PlannerOutput:
     if not isinstance(actions, list):
         actions = []
 
+    gcp_raw = raw.get("goal_change_proposed")
+    goal_change_proposed = gcp_raw.strip() if isinstance(gcp_raw, str) and gcp_raw.strip() else None
+
+    gcc_raw = raw.get("goal_change_confirm")
+    if gcc_raw is True or gcc_raw is False:
+        goal_change_confirm = gcc_raw
+    else:
+        goal_change_confirm = None
+
     return {
         "intent": intent,
         "pivot_target": raw.get("pivot_target"),
@@ -75,4 +89,6 @@ def _validate_planner_output(raw: Any) -> PlannerOutput:
         "actions": actions[:3],  # max 3 tools per turn
         "should_suggest_end": bool(raw.get("should_suggest_end")),
         "briefing_note": raw.get("briefing_note"),
+        "goal_change_proposed": goal_change_proposed,
+        "goal_change_confirm": goal_change_confirm,
     }

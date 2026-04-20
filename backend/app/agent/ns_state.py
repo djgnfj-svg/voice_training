@@ -6,7 +6,7 @@ from datetime import datetime
 
 
 Mode = Literal["tutoring", "quiz", "socratic", "onboarding"]
-Intent = Literal["answer", "question", "pivot", "meta"]
+Intent = Literal["answer", "question", "pivot", "meta", "change_goal", "confirm"]
 Category = Literal["misconception", "explanation", "connection", "question"]
 
 
@@ -46,7 +46,7 @@ class Evaluation(TypedDict):
     notes: str
 
 
-class PlannerOutput(TypedDict):
+class PlannerOutput(TypedDict, total=False):
     intent: Intent
     pivot_target: Optional[str]
     evaluation: Optional[Evaluation]
@@ -54,6 +54,9 @@ class PlannerOutput(TypedDict):
     actions: list[ToolCall]
     should_suggest_end: bool
     briefing_note: Optional[str]
+    # Goal-change (session-level) 2-turn protocol fields
+    goal_change_proposed: Optional[str]
+    goal_change_confirm: Optional[bool]
 
 
 class TurnState(TypedDict):

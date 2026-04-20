@@ -20,6 +20,7 @@ from app.prompts.nightly_study import (
 from app.agent.ns_rag import search_learning_memory
 from app.agent.ns_pivot import match_pivot_target
 from app.agent.ns_srs import apply_proficiency_delta, compute_next_review
+from app.agent.ns_seed import generate_and_insert_seed, normalize_goal
 
 logger = logging.getLogger(__name__)
 
@@ -187,3 +188,138 @@ async def tool_evaluate_answer(
         )
     await db.commit()
     return new_prof
+
+
+async def tool_propose_goal_change(
+    db: AsyncSession,
+    session_id: str,
+    user_id: str,
+    new_goal: str,
+    current_goal_title: str | None,
+) -> tuple[str, dict]:
+    """
+    DB 변경 없이 pending_action만 기록하고 확인 문구 반환.
+    Returns (assistant_text, pending_action_dict).
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    pending = {
+        "type": "goal_change",
+        "proposedGoal": new_goal.strip(),
+        "proposedAt": now_iso,
+    }
+    await db.execute(
+        text("UPDATE learning_sessions SET pending_action = CAST(:p AS jsonb) WHERE id=:s"),
+        {"p": json.dumps(pending, ensure_ascii=False), "s": session_id},
+    )
+    await db.commit()
+    current = current_goal_title or "현재 목표"
+    reply = (
+        f"목표를 '{new_goal.strip()}'로 바꿀까요? "
+        f"지금까지 진행한 '{current}' 커리큘럼은 보관되고, 새 목표로 기초부터 다시 시작합니다."
+    )
+    return reply, pending
+
+
+async def tool_confirm_goal_change(
+    db: AsyncSession,
+    session_id: str,
+    user_id: str,
+    confirm: bool,
+    pending_action: dict | None,
+) -> tuple[str, dict | None]:
+    """
+    Returns (assistant_text, node_changed_to_dict_or_None).
+    Clears pending_action regardless of confirm result.
+    """
+    if not pending_action or pending_action.get("type") != "goal_change":
+        await db.execute(
+            text("UPDATE learning_sessions SET pending_action=NULL WHERE id=:s"),
+            {"s": session_id},
+        )
+        await db.commit()
+        return ("네, 계속 이어가죠.", None)
+
+    new_goal_text = (pending_action.get("proposedGoal") or "").strip()
+
+    if not confirm or not new_goal_text:
+        await db.execute(
+            text("UPDATE learning_sessions SET pending_action=NULL WHERE id=:s"),
+            {"s": session_id},
+        )
+        await db.commit()
+        return ("알겠습니다. 원래 주제 계속 이어가죠.", None)
+
+    # Archive current active goal
+    await db.execute(
+        text("UPDATE learning_goals SET status='archived' WHERE user_id=:u AND status='active'"),
+        {"u": user_id},
+    )
+    # Insert new active goal
+    result = await db.execute(
+        text("""
+            INSERT INTO learning_goals (user_id, title, normalized_goal, status)
+            VALUES (:u, :t, :n, 'active')
+            RETURNING id
+        """),
+        {"u": user_id, "t": new_goal_text, "n": normalize_goal(new_goal_text)},
+    )
+    new_goal_id = str(result.one().id)
+    await db.commit()
+
+    # Regenerate seed curriculum (sync — user is waiting)
+    try:
+        await generate_and_insert_seed(db, new_goal_id, new_goal_text)
+    except Exception:
+        logger.exception("seed re-generation failed on goal swap")
+        # Revert: archive the new (failed) goal and resurrect the most recent archived one
+        await db.execute(
+            text("UPDATE learning_goals SET status='archived' WHERE id=:g"),
+            {"g": new_goal_id},
+        )
+        await db.execute(
+            text("""
+                UPDATE learning_goals
+                SET status='active'
+                WHERE id = (
+                    SELECT id FROM learning_goals
+                    WHERE user_id=:u AND status='archived' AND id <> :g
+                    ORDER BY created_at DESC NULLS LAST LIMIT 1
+                )
+            """),
+            {"u": user_id, "g": new_goal_id},
+        )
+        await db.execute(
+            text("UPDATE learning_sessions SET pending_action=NULL WHERE id=:s"),
+            {"s": session_id},
+        )
+        await db.commit()
+        return ("커리큘럼을 다시 만드는 데 실패했어요. 잠시 후 다시 시도해주세요.", None)
+
+    # Pick first seed node
+    first_node_row = (await db.execute(
+        text("""
+            SELECT id, title FROM curriculum_nodes
+            WHERE goal_id=:g
+            ORDER BY depth_level ASC, title ASC LIMIT 1
+        """),
+        {"g": new_goal_id},
+    )).one_or_none()
+
+    new_node = None
+    if first_node_row:
+        new_node = {"id": str(first_node_row.id), "title": first_node_row.title}
+
+    # Swap session's goal_id + clear pending
+    await db.execute(
+        text("""
+            UPDATE learning_sessions
+            SET goal_id=:g, pending_action=NULL
+            WHERE id=:s
+        """),
+        {"g": new_goal_id, "s": session_id},
+    )
+    await db.commit()
+
+    first_title = new_node["title"] if new_node else "새 주제"
+    reply = f"좋아요, 목표를 '{new_goal_text}'로 바꿨어요. 먼저 '{first_title}'부터 시작해볼게요."
+    return reply, new_node
