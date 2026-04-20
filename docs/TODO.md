@@ -1,5 +1,27 @@
 # TODO
 
+## CS 학습 어시스트 — 2026-04-20 감사 후속 (미해결)
+
+### A-3: 백그라운드 seed 생성 중 첫 /turn
+- `create_goal` → `_run_seed_bg`로 seed 백그라운드 실행. seed 완료 전 유저가 /turn 호출하면 `all_nodes=[]`, `current_node=None` 상태로 planner 실행됨
+- 증상: 해당 턴에 quiz/explain/probing이 모두 게이트되어 무의미한 "네, 계속 해볼까요?" fallback만 나감
+- 수정안: (a) `learning_goals.seed_status` 컬럼 추가 후 준비되지 않은 상태면 첫 턴에 "커리큘럼 준비 중이에요" 고정 응답, 또는 (b) seed를 foreground로 전환하되 phase 이벤트로 진행 표시
+
+### F-1: Goal swap 후 archived goal의 curriculum_nodes 누적
+- goal archive 시 nodes는 그대로 남음. `learning_messages.node_id`가 계속 참조해서 soft-delete도 불가
+- 장기적으로 DB 비대. 현재 개인 사용 규모에선 당장 문제 없음
+- 수정안: cleanup 잡 또는 `learning_messages`에 `goal_id` 비정규화로 archive된 goal 노드는 조회에서 제외 + 추후 삭제
+
+### 남은 Minor
+- `pending_action`이 JSON string으로 반환되는 driver 대응 (현재 asyncpg는 dict 반환이라 영향 없음): `_load_turn_state`에 defensive `json.loads` 한 줄
+- generate_continuation_greeting의 `goal_id` 파라미터 unused. 약점 쿼리를 현재 goal로 필터하면 archived goal 주제 튀어나오는 edge case 제거
+- `_run_seed_bg` 실패 시 silent drop. 실패하면 goal은 생성됐지만 nodes=0. 증상은 A-3과 겹침
+
+### 선행 필수
+- `backend/migrations/2026-04-20-nightly-study-pending-action.sql`: Supabase SQL Editor에서 실행 안 하면 Task 3 (목표 변경) 500 에러
+
+---
+
 ## ✅ 2026-04-13 작업 완료 (feat/resume-rag)
 
 ### 평가 시스템 70점 고정 버그 — 수정됨
