@@ -144,23 +144,33 @@ async def run_turn(
             elif tool == "create_goal":
                 title = (args.get("title") or "").strip()
                 if title:
-                    result = await db.execute(
-                        text("""
-                            INSERT INTO learning_goals (user_id, title, normalized_goal, status)
-                            VALUES (:u, :t, :n, 'active')
-                            RETURNING id
-                        """),
-                        {"u": user_id, "t": title, "n": normalize_goal(title)},
-                    )
-                    row = result.one()
-                    new_goal_id = str(row.id)
+                    # 이미 active 목표가 있으면 재사용 (unique 제약 learning_goals_active_per_user)
+                    existing = (await db.execute(
+                        text("SELECT id FROM learning_goals WHERE user_id=:u AND status='active' LIMIT 1"),
+                        {"u": user_id},
+                    )).one_or_none()
+
+                    if existing is None:
+                        result = await db.execute(
+                            text("""
+                                INSERT INTO learning_goals (user_id, title, normalized_goal, status)
+                                VALUES (:u, :t, :n, 'active')
+                                RETURNING id
+                            """),
+                            {"u": user_id, "t": title, "n": normalize_goal(title)},
+                        )
+                        row = result.one()
+                        new_goal_id = str(row.id)
+                        # Schedule seed generation in background — user doesn't wait
+                        background_tasks.add_task(_run_seed_bg, new_goal_id, title)
+                    else:
+                        new_goal_id = str(existing.id)
+
                     await db.execute(
                         text("UPDATE learning_sessions SET goal_id=:g WHERE id=:s"),
                         {"g": new_goal_id, "s": session_id},
                     )
                     await db.commit()
-                    # Schedule seed generation in background — user doesn't wait
-                    background_tasks.add_task(_run_seed_bg, new_goal_id, title)
 
             elif tool == "generate_immediate_reply":
                 text_out = args.get("text", "").strip()

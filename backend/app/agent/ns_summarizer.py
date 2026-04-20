@@ -80,11 +80,16 @@ async def generate_session_summary(
         logger.exception("summary LLM failed — falling back")
         summary = ""
         highlights = {
-            "headline": f"오늘 {len(mastery_changes)}개 토픽 학습",
-            "learned": [m["title"] for m in mastery_changes[:3]],
+            "headline": "오늘 학습을 마쳤어요",
+            "learned": [],
             "improved": [],
         }
         voice_briefing = "오늘도 학습을 마쳤어요. 수고하셨어요."
+
+    # 서버 가드: learned는 success_count > 0인 노드 title에만 허용
+    succeeded_titles = {m["title"] for m in mastery_changes if (m.get("success") or 0) > 0}
+    raw_learned = highlights.get("learned") or []
+    highlights["learned"] = [t for t in raw_learned if t in succeeded_titles][:3]
 
     return {"summary": summary, "highlights": highlights, "voice_briefing": voice_briefing}
 

@@ -58,7 +58,8 @@ export function useNightlyStudyStream(opts: UseNightlyStudyStreamOptions) {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+        // sse-starlette는 이벤트 구분자로 \r\n\r\n을 쓰기도 한다. CRLF를 LF로 정규화.
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
 
         let idx;
         while ((idx = buffer.indexOf('\n\n')) !== -1) {
