@@ -36,6 +36,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
   const [currentTopicLabel, setCurrentTopicLabel] = useState<string | null>(currentTopic);
   const [shouldSuggestEnd, setShouldSuggestEnd] = useState(false);
   const [countdownSec, setCountdownSec] = useState<number | null>(null);
+  const [phase, setPhase] = useState<{ phase: string; label: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownTickRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,16 +78,23 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
   const { isStreaming, sendTurn } = useNightlyStudyStream({
     sessionId,
     onText: (text) => {
+      setPhase(null);
       setMessages((prev) => [...prev, { role: 'assistant', content: text }]);
     },
     onMeta: (meta) => {
       if (meta.nodeChangedTo) setCurrentTopicLabel(meta.nodeChangedTo.title);
       if (meta.shouldSuggestEnd) setShouldSuggestEnd(true);
     },
+    onPhase: (p) => {
+      setPhase({ phase: p.phase, label: p.label });
+    },
     onError: (msg) => {
+      setPhase(null);
       setMessages((prev) => [...prev, { role: 'assistant', content: `⚠ ${msg}` }]);
     },
-    onEnd: () => {},
+    onEnd: () => {
+      setPhase(null);
+    },
   });
 
   const tryStartMic = useCallback(() => {
@@ -336,7 +344,9 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
               ) : isStreaming ? (
                 <div className="flex items-center gap-3">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">생각 중…</span>
+                  <span className="text-sm text-muted-foreground">
+                    {phase?.label ?? '생각 중…'}
+                  </span>
                 </div>
               ) : isListening ? (
                 <div className="flex items-center gap-3">

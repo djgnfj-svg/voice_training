@@ -8,10 +8,18 @@ export interface TurnMeta {
   shouldSuggestEnd: boolean;
 }
 
+export type StreamPhase = 'thinking' | 'retrieving' | 'generating';
+
+export interface PhaseEvent {
+  phase: StreamPhase;
+  label: string;
+}
+
 export interface UseNightlyStudyStreamOptions {
   sessionId: string;
   onText: (text: string) => void;
   onMeta: (meta: TurnMeta) => void;
+  onPhase: (phase: PhaseEvent) => void;
   onError: (msg: string) => void;
   onEnd: (turnCount: number) => void;
 }
@@ -23,11 +31,13 @@ export function useNightlyStudyStream(opts: UseNightlyStudyStreamOptions) {
   // Store callbacks in refs so sendTurn doesn't need them in its dep array
   const onTextRef = useRef(opts.onText);
   const onMetaRef = useRef(opts.onMeta);
+  const onPhaseRef = useRef(opts.onPhase);
   const onErrorRef = useRef(opts.onError);
   const onEndRef = useRef(opts.onEnd);
   useEffect(() => {
     onTextRef.current = opts.onText;
     onMetaRef.current = opts.onMeta;
+    onPhaseRef.current = opts.onPhase;
     onErrorRef.current = opts.onError;
     onEndRef.current = opts.onEnd;
   });
@@ -80,6 +90,8 @@ export function useNightlyStudyStream(opts: UseNightlyStudyStreamOptions) {
             onTextRef.current(typeof payload === 'string' ? payload : (payload as { text?: string }).text || String(payload));
           } else if (event === 'meta') {
             onMetaRef.current(payload as TurnMeta);
+          } else if (event === 'phase') {
+            onPhaseRef.current(payload as PhaseEvent);
           } else if (event === 'error') {
             onErrorRef.current((payload as { error?: string })?.error || '에러');
           } else if (event === 'end') {

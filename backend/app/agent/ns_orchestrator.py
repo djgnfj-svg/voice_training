@@ -43,6 +43,7 @@ async def run_turn(
     await _append_message(db, session_id, state["next_index"], "user", user_utterance, None, None, None)
 
     # 3. Run planner
+    yield {"type": "phase", "data": {"phase": "thinking", "label": "생각하는 중"}}
     try:
         planner_out = await run_planner(
             user_utterance=user_utterance,
@@ -83,6 +84,7 @@ async def run_turn(
 
         try:
             if tool == "retrieve_memory":
+                yield {"type": "phase", "data": {"phase": "retrieving", "label": "지난 대화 살펴보는 중"}}
                 rag_hits = await tool_retrieve_memory(
                     db, user_id, args.get("query", ""),
                     state["current_node"]["id"] if state["current_node"] else None,
@@ -181,6 +183,7 @@ async def run_turn(
             logger.exception(f"tool {tool} failed")
 
     # 6. Stream assistant reply
+    yield {"type": "phase", "data": {"phase": "generating", "label": "답변 준비 중"}}
     final_reply = " ".join(p for p in assistant_reply_parts if p).strip()
     if not final_reply:
         final_reply = "네, 계속 해볼까요?"
