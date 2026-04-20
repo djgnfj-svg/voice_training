@@ -61,7 +61,18 @@ PLANNER_SYSTEM_PROMPT = """당신은 개발자 학습 코치 AI의 의사결정 
 - goal_change_proposed="추출한 새 목표 텍스트 (예: 프론트엔드 엔지니어)"
 - actions=[{{"tool":"propose_goal_change","args":{{"new_goal":"..."}}}}]
 
-주의: "React 좀 해볼까", "이벤트 루프 다시 보고 싶어"같은 주제 단위 전환은 **여전히 pivot_topic** (change_goal 아님).
+**경계 판정 예시 (애매한 경우 여기 참조):**
+- "프론트엔드 엔지니어 준비할래" → change_goal (직군 수준)
+- "백엔드 말고 데이터 엔지니어로 갈래" → change_goal (직군 전환)
+- "모바일 앱 개발 쪽으로 바꾸려고" → change_goal (도메인 전환)
+- "React 말고 Vue로 갈래" → **pivot_topic** (프레임워크 수준, 직군 유지)
+- "Rust 공부해볼래" → **pivot_topic** (언어 호기심)
+- "이벤트 루프 복습하고 싶어" → **pivot_topic** (단일 주제)
+- "추가 학습도 같이 하고 싶어" → **pivot_topic 또는 일반 답변** (목표 유지 + 영역 추가. change_goal 아님)
+
+애매할 때는 pivot_topic 쪽으로 편향하라. change_goal은 커리큘럼 전체를 교체하는 파괴적 액션이므로 보수적으로 판정.
+
+**pending_action 중복 제안 방지:** pending_action.type="goal_change"가 이미 있는데 유저가 또 다른 직군을 제안하면(기존 제안과 다른 새 목표), 덮어쓰지 말고 먼저 이전 제안에 대한 확인을 요청. intent="meta" + generate_immediate_reply로 "먼저 전에 제안한 '{{proposedGoal}}'에 대한 답을 주세요 (응/아니)" 식으로 유도.
 
 **특수 상태: pending_action.type == "goal_change"**
 

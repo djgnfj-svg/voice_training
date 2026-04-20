@@ -68,10 +68,9 @@ async def run_turn(
                 await db.commit()
                 state["pending_action"] = None
 
-    # 2. Persist user message
-    await _append_message(db, session_id, state["next_index"], "user", user_utterance, None, None, None)
-
-    # 3. Run planner
+    # 2. Run planner FIRST (before persisting user message).
+    # Planner 실패 시 user message가 남아 recent_messages 맥락을 오염시키는 걸 방지.
+    # planner는 user_utterance를 인자로 직접 받으므로 recent_messages에 없어도 OK.
     yield {"type": "phase", "data": {"phase": "thinking", "label": "생각하는 중"}}
     try:
         planner_out = await run_planner(
@@ -90,9 +89,18 @@ async def run_turn(
         yield {"type": "error", "data": {"error": "잠깐 연결이 끊겼어요. 다시 말씀해주세요."}}
         return
 
+    # 3. Planner 성공 후 user message persist
+    await _append_message(db, session_id, state["next_index"], "user", user_utterance, None, None, None)
+
     # 4. Evaluate answer (if applicable) — update proficiency BEFORE other tools
+    # current_node이 현재 goal의 노드인 경우만 평가 반영 (archived goal 노드는 dead row).
     proficiency_after = None
-    if planner_out["intent"] == "answer" and planner_out["evaluation"] and state["current_node"]:
+    current_node_ids = {n["id"] for n in state["all_nodes"]}
+    current_node_in_goal = (
+        state["current_node"] is not None
+        and state["current_node"]["id"] in current_node_ids
+    )
+    if planner_out["intent"] == "answer" and planner_out["evaluation"] and current_node_in_goal:
         ev = planner_out["evaluation"]
         proficiency_after = await tool_evaluate_answer(
             db=db,
@@ -318,9 +326,13 @@ async def _run_seed_bg(goal_id: str, goal_title: str) -> None:
 
 
 async def _load_turn_state(db: AsyncSession, session_id: str) -> dict | None:
-    """Load everything planner needs: session, goal, current_node candidate, mastery, history."""
+    """Load everything planner needs: session, goal, current_node candidate, mastery, history.
+
+    `FOR UPDATE`로 세션 row를 잠가 (a) 동일 세션의 /turn 동시 호출을 직렬화하고
+    (b) /end 진행 중인 세션에 대한 /turn이 stale state로 진행되는 것을 막는다.
+    """
     sess_row = (await db.execute(
-        text("SELECT user_id, goal_id, turn_count, pending_action FROM learning_sessions WHERE id=:s AND status='active'"),
+        text("SELECT user_id, goal_id, turn_count, pending_action FROM learning_sessions WHERE id=:s AND status='active' FOR UPDATE"),
         {"s": session_id},
     )).one_or_none()
     if sess_row is None:
