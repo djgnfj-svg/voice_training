@@ -138,7 +138,7 @@ async def start_session(
                 detail={"error": "크레딧이 부족해요", "code": "INSUFFICIENT_CREDITS"},
             )
 
-    # 6. Seed the first assistant message (non-LLM, fixed greeting for onboarding or learning)
+    # 6. Seed the first assistant message
     if initial_mode == "onboarding":
         first_text = (
             "안녕하세요, 저는 CS 학습 어시스트예요. "
@@ -147,7 +147,32 @@ async def start_session(
         )
         first_node_id = None
     else:
-        first_text = f"다시 오셨네요. 오늘은 '{target_node['title']}' 해볼까요?" if target_node else "오늘도 시작해볼까요?"
+        fallback_text = (
+            f"다시 오셨네요. 오늘은 '{target_node['title']}' 해볼까요?"
+            if target_node else "오늘도 시작해볼까요?"
+        )
+        # 재방문: 과거 completed 세션이 있으면 RAG 기반 이어가기 인사 생성
+        past_count_row = (await db.execute(
+            text("""
+                SELECT COUNT(*) AS c FROM learning_sessions
+                WHERE user_id=:u AND status='completed'
+            """),
+            {"u": user.id},
+        )).one()
+        past_count = past_count_row.c or 0
+
+        if past_count > 0:
+            from app.agent.ns_greeting import generate_continuation_greeting
+            first_text = await generate_continuation_greeting(
+                db=db,
+                user_id=user.id,
+                goal_id=goal_id,
+                target_node=target_node,
+                fallback=fallback_text,
+            )
+        else:
+            first_text = fallback_text
+
         first_node_id = target_node["id"] if target_node else None
 
     await db.execute(
