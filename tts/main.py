@@ -30,6 +30,15 @@ FORMAT_MEDIA_TYPES = {
     "pcm": "audio/L16",
 }
 
+# 페르소나별 기본 speed. 요청에 speed 명시되면 그게 우선.
+PERSONA_DEFAULT_SPEED = {
+    "interviewer": 2.0,
+    "tutor": 1.3,
+    "journal_friend": 1.3,
+    "journal_counselor": 1.1,
+    "default": 2.0,
+}
+
 # 페르소나별 instructions (gpt-4o-mini-tts 전용)
 PERSONA_INSTRUCTIONS = {
     "interviewer": (
@@ -90,7 +99,7 @@ async def synthesize(req: SynthesizeRequest):
     voice = req.voice or DEFAULT_VOICE
     persona = req.persona or "default"
     instructions = PERSONA_INSTRUCTIONS.get(persona, PERSONA_INSTRUCTIONS["default"])
-    speed = req.speed if req.speed is not None else DEFAULT_SPEED
+    speed = req.speed if req.speed is not None else PERSONA_DEFAULT_SPEED.get(persona, DEFAULT_SPEED)
     model = req.model or MODEL
     fmt = (req.format or DEFAULT_FORMAT).lower()
     media_type = FORMAT_MEDIA_TYPES.get(fmt, "audio/mpeg")

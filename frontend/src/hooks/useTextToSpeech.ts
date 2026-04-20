@@ -26,14 +26,6 @@ export interface UseTextToSpeechOptions {
   persona?: TTSPersona;
 }
 
-const MIME = 'audio/mpeg';
-
-function mseSupported(): boolean {
-  if (typeof window === 'undefined') return false;
-  const MS = window.MediaSource;
-  return !!MS && typeof MS.isTypeSupported === 'function' && MS.isTypeSupported(MIME);
-}
-
 export function useTextToSpeech(options: UseTextToSpeechOptions = {}): TextToSpeechHook {
   const defaultPersona = options.persona;
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -43,8 +35,6 @@ export function useTextToSpeech(options: UseTextToSpeechOptions = {}): TextToSpe
   const abortRef = useRef<AbortController | null>(null);
   const rejectRef = useRef<((reason?: unknown) => void) | null>(null);
   const objectUrlRef = useRef<string | null>(null);
-  const mediaSourceRef = useRef<MediaSource | null>(null);
-
   const handleSetVolume = useCallback((v: number) => {
     const clamped = Math.max(0, Math.min(1, v));
     setVolume(clamped);
@@ -55,16 +45,6 @@ export function useTextToSpeech(options: UseTextToSpeechOptions = {}): TextToSpe
   }, []);
 
   const cleanup = useCallback(() => {
-    if (mediaSourceRef.current) {
-      try {
-        if (mediaSourceRef.current.readyState === 'open') {
-          mediaSourceRef.current.endOfStream();
-        }
-      } catch {
-        // ignore
-      }
-      mediaSourceRef.current = null;
-    }
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = null;
@@ -91,112 +71,6 @@ export function useTextToSpeech(options: UseTextToSpeechOptions = {}): TextToSpe
     setIsSpeaking(false);
   }, [cleanup]);
 
-  const playStreaming = useCallback(
-    async (res: Response, signal: AbortSignal): Promise<void> => {
-      if (!res.body) throw new Error('No response body');
-      const reader = res.body.getReader();
-
-      const mediaSource = new MediaSource();
-      mediaSourceRef.current = mediaSource;
-      const url = URL.createObjectURL(mediaSource);
-      objectUrlRef.current = url;
-
-      const audio = new Audio(url);
-      audio.volume = volumeRef.current;
-      audioRef.current = audio;
-
-      await new Promise<void>((resolve, reject) => {
-        let sourceBuffer: SourceBuffer | null = null;
-        const queue: ArrayBuffer[] = [];
-        let streamEnded = false;
-        let settled = false;
-
-        const settle = (err?: unknown) => {
-          if (settled) return;
-          settled = true;
-          if (err) reject(err);
-          else resolve();
-        };
-
-        rejectRef.current = (reason) => settle(reason);
-
-        const pump = () => {
-          if (!sourceBuffer || sourceBuffer.updating) return;
-          if (queue.length > 0) {
-            try {
-              sourceBuffer.appendBuffer(queue.shift()!);
-            } catch (e) {
-              settle(e);
-            }
-            return;
-          }
-          if (streamEnded && mediaSource.readyState === 'open') {
-            try {
-              mediaSource.endOfStream();
-            } catch {
-              // ignore
-            }
-          }
-        };
-
-        const onSourceOpen = async () => {
-          try {
-            sourceBuffer = mediaSource.addSourceBuffer(MIME);
-            sourceBuffer.addEventListener('updateend', pump);
-            sourceBuffer.addEventListener('error', () =>
-              settle(new Error('SourceBuffer error'))
-            );
-
-            let readerDone = false;
-            while (!readerDone) {
-              if (signal.aborted) {
-                settle(new DOMException('Stopped', 'AbortError'));
-                return;
-              }
-              const { value, done } = await reader.read();
-              if (done) {
-                readerDone = true;
-                streamEnded = true;
-                pump();
-                break;
-              }
-              if (value && value.byteLength > 0) {
-                const copy = value.buffer.slice(
-                  value.byteOffset,
-                  value.byteOffset + value.byteLength
-                );
-                queue.push(copy);
-                pump();
-              }
-            }
-          } catch (e) {
-            settle(e);
-          }
-        };
-
-        mediaSource.addEventListener('sourceopen', onSourceOpen, { once: true });
-
-        audio.onplay = () => setIsSpeaking(true);
-        audio.onended = () => {
-          setIsSpeaking(false);
-          rejectRef.current = null;
-          settle();
-        };
-        audio.onerror = () => {
-          setIsSpeaking(false);
-          rejectRef.current = null;
-          settle(new Error('Audio playback failed'));
-        };
-
-        audio.play().catch((err) => {
-          rejectRef.current = null;
-          settle(err);
-        });
-      });
-    },
-    []
-  );
-
   const playBuffered = useCallback(
     async (res: Response, signal: AbortSignal): Promise<void> => {
       const blob = await res.blob();
@@ -205,27 +79,46 @@ export function useTextToSpeech(options: UseTextToSpeechOptions = {}): TextToSpe
       objectUrlRef.current = url;
 
       await new Promise<void>((resolve, reject) => {
-        rejectRef.current = reject;
         const audio = new Audio(url);
         audio.volume = volumeRef.current;
         audioRef.current = audio;
 
-        audio.onplay = () => setIsSpeaking(true);
-        audio.onended = () => {
+        let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+        let settled = false;
+        const settle = (err?: unknown) => {
+          if (settled) return;
+          settled = true;
+          if (fallbackTimer) {
+            clearTimeout(fallbackTimer);
+            fallbackTimer = null;
+          }
           setIsSpeaking(false);
           rejectRef.current = null;
-          resolve();
-        };
-        audio.onerror = () => {
-          setIsSpeaking(false);
-          rejectRef.current = null;
-          reject(new Error('Audio playback failed'));
+          if (err) reject(err);
+          else resolve();
         };
 
-        audio.play().catch((err) => {
-          rejectRef.current = null;
-          reject(err);
-        });
+        rejectRef.current = (reason) => settle(reason ?? new DOMException('Stopped', 'AbortError'));
+
+        const scheduleFallback = () => {
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+          const d = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 30;
+          const remaining = Math.max(1, d - audio.currentTime);
+          fallbackTimer = setTimeout(() => settle(), (remaining + 2) * 1000);
+        };
+
+        audio.onloadedmetadata = scheduleFallback;
+        audio.onplay = () => {
+          setIsSpeaking(true);
+          scheduleFallback();
+        };
+        audio.onended = () => settle();
+        audio.onerror = () => settle(new Error('Audio playback failed'));
+
+        audio.play().catch((err) => settle(err));
+
+        // 메타데이터 로드 없이도 안전장치 — 최장 60초 후 강제 완료
+        fallbackTimer = setTimeout(() => settle(), 60_000);
       });
     },
     []
@@ -253,11 +146,7 @@ export function useTextToSpeech(options: UseTextToSpeechOptions = {}): TextToSpe
         if (!res.ok) throw new Error('TTS request failed');
         if (abortController.signal.aborted) return;
 
-        if (mseSupported()) {
-          await playStreaming(res, abortController.signal);
-        } else {
-          await playBuffered(res, abortController.signal);
-        }
+        await playBuffered(res, abortController.signal);
         cleanup();
       } catch (error) {
         cleanup();
@@ -268,7 +157,7 @@ export function useTextToSpeech(options: UseTextToSpeechOptions = {}): TextToSpe
         throw error;
       }
     },
-    [stop, cleanup, playStreaming, playBuffered, defaultPersona]
+    [stop, cleanup, playBuffered, defaultPersona]
   );
 
   useEffect(() => {

@@ -8,10 +8,16 @@ interface SpeechRecognitionHook {
   transcript: string;
   interimTranscript: string;
   isSupported: boolean;
-  startListening: () => void;
+  startListening: () => boolean;
   stopListening: () => void;
   resetTranscript: () => void;
 }
+
+interface UseSpeechRecognitionOptions {
+  onFatalError?: (err: string) => void;
+}
+
+const FATAL_ERRORS = new Set(['not-allowed', 'audio-capture', 'service-not-allowed']);
 
 // Web Speech API type declarations
 interface SpeechRecognitionEvent extends Event {
@@ -71,11 +77,17 @@ function appendWithOverlap(prev: string, next: string): string {
   return prev + next;
 }
 
-export function useSpeechRecognition(): SpeechRecognitionHook {
+export function useSpeechRecognition(
+  options: UseSpeechRecognitionOptions = {},
+): SpeechRecognitionHook {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const onFatalErrorRef = useRef(options.onFatalError);
+  useEffect(() => {
+    onFatalErrorRef.current = options.onFatalError;
+  });
 
   const isSupported = isSpeechRecognitionSupported();
 
@@ -123,6 +135,10 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       if (event.error === 'no-speech') return;
       console.warn('Speech recognition error:', event.error);
       setIsListening(false);
+      if (FATAL_ERRORS.has(event.error)) {
+        if (recognitionRef.current) recognitionRef.current._shouldListen = false;
+        onFatalErrorRef.current?.(event.error);
+      }
     };
 
     recognition.onend = () => {
@@ -146,14 +162,16 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     };
   }, [isSupported]);
 
-  const startListening = useCallback(() => {
-    if (!recognitionRef.current) return;
+  const startListening = useCallback((): boolean => {
+    if (!recognitionRef.current) return false;
     try {
       recognitionRef.current._shouldListen = true;
       recognitionRef.current.start();
       setIsListening(true);
+      return true;
     } catch (error) {
       console.warn('Failed to start speech recognition:', error);
+      return false;
     }
   }, []);
 

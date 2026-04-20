@@ -74,3 +74,5 @@ backend/.env.production
 # Misc
 *.tsbuildinfo
 next-env.d.ts
+.superpowers/
+backend/.coverage

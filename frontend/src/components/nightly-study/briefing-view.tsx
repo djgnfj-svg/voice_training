@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Flame, Sparkles, TrendingUp } from 'lucide-react';
@@ -17,44 +16,27 @@ export function BriefingView({ result, onClose }: Props) {
   const headline = result.highlights?.headline ?? '오늘도 수고하셨어요';
   const streak = result.streakUpdated ?? { current: 0, longest: 0, totalSessions: 0, totalNodesLearned: 0, isNewRecord: false };
 
-  useEffect(() => {
-    const text = result.voiceBriefing;
-    if (!text) return;
-    (async () => {
-      try {
-        const res = await fetch('/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, persona: 'tutor' }),
-        });
-        if (!res.ok) return;
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        await audio.play();
-        audio.onended = () => URL.revokeObjectURL(url);
-      } catch {}
-    })();
-  }, [result.voiceBriefing]);
-
   return (
-    <div className="space-y-4 p-4 pb-8">
-      <h2 className="text-xl font-bold text-center">수고하셨어요</h2>
+    <div className="mx-auto max-w-2xl space-y-5 p-4 pb-8 md:p-8">
+      <div className="space-y-1 text-center">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">오늘의 브리핑</p>
+        <h2 className="text-2xl font-bold">수고하셨어요</h2>
+      </div>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
             <Sparkles className="h-4 w-4 text-primary" /> 오늘의 하이라이트
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-base">{headline}</p>
+          <p className="text-base leading-relaxed">{headline}</p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
             <TrendingUp className="h-4 w-4 text-primary" /> 새로 이해한 것
           </CardTitle>
         </CardHeader>
@@ -62,18 +44,26 @@ export function BriefingView({ result, onClose }: Props) {
           {learned.length === 0 ? (
             <p className="text-sm text-muted-foreground">—</p>
           ) : (
-            <ul className="text-sm space-y-1">
+            <ul className="space-y-1.5 text-sm leading-relaxed">
               {learned.map((item, i) => (
-                <li key={i}>• {item}</li>
+                <li key={i} className="flex gap-2">
+                  <span className="text-primary">•</span>
+                  <span>{item}</span>
+                </li>
               ))}
             </ul>
           )}
           {improved.length > 0 && (
-            <div className="pt-2 border-t mt-2">
-              <p className="text-xs font-medium text-muted-foreground mb-1">개선 포인트</p>
-              <ul className="text-sm space-y-1">
+            <div className="mt-3 border-t pt-3">
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                개선 포인트
+              </p>
+              <ul className="space-y-1.5 text-sm leading-relaxed">
                 {improved.map((item, i) => (
-                  <li key={i}>• {item}</li>
+                  <li key={i} className="flex gap-2">
+                    <span className="text-amber-600">•</span>
+                    <span>{item}</span>
+                  </li>
                 ))}
               </ul>
             </div>
@@ -82,12 +72,14 @@ export function BriefingView({ result, onClose }: Props) {
       </Card>
 
       <Card>
-        <CardContent className="flex items-center justify-between py-4">
-          <div className="flex items-center gap-2">
+        <CardContent className="flex items-center justify-between py-5">
+          <div className="flex items-center gap-2.5">
             <Flame className="h-6 w-6 text-orange-500" />
             <span className="text-lg font-bold">{streak.current}일</span>
             {streak.isNewRecord && (
-              <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">최고 기록</span>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                최고 기록
+              </span>
             )}
           </div>
           <div className="text-right text-xs text-muted-foreground">
@@ -97,7 +89,9 @@ export function BriefingView({ result, onClose }: Props) {
         </CardContent>
       </Card>
 
-      <Button onClick={onClose} className="w-full">확인</Button>
+      <Button onClick={onClose} size="lg" className="h-12 w-full">
+        확인
+      </Button>
     </div>
   );
 }

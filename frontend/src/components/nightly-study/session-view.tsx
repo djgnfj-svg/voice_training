@@ -1,11 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, Loader2, X, Volume2 } from 'lucide-react';
+import { Mic, Loader2, X, Volume2, VolumeX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { useNightlyStudyStream } from '@/hooks/useNightlyStudyStream';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -19,7 +22,12 @@ interface Props {
   onEnd: () => Promise<void>;
 }
 
-const SILENCE_MS = 2500; // 2.5초 무음 시 자동 전송
+const SILENCE_MS = 3000;
+const MIC_RETRY_MAX = 3;
+const MIC_RETRY_DELAY_MS = 1000;
+
+// 모듈 스코프: StrictMode 이중 mount에서도 세션별 재생 이력을 유지해 중복 TTS를 막는다.
+const spokenBySession = new Map<string, Set<string>>();
 
 export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Props) {
   const [messages, setMessages] = useState<Message[]>([
@@ -27,56 +35,36 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
   ]);
   const [currentTopicLabel, setCurrentTopicLabel] = useState<string | null>(currentTopic);
   const [shouldSuggestEnd, setShouldSuggestEnd] = useState(false);
-  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [countdownSec, setCountdownSec] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownTickRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastHeardRef = useRef<string>('');
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const micRetryRef = useRef(0);
+  const micRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const playTTS = useCallback(async (text: string, onDone?: () => void) => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
-    }
-    try {
-      const res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, persona: 'tutor' }),
-      });
-      if (!res.ok) {
-        onDone?.();
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      currentAudioRef.current = audio;
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        if (currentAudioRef.current === audio) currentAudioRef.current = null;
-        onDone?.();
-      };
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        if (currentAudioRef.current === audio) currentAudioRef.current = null;
-        onDone?.();
-      };
-      await audio.play();
-    } catch {
-      onDone?.();
-    }
-  }, []);
+  const tts = useTextToSpeech({ persona: 'tutor' });
+  const { speak: ttsSpeak, stop: ttsStop, isSpeaking: isAiSpeaking } = tts;
 
-  useEffect(() => {
-    return () => {
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
-    };
-  }, []);
+  const endedRef = useRef(false);
+  const finishWithError = useCallback((msg: string) => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    setMessages((prev) => [...prev, { role: 'assistant', content: `⚠ ${msg}` }]);
+    void onEnd().catch(() => {});
+  }, [onEnd]);
 
+  const speech = useSpeechRecognition({
+    onFatalError: (err) => {
+      const msg =
+        err === 'not-allowed'
+          ? '마이크 권한이 거부되어 세션을 종료합니다.'
+          : err === 'audio-capture'
+          ? '마이크를 찾지 못해 세션을 종료합니다.'
+          : '음성인식을 사용할 수 없어 세션을 종료합니다.';
+      finishWithError(msg);
+    },
+  });
   const {
     isListening,
     startListening,
@@ -84,14 +72,12 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     transcript,
     interimTranscript,
     resetTranscript,
-  } = useSpeechRecognition();
+  } = speech;
 
   const { isStreaming, sendTurn } = useNightlyStudyStream({
     sessionId,
     onText: (text) => {
       setMessages((prev) => [...prev, { role: 'assistant', content: text }]);
-      setIsAiSpeaking(true);
-      playTTS(text, () => setIsAiSpeaking(false));
     },
     onMeta: (meta) => {
       if (meta.nodeChangedTo) setCurrentTopicLabel(meta.nodeChangedTo.title);
@@ -103,6 +89,25 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     onEnd: () => {},
   });
 
+  const tryStartMic = useCallback(() => {
+    if (endedRef.current) return;
+    if (micRetryTimerRef.current) {
+      clearTimeout(micRetryTimerRef.current);
+      micRetryTimerRef.current = null;
+    }
+    const started = startListening();
+    if (started) {
+      micRetryRef.current = 0;
+      return;
+    }
+    if (micRetryRef.current < MIC_RETRY_MAX) {
+      micRetryRef.current += 1;
+      micRetryTimerRef.current = setTimeout(() => tryStartMic(), MIC_RETRY_DELAY_MS);
+    } else {
+      finishWithError('마이크를 시작하지 못해 세션을 종료합니다.');
+    }
+  }, [startListening, finishWithError]);
+
   const handleSend = useCallback(async (textOverride?: string) => {
     const text = (textOverride ?? transcript).trim();
     if (!text || isStreaming) return;
@@ -110,6 +115,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
+    setCountdownSec(null);
     lastHeardRef.current = '';
     setMessages((prev) => [...prev, { role: 'user', content: text }]);
     resetTranscript();
@@ -117,128 +123,244 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     await sendTurn(text);
   }, [transcript, isStreaming, resetTranscript, stopListening, sendTurn]);
 
+  // 최신 handleSend를 setTimeout 콜백에서 참조 (stale closure 방지)
+  const handleSendRef = useRef(handleSend);
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  });
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, interimTranscript]);
 
-  // 첫 메시지 TTS 재생
-  const firstMessageRef = useRef(firstMessage);
+  // AI 메시지가 추가되면 TTS 재생 후 자동으로 듣기 시작
   useEffect(() => {
-    const text = firstMessageRef.current;
-    setIsAiSpeaking(true);
-    playTTS(text, () => setIsAiSpeaking(false));
-  }, [playTTS]);
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant') return;
 
-  // AI 발화 끝나면 자동 듣기 시작
-  useEffect(() => {
-    if (!isAiSpeaking && !isListening && !isStreaming) {
-      startListening();
+    let spoken = spokenBySession.get(sessionId);
+    if (!spoken) {
+      spoken = new Set<string>();
+      spokenBySession.set(sessionId, spoken);
     }
-    // AI가 다시 말하기 시작하면 듣기 중지
+    if (spoken.has(last.content)) return;
+    spoken.add(last.content);
+
+    (async () => {
+      try {
+        await ttsSpeak(last.content);
+      } catch {
+        // abort 또는 재생 실패 — listening으로 진행
+      }
+      resetTranscript();
+      lastHeardRef.current = '';
+      tryStartMic();
+    })();
+  }, [messages, sessionId, ttsSpeak, resetTranscript, tryStartMic]);
+
+  // 세션 종료 시 모듈 캐시 정리
+  useEffect(() => {
+    return () => {
+      spokenBySession.delete(sessionId);
+    };
+  }, [sessionId]);
+
+  // AI 발화 시작 시 듣기 중지
+  useEffect(() => {
     if (isAiSpeaking && isListening) {
       stopListening();
       resetTranscript();
       lastHeardRef.current = '';
     }
-  }, [isAiSpeaking, isStreaming, isListening, startListening, stopListening, resetTranscript]);
+  }, [isAiSpeaking, isListening, stopListening, resetTranscript]);
 
   // 무음 감지 → 자동 전송
+  // interim이 있으면 사용자가 말하는 중 → 타이머 취소.
+  // interim 비었고 transcript 확정본이 있으면 → 말 멈춤, 타이머 시작.
   useEffect(() => {
-    if (!isListening) return;
-    const combined = transcript + interimTranscript;
-    if (combined === lastHeardRef.current) return;
-    lastHeardRef.current = combined;
+    const cancel = () => {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      setCountdownSec(null);
+    };
 
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-
-    if (transcript.trim().length > 0) {
-      silenceTimerRef.current = setTimeout(() => {
-        handleSend();
-      }, SILENCE_MS);
+    if (!isListening || isStreaming) {
+      cancel();
+      return;
     }
-  }, [transcript, interimTranscript, isListening, handleSend]);
+
+    const hasFinal = transcript.trim().length > 0;
+    const isSpeaking = interimTranscript.trim().length > 0;
+
+    if (!hasFinal || isSpeaking) {
+      cancel();
+      return;
+    }
+
+    // 이미 카운트 중이면 유지 (transcript가 한 번 더 final로 커져도 새 타이머 안 시작)
+    if (silenceTimerRef.current) return;
+
+    setCountdownSec(Math.ceil(SILENCE_MS / 1000));
+    silenceTimerRef.current = setTimeout(() => {
+      silenceTimerRef.current = null;
+      setCountdownSec(null);
+      void handleSendRef.current?.();
+    }, SILENCE_MS);
+  }, [transcript, interimTranscript, isListening, isStreaming]);
+
+  // 카운트다운 초 단위 감소 (표시용)
+  useEffect(() => {
+    if (countdownTickRef.current) {
+      clearTimeout(countdownTickRef.current);
+      countdownTickRef.current = null;
+    }
+    if (countdownSec === null || countdownSec <= 0) return;
+    countdownTickRef.current = setTimeout(() => {
+      setCountdownSec((c) => (c === null ? null : Math.max(0, c - 1)));
+    }, 1000);
+    return () => {
+      if (countdownTickRef.current) {
+        clearTimeout(countdownTickRef.current);
+        countdownTickRef.current = null;
+      }
+    };
+  }, [countdownSec]);
 
   // 언마운트 시 정리
   useEffect(() => {
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (micRetryTimerRef.current) clearTimeout(micRetryTimerRef.current);
+      ttsStop();
     };
-  }, []);
+  }, [ttsStop]);
 
   const showInterim = isListening && (transcript || interimTranscript);
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col h-[100dvh]">
-      <header className="flex items-center justify-between border-b p-3 shrink-0">
-        {currentTopicLabel ? (
-          <Badge variant="secondary">{currentTopicLabel}</Badge>
-        ) : (
-          <span className="text-sm text-muted-foreground">
-            {isAiSpeaking ? 'AI가 말하는 중...' : isListening ? '듣는 중...' : '대화 중'}
-          </span>
-        )}
-        <Button variant="ghost" size="sm" onClick={onEnd}>
-          <X className="h-4 w-4 mr-1" /> 종료
-        </Button>
+    <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col bg-background">
+      {/* Header */}
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Mic className="h-5 w-5 shrink-0 text-primary" />
+          {currentTopicLabel ? (
+            <Badge variant="secondary" className="truncate">
+              {currentTopicLabel}
+            </Badge>
+          ) : (
+            <span className="truncate text-sm text-muted-foreground">오늘의 학습</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="hidden items-center gap-2 sm:flex">
+            <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.1}
+              value={tts.volume}
+              onChange={(e) => tts.setVolume(Number(e.target.value))}
+              aria-label="음량 조절"
+              className="h-1 w-24 cursor-pointer accent-primary"
+            />
+            <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
+              {Math.round(tts.volume * 100)}%
+            </span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onEnd}>
+            <X className="mr-1 h-4 w-4" /> 종료
+          </Button>
+        </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-3 py-4 space-y-3 min-h-0">
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-              m.role === 'user'
-                ? 'ml-auto bg-primary text-primary-foreground'
-                : 'bg-muted'
-            }`}
-          >
-            {m.content}
-          </div>
-        ))}
-        {showInterim ? (
-          <div className="max-w-[85%] ml-auto rounded-lg px-3 py-2 text-sm bg-primary/20 text-primary">
-            {transcript}
-            {interimTranscript ? (
-              <span className="opacity-60">{transcript ? ' ' : ''}{interimTranscript}</span>
-            ) : null}
-          </div>
-        ) : null}
-        <div ref={bottomRef} />
+      {/* Conversation */}
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="mx-auto w-full max-w-3xl space-y-3 px-4 py-6">
+          {messages.map((m, i) => (
+            <div
+              key={i}
+              className={cn(
+                'max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed',
+                m.role === 'user'
+                  ? 'ml-auto bg-primary text-primary-foreground'
+                  : 'bg-muted'
+              )}
+            >
+              {m.content}
+            </div>
+          ))}
+          {showInterim ? (
+            <div className="ml-auto max-w-[85%] rounded-2xl bg-primary/15 px-4 py-3 text-sm text-primary">
+              {transcript}
+              {interimTranscript ? (
+                <span className="opacity-60">
+                  {transcript ? ' ' : ''}
+                  {interimTranscript}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          <div ref={bottomRef} />
+        </div>
       </main>
 
       {shouldSuggestEnd ? (
-        <div className="bg-amber-50 border-t border-amber-200 p-2 text-xs text-center text-amber-900 shrink-0">
+        <div className="shrink-0 border-t border-amber-200 bg-amber-50 p-2 text-center text-xs text-amber-900">
           AI가 오늘 여기까지 정리하자고 제안했어요
         </div>
       ) : null}
 
-      <footer className="border-t p-3 shrink-0 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-        <div className="flex items-center justify-center gap-3 h-14">
-          {isAiSpeaking ? (
-            <>
-              <Volume2 className="h-5 w-5 text-primary animate-pulse" />
-              <span className="text-sm text-muted-foreground">AI가 말하는 중...</span>
-            </>
-          ) : isStreaming ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              <span className="text-sm text-muted-foreground">생각 중...</span>
-            </>
-          ) : isListening ? (
-            <>
-              <Mic className="h-5 w-5 text-primary animate-pulse" />
-              <span className="text-sm text-muted-foreground">
-                {transcript.trim().length > 0 ? '말 멈추면 자동 전송' : '말씀하세요'}
-              </span>
-            </>
-          ) : (
-            <Button size="sm" variant="outline" onClick={startListening}>
-              <Mic className="h-4 w-4 mr-1" /> 듣기 시작
-            </Button>
-          )}
+      {/* Status */}
+      <footer className="shrink-0 border-t pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+        <div className="mx-auto w-full max-w-3xl px-4 py-3">
+          <Card>
+            <CardContent className="flex min-h-[92px] items-center justify-center py-5">
+              {isAiSpeaking ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                    <Volume2 className="h-5 w-5 animate-pulse text-primary" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">AI가 말하는 중</span>
+                    <button
+                      onClick={ttsStop}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <VolumeX className="h-3 w-3" /> 건너뛰기
+                    </button>
+                  </div>
+                </div>
+              ) : isStreaming ? (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">생각 중…</span>
+                </div>
+              ) : isListening ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 ring-4 ring-red-100/50 dark:bg-red-900/30 dark:ring-red-900/30">
+                    <Mic className="h-5 w-5 animate-pulse text-red-500 dark:text-red-400" />
+                  </div>
+                  <span className="text-sm font-medium text-red-500 dark:text-red-400 tabular-nums">
+                    {countdownSec !== null
+                      ? `${countdownSec}초 후 자동 전송…`
+                      : transcript.trim().length > 0
+                      ? '말 멈추면 자동 전송'
+                      : '말씀하세요'}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">마이크 준비 중…</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </footer>
     </div>
   );
 }
-
