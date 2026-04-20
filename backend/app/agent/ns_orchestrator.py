@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from sqlalchemy import text
@@ -39,6 +40,33 @@ async def run_turn(
     if state is None:
         yield {"type": "error", "data": {"error": "세션을 찾을 수 없어요"}}
         return
+
+    # 1b. Stale pending_action scrub.
+    # TTL은 planner 프롬프트에도 적고 tool 내부에도 서버 가드를 뒀지만,
+    # 프롬프트 규칙에 따라 planner가 stale pending을 "무시"할 경우 tool이 호출되지 않아
+    # 서버 가드도 발동하지 않는다. 그 결과 pending이 영원히 남아 이후 턴마다 오염.
+    # 여기서 미리 감지해 즉시 clear하고 planner에도 None을 넘긴다.
+    pending = state.get("pending_action")
+    if isinstance(pending, dict):
+        proposed_at_str = pending.get("proposedAt")
+        if proposed_at_str:
+            try:
+                proposed_at = datetime.fromisoformat(proposed_at_str)
+                if (datetime.now(timezone.utc) - proposed_at).total_seconds() > 300:
+                    await db.execute(
+                        text("UPDATE learning_sessions SET pending_action=NULL WHERE id=:s"),
+                        {"s": session_id},
+                    )
+                    await db.commit()
+                    state["pending_action"] = None
+            except ValueError:
+                logger.warning("pending_action.proposedAt malformed; clearing")
+                await db.execute(
+                    text("UPDATE learning_sessions SET pending_action=NULL WHERE id=:s"),
+                    {"s": session_id},
+                )
+                await db.commit()
+                state["pending_action"] = None
 
     # 2. Persist user message
     await _append_message(db, session_id, state["next_index"], "user", user_utterance, None, None, None)
