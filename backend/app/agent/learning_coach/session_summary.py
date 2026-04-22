@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.lib.llm_client import call_llm_json
 from app.prompts.nightly_study import SESSION_SUMMARY_PROMPT
-from app.agent.nightly_study.ns_srs import update_streak_state
+from app.agent.learning_coach.spaced_repetition import update_streak_state
 
 logger = logging.getLogger(__name__)
 

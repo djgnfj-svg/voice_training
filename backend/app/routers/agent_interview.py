@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import logging
@@ -13,7 +13,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
-from app.agent.interview import nodes
+from app.agent.interview import graph as interview_graph
 from app.agent.interview.state import InterviewState
 from app.models.agent_interview import AgentInterviewSession, AgentInterviewMessage
 from app.models.resume import Resume
@@ -40,7 +40,7 @@ MIN_UNIQUE_TOKENS = 3
 
 
 def _is_meaningful_answer(text: str) -> bool:
-    """紐⑤컮??以묐났 ?낅젰/諛섎났 臾몄옄 ?섏뿴??留됰뒗 ?섎? ?덈뒗 ?듬? 媛??"""
+    """모바??중복 ?�력/반복 문자 ?�열??막는 ?��? ?�는 ?��? 가??"""
     stripped = text.strip()
     if len(stripped) < MIN_ANSWER_CHARS:
         return False
@@ -70,7 +70,7 @@ async def start_interview(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(404, {"error": "?대젰?쒕? 李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "?�력?��? 찾을 ???�습?�다"})
 
     resume_data = resume.parsed_data or {}
 
@@ -87,8 +87,8 @@ async def start_interview(
         if jp:
             job_posting_data = jp.parsed_data
 
-    # 吏덈Ц ?섎뒗 ?대젰???꾨줈?앺듃/?듬? 源딆씠濡??숈쟻 寃곗젙 (scan 3 + dive 理쒕? 6 = 9).
-    # max_questions???곹븳 媛?쒕줈留??ъ슜: 臾대즺泥댄뿕? 3(scan留?, ?쇰컲? 9(scan+dive ?꾩껜).
+    # 질문 ?�는 ?�력???�로?�트/?��? 깊이�??�적 결정 (scan 3 + dive 최�? 6 = 9).
+    # max_questions???�한 가?�로�??�용: 무료체험?� 3(scan�?, ?�반?� 9(scan+dive ?�체).
     effective_max_questions = 9
 
     # Create session
@@ -140,37 +140,27 @@ async def start_interview(
             yield {"event": "status", "data": json.dumps({"phase": "loading_profile"})}
             state["pending_events"] = []
 
-            state = await nodes.load_profile(state, db)
-            for ev in state.get("pending_events", []):
-                yield {"event": ev["event"], "data": json.dumps(ev["data"])}
-            state["pending_events"] = []
+            state = await interview_graph.run_start_graph(state, db)
 
-            state = await nodes.fit_analysis_node(state, db)
-            for ev in state.get("pending_events", []):
-                yield {"event": ev["event"], "data": json.dumps(ev["data"])}
-            state["pending_events"] = []
-
-            # Fit Analysis ?곸냽????answer/skip ?먮쫫?먯꽌 ?ъ궗??(Spec 4.2(b))
+            # Fit Analysis ?�속????answer/skip ?�름?�서 ?�사??(Spec 4.2(b))
             session.fit_analysis = state.get("fit_analysis")
-
-            # Scan ?뚮옖 ?뺤젙 ??泥?吏덈Ц ?앹꽦
-            state = await nodes.build_scan_plan_node(state, db)
-            for ev in state.get("pending_events", []):
-                yield {"event": ev["event"], "data": json.dumps(ev["data"])}
-            state["pending_events"] = []
 
             session.phase = state.get("phase")
             session.scan_plan = state.get("scan_plan")
             session.dive_plan = state.get("dive_plan")
-            # Task 8-fix: progress 珥덇린??
+            # Task 8-fix: progress 초기??
             session.current_scan_idx = state.get("current_scan_idx", 0)
             session.current_dive_idx = 0
             session.current_dive_depth = 0
             session.scan_evaluations = state.get("scan_evaluations", [])
 
-            state = await nodes.scan_ask(state, db)
+            pending_events = list(state.get("pending_events", []))
+            question_events = [ev for ev in pending_events if ev.get("event") == "question"]
+            for ev in pending_events:
+                if ev.get("event") != "question":
+                    yield {"event": ev["event"], "data": json.dumps(ev["data"])}
 
-            # session ?대깽?몃? question蹂대떎 癒쇱? ?꾩넚 (?꾨줎?몄뿉??sessionId ?꾩슂)
+            # session ?�벤?��? question보다 먼�? ?�송 (?�론?�에??sessionId ?�요)
             yield {
                 "event": "session",
                 "data": json.dumps({
@@ -180,7 +170,7 @@ async def start_interview(
                 }),
             }
 
-            for ev in state.get("pending_events", []):
+            for ev in question_events:
                 yield {"event": ev["event"], "data": json.dumps(ev["data"])}
             state["pending_events"] = []
 
@@ -198,7 +188,7 @@ async def start_interview(
             await db.commit()
         except Exception as e:
             logger.exception("Agent interview start failed")
-            yield {"event": "error", "data": json.dumps({"error": "硫댁젒 ?쒖옉???ㅽ뙣?덉뒿?덈떎"})}
+            yield {"event": "error", "data": json.dumps({"error": "면접 ?�작???�패?�습?�다"})}
 
     return EventSourceResponse(event_generator())
 
@@ -213,11 +203,11 @@ async def submit_answer(
     db: AsyncSession = Depends(get_db),
 ):
     """Submit answer: evaluate ??decide next ??generate next question or end."""
-    # ?듬? ?덉쭏 媛??(?꾨줎???고쉶 諛⑹뼱)
+    # ?��? ?�질 가??(?�론???�회 방어)
     if not _is_meaningful_answer(body.answer):
         raise HTTPException(
             400,
-            {"error": '?듬????덈Т 吏㏐굅??諛섎났?⑸땲?? 議곌툑 ??留먯???二쇱떆嫄곕굹 "嫄대꼫?곌린"瑜??뚮윭二쇱꽭??'},
+            {"error": '?��????�무 짧거??반복?�니?? 조금 ??말�???주시거나 "건너?�기"�??�러주세??'},
         )
 
     # Verify session
@@ -232,7 +222,7 @@ async def submit_answer(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "?�션??찾을 ???�습?�다"})
 
     # Load resume
     resume_result = await db.execute(select(Resume).where(Resume.id == session.resume_id))
@@ -278,20 +268,20 @@ async def submit_answer(
             break
 
     if not last_question_msg:
-        raise HTTPException(400, {"error": "吏꾪뻾 以묒씤 吏덈Ц???놁뒿?덈떎"})
+        raise HTTPException(400, {"error": "진행 중인 질문???�습?�다"})
 
     current_question = last_question_msg.content
     question_count = last_question_msg.question_number or 1
 
     # Rebuild profile from RAG
-    from app.agent.interview.profile_agent import load_user_profile
+    from app.agent.interview.profile_memory import load_user_profile
     user_profile = await load_user_profile(db, user.id, resume_data, job_posting_data)
 
-    # ?대젰??RAG / Fit Analysis 而⑦뀓?ㅽ듃 蹂듭썝 (Spec 4.2(b))
-    from app.agent.interview.resume_rag import has_resume_embeddings as _has_emb
+    # ?�력??RAG / Fit Analysis 컨텍?�트 복원 (Spec 4.2(b))
+    from app.agent.interview.resume_memory import has_resume_embeddings as _has_emb
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
 
-    # Scan/Dive ?섏씠利?而⑦뀓?ㅽ듃 蹂듭썝 (Task 8-fix: session?먯꽌 吏곸젒 蹂듭썝)
+    # Scan/Dive ?�이�?컨텍?�트 복원 (Task 8-fix: session?�서 직접 복원)
     phase = session.phase or "scan"
     scan_plan = session.scan_plan or []
     dive_plan = session.dive_plan or []
@@ -300,7 +290,7 @@ async def submit_answer(
     current_dive_depth = session.current_dive_depth or 0
     scan_evaluations = session.scan_evaluations or []
 
-    # Task 8-fix: ?덇굅???몄뀡(phase=NULL) 諛⑹뼱 ??scan_plan ?놁쑝硫??ъ깮??
+    # Task 8-fix: ?�거???�션(phase=NULL) 방어 ??scan_plan ?�으�??�생??
     if not scan_plan:
         tmp_state: InterviewState = {
             "session_id": session_id,
@@ -311,7 +301,7 @@ async def submit_answer(
             "fit_analysis": session.fit_analysis,
             "pending_events": [],
         }  # type: ignore
-        tmp_state = await nodes.build_scan_plan_node(tmp_state, db)
+        tmp_state = await interview_graph.run_scan_plan_graph(tmp_state, db)
         phase = tmp_state.get("phase") or phase
         scan_plan = tmp_state.get("scan_plan") or []
         session.phase = phase
@@ -368,7 +358,7 @@ async def submit_answer(
             next_message_index += 1
 
             # Agent loop: plan ??action ??plan ??... ??decide
-            state = await nodes.agent_loop(state, db)
+            state = await interview_graph.run_answer_graph(state, db)
 
             # Flush all pending events
             for ev in state.get("pending_events", []):
@@ -378,12 +368,12 @@ async def submit_answer(
             # Update answer message with evaluation
             answer_msg.evaluation = state["current_evaluation"]
 
-            # Handle post-decide state ??Scan+Dive 援ъ“?먯꽌 next_action?
-            # scan_ask / dive_ask / build_dive_plan / end 以??섎굹
+            # Handle post-decide state ??Scan+Dive 구조?�서 next_action?�
+            # scan_ask / dive_ask / build_dive_plan / end �??�나
             action = state.get("next_action", "end")
 
             if action in ("scan_ask", "dive_ask", "build_dive_plan"):
-                # ?λ떎?대툕 depth>=2 吏덈Ц? agent_followup, ?섎㉧吏??agent_question
+                # ?�다?�브 depth>=2 질문?� agent_followup, ?�머지??agent_question
                 is_dive_followup = (
                     state.get("phase") == "dive"
                     and state.get("current_dive_depth", 0) > 1
@@ -401,11 +391,11 @@ async def submit_answer(
                 db.add(q_msg)
                 next_message_index += 1
 
-                # phase/scan_plan/dive_plan ?곸냽??
+                # phase/scan_plan/dive_plan ?�속??
                 session.phase = state.get("phase")
                 session.scan_plan = state.get("scan_plan")
                 session.dive_plan = state.get("dive_plan")
-                # Task 8-fix: progress ?곸냽??
+                # Task 8-fix: progress ?�속??
                 session.scan_evaluations = state.get("scan_evaluations")
                 session.current_scan_idx = state.get("current_scan_idx", 0)
                 session.current_dive_idx = state.get("current_dive_idx", 0)
@@ -418,14 +408,14 @@ async def submit_answer(
                 if state.get("overall_report"):
                     session.overall_score = state["overall_report"].get("overallScore")
                 session.phase = "done"
-                # Task 8-fix: progress ?곸냽??
+                # Task 8-fix: progress ?�속??
                 session.current_scan_idx = state.get("current_scan_idx", 0)
                 session.current_dive_idx = state.get("current_dive_idx", 0)
                 session.current_dive_depth = state.get("current_dive_depth", 0)
 
             await db.commit()
 
-            # ?꾨줎???명솚: ?대? action(scan_ask/dive_ask/build_dive_plan) ??"next_question"
+            # ?�론???�환: ?��? action(scan_ask/dive_ask/build_dive_plan) ??"next_question"
             legacy_action = (
                 "next_question"
                 if action in ("scan_ask", "dive_ask", "build_dive_plan")
@@ -443,7 +433,7 @@ async def submit_answer(
 
         except Exception as e:
             logger.exception("Agent interview answer processing failed")
-            yield {"event": "error", "data": json.dumps({"error": "?듬? 泥섎━???ㅽ뙣?덉뒿?덈떎"})}
+            yield {"event": "error", "data": json.dumps({"error": "?��? 처리???�패?�습?�다"})}
 
     return EventSourceResponse(event_generator())
 
@@ -468,7 +458,7 @@ async def skip_question(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "?�션??찾을 ???�습?�다"})
 
     messages = sorted(session.messages, key=lambda m: m.message_index)
     next_message_index = len(messages)
@@ -493,7 +483,7 @@ async def skip_question(
         if jp:
             job_posting_data = jp.parsed_data
 
-    from app.agent.interview.profile_agent import load_user_profile
+    from app.agent.interview.profile_memory import load_user_profile
     user_profile = await load_user_profile(db, user.id, resume_data, job_posting_data)
 
     # Build conversation history from DB
@@ -512,12 +502,12 @@ async def skip_question(
 
     max_questions = session.max_questions or 7
 
-    # ?대젰??RAG / Fit Analysis 而⑦뀓?ㅽ듃 蹂듭썝 (Spec 4.2(b))
-    from app.agent.interview.resume_rag import has_resume_embeddings as _has_emb
+    # ?�력??RAG / Fit Analysis 컨텍?�트 복원 (Spec 4.2(b))
+    from app.agent.interview.resume_memory import has_resume_embeddings as _has_emb
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
     persisted_fit = session.fit_analysis
 
-    # Task 8-fix: Scan/Dive progress 吏곸젒 蹂듭썝 (?대━?ㅽ떛 ?쒓굅)
+    # Task 8-fix: Scan/Dive progress 직접 복원 (?�리?�틱 ?�거)
     phase = session.phase or "scan"
     scan_plan = session.scan_plan or []
     dive_plan = session.dive_plan or []
@@ -526,7 +516,7 @@ async def skip_question(
     current_dive_depth = session.current_dive_depth or 0
     scan_evaluations = session.scan_evaluations or []
 
-    # Task 8-fix: ?덇굅???몄뀡(phase=NULL) 諛⑹뼱 ??scan_plan ?놁쑝硫??ъ깮??
+    # Task 8-fix: ?�거???�션(phase=NULL) 방어 ??scan_plan ?�으�??�생??
     if not scan_plan:
         tmp_state: InterviewState = {
             "session_id": session_id,
@@ -537,7 +527,7 @@ async def skip_question(
             "fit_analysis": persisted_fit,
             "pending_events": [],
         }  # type: ignore
-        tmp_state = await nodes.build_scan_plan_node(tmp_state, db)
+        tmp_state = await interview_graph.run_scan_plan_graph(tmp_state, db)
         phase = tmp_state.get("phase") or phase
         scan_plan = tmp_state.get("scan_plan") or []
         session.phase = phase
@@ -553,14 +543,14 @@ async def skip_question(
                 session_id=session_id,
                 message_index=next_message_index,
                 role="user_answer",
-                content="(嫄대꼫?)",
+                content="(건너?�)",
                 question_number=question_count,
                 follow_up_round=0,
             )
             db.add(skip_msg)
             next_message_index += 1
 
-            # 怨듯넻 state 鍮뚮뱶
+            # 공통 state 빌드
             state: InterviewState = {
                 "session_id": session_id,
                 "user_id": user.id,
@@ -593,36 +583,36 @@ async def skip_question(
             if question_count >= max_questions:
                 should_end = True
             else:
-                # ?섏씠利덈퀎 skip 泥섎━
+                # ?�이즈별 skip 처리
                 if phase == "scan":
                     # scan: dummy eval push, idx++
                     new_scan_idx = current_scan_idx + 1
                     state["scan_evaluations"] = scan_evaluations + [{"scores": {"depth": 0}}]
                     state["current_scan_idx"] = new_scan_idx
                     if new_scan_idx >= len(scan_plan):
-                        # ?묎린 ?뚯쭊 ??dive ?꾪솚
-                        state = await nodes.build_dive_plan_node(state, db)
+                        # ?�기 ?�진 ??dive ?�환
+                        state["next_action"] = "build_dive_plan"
+                        state = await interview_graph.run_next_question_graph(state, db)
                         if not state.get("dive_plan"):
-                            # dive_plan 鍮꾩뼱?덉쑝硫?醫낅즺
+                            # dive_plan 비어?�으�?종료
                             should_end = True
-                        else:
-                            state = await nodes.dive_ask(state, db)
                     else:
-                        state = await nodes.scan_ask(state, db)
+                        state["next_action"] = "scan_ask"
+                        state = await interview_graph.run_next_question_graph(state, db)
                 else:
-                    # dive: ?꾩옱 二쇱젣 以묐떒 + ?ㅼ쓬 二쇱젣濡?
+                    # dive: ?�재 주제 중단 + ?�음 주제�?
                     new_dive_idx = current_dive_idx + 1
                     if new_dive_idx >= len(dive_plan):
                         should_end = True
                     else:
                         state["current_dive_idx"] = new_dive_idx
                         state["current_dive_depth"] = 0
-                        state = await nodes.dive_ask(state, db)
+                        state["next_action"] = "dive_ask"
+                        state = await interview_graph.run_next_question_graph(state, db)
 
             if should_end:
                 state["next_action"] = "end"
-                state = await nodes.update_profile(state, db)
-                state = await nodes.generate_report(state, db)
+                state = await interview_graph.run_end_graph(state, db)
                 for ev in state.get("pending_events", []):
                     yield {"event": ev["event"], "data": json.dumps(ev["data"])}
 
@@ -632,7 +622,7 @@ async def skip_question(
                 if state.get("overall_report"):
                     session.overall_score = state["overall_report"].get("overallScore")
                 session.phase = "done"
-                # Task 8-fix: progress ?곸냽??
+                # Task 8-fix: progress ?�속??
                 session.current_scan_idx = state.get("current_scan_idx", 0)
                 session.current_dive_idx = state.get("current_dive_idx", 0)
                 session.current_dive_depth = state.get("current_dive_depth", 0)
@@ -668,11 +658,11 @@ async def skip_question(
                 )
                 db.add(q_msg)
 
-                # phase/scan_plan/dive_plan ?곸냽??
+                # phase/scan_plan/dive_plan ?�속??
                 session.phase = state.get("phase")
                 session.scan_plan = state.get("scan_plan")
                 session.dive_plan = state.get("dive_plan")
-                # Task 8-fix: progress ?곸냽??
+                # Task 8-fix: progress ?�속??
                 session.scan_evaluations = state.get("scan_evaluations")
                 session.current_scan_idx = state.get("current_scan_idx", 0)
                 session.current_dive_idx = state.get("current_dive_idx", 0)
@@ -691,7 +681,7 @@ async def skip_question(
 
         except Exception:
             logger.exception("Skip question failed")
-            yield {"event": "error", "data": json.dumps({"error": "嫄대꼫?곌린???ㅽ뙣?덉뒿?덈떎"})}
+            yield {"event": "error", "data": json.dumps({"error": "건너?�기???�패?�습?�다"})}
 
     return EventSourceResponse(event_generator())
 
@@ -704,7 +694,7 @@ async def end_interview(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Manually end interview early. ?꾨줈???낅뜲?댄듃 + 由ы룷???앹꽦源뚯? ?섑뻾."""
+    """Manually end interview early. ?�로???�데?�트 + 리포???�성까�? ?�행."""
     result = await db.execute(
         select(AgentInterviewSession)
         .where(
@@ -716,9 +706,9 @@ async def end_interview(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "?�션??찾을 ???�습?�다"})
 
-    # ????덉뒪?좊━ 蹂듭썝
+    # ?�???�스?�리 복원
     messages = sorted(session.messages, key=lambda m: m.message_index)
     conversation_history = []
     question_count = 0
@@ -736,7 +726,7 @@ async def end_interview(
                 "question_number": msg.question_number,
             })
 
-    # 由ъ냼??濡쒕뱶 (?꾨줈???낅뜲?댄듃 諛?由ы룷???앹꽦??
+    # 리소??로드 (?�로???�데?�트 �?리포???�성??
     resume_result = await db.execute(select(Resume).where(Resume.id == session.resume_id))
     resume = resume_result.scalar_one_or_none()
     resume_data = resume.parsed_data if resume else {}
@@ -753,7 +743,7 @@ async def end_interview(
         if jp:
             job_posting_data = jp.parsed_data
 
-    from app.agent.interview.profile_agent import load_user_profile
+    from app.agent.interview.profile_memory import load_user_profile
     user_profile = await load_user_profile(db, user.id, resume_data, job_posting_data)
 
     state: InterviewState = {
@@ -777,11 +767,10 @@ async def end_interview(
         "current_resume_chunks": [],
     }
 
-    # ????댁뿭???놁쑝硫?由ы룷???앹꽦 嫄대꼫? (LLM ?몄텧 ??퉬 + ?섎? ?녿뒗 由ы룷??諛⑹?)
+    # ?�???�역???�으�?리포???�성 건너?� (LLM ?�출 ??�� + ?��? ?�는 리포??방�?)
     if conversation_history:
         try:
-            state = await nodes.update_profile(state, db)
-            state = await nodes.generate_report(state, db)
+            state = await interview_graph.run_end_graph(state, db)
             session.report_data = state.get("overall_report")
             if state.get("overall_report"):
                 session.overall_score = state["overall_report"].get("overallScore")
@@ -815,7 +804,7 @@ async def get_session(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "?�션??찾을 ???�습?�다"})
 
     messages = sorted(session.messages, key=lambda m: m.message_index)
 
@@ -851,9 +840,9 @@ async def get_profile(
     db: AsyncSession = Depends(get_db),
 ):
     """Get user's AI profile summary."""
-    from app.agent.interview.profile_agent import search_profile
+    from app.agent.interview.profile_memory import search_profile
 
-    profiles = await search_profile(db, user.id, "硫댁젒 ??웾 醫낇빀", top_k=20)
+    profiles = await search_profile(db, user.id, "면접 ??�� 종합", top_k=20)
 
     CATEGORY_KEY = {"strength": "strengths", "weakness": "weaknesses", "pattern": "patterns", "context": "context"}
     organized: dict[str, list[str]] = {
@@ -880,7 +869,7 @@ async def add_profile_context(
     db: AsyncSession = Depends(get_db),
 ):
     """Add explicit user context to profile."""
-    from app.agent.interview.profile_agent import update_profile
+    from app.agent.interview.profile_memory import update_profile
 
     entry_id = await update_profile(
         db,

@@ -1,5 +1,5 @@
 """Tests for build_scan_plan."""
-from app.agent.interview.planner import build_scan_plan
+from app.agent.interview.plan_builder import build_scan_plan
 
 
 def test_scan_plan_jd_matched_two_plus_unmatched_one():

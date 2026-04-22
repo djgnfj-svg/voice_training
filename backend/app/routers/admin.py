@@ -99,7 +99,7 @@ async def ns_test_search(
     user: AuthUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.agent.nightly_study.ns_rag import search_learning_memory
+    from app.agent.learning_coach.learning_memory import search_learning_memory
     hits = await search_learning_memory(
         db, user_id=user.id, query=body.query,
         top_k=5, category=body.category,
@@ -118,7 +118,7 @@ async def ns_test_insert(
     user: AuthUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.agent.nightly_study.ns_rag import insert_learning_memory
+    from app.agent.learning_coach.learning_memory import insert_learning_memory
     new_id = await insert_learning_memory(
         db, user_id=user.id, category=body.category, content=body.content,
     )

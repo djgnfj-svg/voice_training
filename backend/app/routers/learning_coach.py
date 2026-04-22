@@ -3,9 +3,8 @@
 import asyncio
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,18 +12,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
-from app.agent.nightly_study.ns_graph import run_agent_turn, stream_agent_turn
-from app.agent.nightly_study.ns_seed import generate_and_insert_seed, normalize_goal
-from app.agent.nightly_study.ns_summarizer import generate_session_summary, update_streak_after_session
+from app.agent.learning_coach.graph import pick_start_node, run_end_graph, run_start_graph, stream_agent_turn
+from app.agent.learning_coach.curriculum_seed import generate_and_insert_seed, normalize_goal
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-KST = timezone(timedelta(hours=9))
-
-
-def _kst_today() -> date:
-    return datetime.now(KST).date()
 
 
 @router.post("/api/nightly-study/start")
@@ -32,69 +25,7 @@ async def start_session(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await db.execute(text("SELECT id FROM users WHERE id=:u FOR UPDATE"), {"u": user.id})
-    await db.execute(
-        text("UPDATE learning_sessions SET status='completed', ended_at=NOW() WHERE user_id=:u AND status='active'"),
-        {"u": user.id},
-    )
-    await db.commit()
-
-    goal_row = (await db.execute(
-        text("SELECT id, title FROM learning_goals WHERE user_id=:u AND status='active'"),
-        {"u": user.id},
-    )).one_or_none()
-    goal_id = str(goal_row.id) if goal_row else None
-    initial_mode = "learning" if goal_id else "onboarding"
-    target_node = await _pick_start_node(db, user.id, goal_id) if goal_id else None
-
-    row = (await db.execute(
-        text("""
-            INSERT INTO learning_sessions
-                (user_id, goal_id, is_free_session, status, target_node_id)
-            VALUES (:u, :g, TRUE, 'active', :n)
-            RETURNING id
-        """),
-        {
-            "u": user.id,
-            "g": goal_id,
-            "n": target_node["id"] if target_node else None,
-        },
-    )).one()
-    session_id = str(row.id)
-    await db.commit()
-
-    try:
-        result = await run_agent_turn(
-            db=db,
-            session_id=session_id,
-            user_id=user.id,
-            user_utterance="?몄뀡 ?쒖옉",
-            persist_user=False,
-        )
-        first_text = result.get("final_text") or ""
-    except Exception:
-        logger.exception("agentic start failed")
-        first_text = (
-            "?덈뀞?섏꽭?? 癒쇱? ?숈뒿 紐⑺몴? ?꾩옱 以鍮?以묒씤 遺꾩빞瑜?吏㏐쾶 留먰빐 二쇱꽭??"
-            if initial_mode == "onboarding"
-            else f"?ㅼ떆 ?댁뼱媛 蹂쇨쾶?? ?ㅻ뒛? '{target_node['title']}'遺??蹂쇨퉴??"
-            if target_node else "?ㅻ뒛 ?숈뒿???쒖옉??蹂쇨퉴??"
-        )
-        await db.execute(
-            text("""
-                INSERT INTO learning_messages (session_id, message_index, role, content, mode, node_id)
-                VALUES (:s, 0, 'assistant', :c, :m, :n)
-            """),
-            {"s": session_id, "c": first_text, "m": initial_mode, "n": target_node["id"] if target_node else None},
-        )
-        await db.commit()
-
-    return {
-        "sessionId": session_id,
-        "initialMode": initial_mode,
-        "targetNode": target_node,
-        "firstMessage": first_text,
-    }
+    return await run_start_graph(db, user.id)
 
 
 class GoalBody(BaseModel):
@@ -107,7 +38,10 @@ async def set_goal(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await db.execute(text("UPDATE learning_goals SET status='archived' WHERE user_id=:u AND status='active'"), {"u": user.id})
+    await db.execute(
+        text("UPDATE learning_goals SET status='archived' WHERE user_id=:u AND status='active'"),
+        {"u": user.id},
+    )
     row = (await db.execute(
         text("""
             INSERT INTO learning_goals (user_id, title, normalized_goal, status)
@@ -144,7 +78,6 @@ class TurnBody(BaseModel):
 async def turn(
     session_id: str,
     body: TurnBody,
-    background_tasks: BackgroundTasks,
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -176,7 +109,6 @@ class EndBody(BaseModel):
 async def end_session(
     session_id: str,
     body: EndBody,
-    background_tasks: BackgroundTasks,
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -187,31 +119,7 @@ async def end_session(
     if sess is None:
         raise HTTPException(status_code=404, detail={"error": "세션을 찾을 수 없어요"})
 
-    summary_data = await generate_session_summary(db, session_id)
-    await db.execute(
-        text("""
-            UPDATE learning_sessions
-            SET status='completed', ended_at=NOW(),
-                summary=:sum, highlights=CAST(:h AS jsonb), voice_briefing=:vb,
-                pending_action=NULL
-            WHERE id=:s
-        """),
-        {
-            "s": session_id,
-            "sum": summary_data["summary"],
-            "h": json.dumps(summary_data["highlights"], ensure_ascii=False),
-            "vb": summary_data["voice_briefing"],
-        },
-    )
-    await db.commit()
-    streak_state = await update_streak_after_session(db, user.id, _kst_today())
-    background_tasks.add_task(_store_insights_bg, session_id, user.id)
-    return {
-        "summary": summary_data["summary"],
-        "highlights": summary_data["highlights"],
-        "voiceBriefing": summary_data["voice_briefing"],
-        "streakUpdated": streak_state,
-    }
+    return await run_end_graph(db, session_id, user.id)
 
 
 @router.get("/api/nightly-study/status")
@@ -227,7 +135,7 @@ async def status(
         text("SELECT id FROM learning_goals WHERE user_id=:u AND status='active'"),
         {"u": user.id},
     )).one_or_none()
-    target = await _pick_start_node(db, user.id, str(goal_row.id)) if goal_row else None
+    target = await pick_start_node(db, user.id, str(goal_row.id)) if goal_row else None
     recent = (await db.execute(
         text("""
             SELECT id, started_at, ended_at, highlights
@@ -251,7 +159,7 @@ async def status(
                 "id": str(r.id),
                 "startedAt": r.started_at.isoformat() if r.started_at else None,
                 "endedAt": r.ended_at.isoformat() if r.ended_at else None,
-                "headline": ((r.highlights or {}).get("headline") or "?숈뒿 ?몄뀡") if isinstance(r.highlights, dict) else "?숈뒿 ?몄뀡",
+                "headline": ((r.highlights or {}).get("headline") or "학습 세션") if isinstance(r.highlights, dict) else "학습 세션",
             }
             for r in recent
         ],
@@ -288,53 +196,3 @@ async def get_session_detail(
         "voiceBriefing": sess.voice_briefing,
         "messages": [{"index": m.message_index, "role": m.role, "content": m.content, "mode": m.mode} for m in msgs],
     }
-
-
-async def _pick_start_node(db: AsyncSession, user_id: str, goal_id: str | None) -> dict | None:
-    if not goal_id:
-        return None
-    row = (await db.execute(
-        text("""
-            SELECT cn.id, cn.title, cn.description
-            FROM curriculum_nodes cn
-            LEFT JOIN node_mastery nm ON nm.node_id = cn.id AND nm.user_id=:u
-            WHERE cn.goal_id=:g
-            ORDER BY
-                CASE WHEN nm.next_review_at IS NULL OR nm.next_review_at <= NOW() THEN 0 ELSE 1 END,
-                nm.proficiency ASC NULLS FIRST,
-                cn.depth_level ASC
-            LIMIT 1
-        """),
-        {"u": user_id, "g": goal_id},
-    )).one_or_none()
-    if not row:
-        return None
-    return {"id": str(row.id), "title": row.title, "description": row.description}
-
-
-async def _store_insights_bg(session_id: str, user_id: str) -> None:
-    from app.database import async_session
-    from app.agent.nightly_study.ns_rag import insert_learning_memory
-
-    async with async_session() as db:
-        try:
-            rows = (await db.execute(
-                text("""
-                    SELECT content, node_id FROM learning_messages
-                    WHERE session_id=:s AND role='assistant'
-                    ORDER BY message_index DESC LIMIT 2
-                """),
-                {"s": session_id},
-            )).fetchall()
-            for row in rows:
-                if row.content:
-                    await insert_learning_memory(
-                        db,
-                        user_id=user_id,
-                        category="connection",
-                        content=row.content[:1000],
-                        node_id=str(row.node_id) if row.node_id else None,
-                        metadata={"session_id": session_id},
-                    )
-        except Exception:
-            logger.exception("insight extraction failed for session %s", session_id)

@@ -59,5 +59,5 @@ async def test_status_reflects_streak(client, auth_headers, db):
 
 def test_router_importable():
     """Smoke test: router imports without error."""
-    from app.routers.nightly_study import router
+    from app.routers.learning_coach import router
     assert router is not None

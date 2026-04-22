@@ -19,6 +19,7 @@ dependencies = [
     "cryptography>=42.0",
     "joserfc>=1.0",
     "langgraph>=0.2",
+    "langsmith>=0.1",
 ]
 
 [project.optional-dependencies]

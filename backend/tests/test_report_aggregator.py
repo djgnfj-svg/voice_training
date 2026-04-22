@@ -1,5 +1,5 @@
 """Tests for aggregate_evaluations."""
-from app.agent.interview.report_aggregator import aggregate_evaluations
+from app.agent.interview.report_metrics import aggregate_evaluations
 
 
 def _turn(q: str, score: int, *, scores: dict | None = None, meta: dict | None = None,
@@ -110,7 +110,7 @@ def test_skipped_answers_excluded():
 
 def test_format_aggregate_renders_all_sections():
     """format_aggregate_for_prompt 주요 섹션 헤더와 값이 텍스트에 포함."""
-    from app.agent.interview.report_aggregator import format_aggregate_for_prompt
+    from app.agent.interview.report_metrics import format_aggregate_for_prompt
     history = [
         _turn("React에서 useMemo를 썼나요?", 80, demo=["useMemo", "의존성 배열"], miss=["useCallback"],
               meta={"phase": "scan", "scanIdx": 0, "projectRef": "P1"}),
@@ -140,7 +140,7 @@ def test_format_aggregate_renders_all_sections():
 
 
 def test_format_aggregate_empty_returns_default():
-    from app.agent.interview.report_aggregator import format_aggregate_for_prompt
+    from app.agent.interview.report_metrics import format_aggregate_for_prompt
     text = format_aggregate_for_prompt(aggregate_evaluations([]))
     # 빈 집계도 전체 라인은 항상 출력 (기존 동작)
     assert "전체: 0개 답변" in text

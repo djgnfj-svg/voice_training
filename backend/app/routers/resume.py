@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.interview.resume_rag import embed_resume
+from app.agent.interview.resume_memory import embed_resume
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
 from app.lib.llm_client import call_llm_json
@@ -67,7 +67,7 @@ async def get_resume(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(status_code=404, detail={"error": "이력서를 찾을 수 없습니다."})
+        raise HTTPException(status_code=404, detail={"error": "?�력?��? 찾을 ???�습?�다."})
     return {
         "id": resume.id,
         "userId": resume.user_id,
@@ -87,26 +87,26 @@ async def upload_resume(
     db: AsyncSession = Depends(get_db),
 ):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail={"error": "PDF 파일만 업로드할 수 있습니다."})
+        raise HTTPException(status_code=400, detail={"error": "PDF ?�일�??�로?�할 ???�습?�다."})
 
     content = await file.read()
     if len(content) > MAX_PDF_SIZE:
-        raise HTTPException(status_code=413, detail={"error": "PDF 파일이 너무 큽니다 (최대 10MB)"})
+        raise HTTPException(status_code=413, detail={"error": "PDF ?�일???�무 ?�니??(최�? 10MB)"})
 
     try:
         doc = pymupdf.open(stream=content, filetype="pdf")
         text = "".join(page.get_text() for page in doc)
         doc.close()
     except Exception:
-        raise HTTPException(status_code=400, detail={"error": "PDF 파일을 읽을 수 없습니다."})
+        raise HTTPException(status_code=400, detail={"error": "PDF ?�일???�을 ???�습?�다."})
 
     if not text.strip():
-        raise HTTPException(status_code=400, detail={"error": "PDF에서 텍스트를 추출할 수 없습니다."})
+        raise HTTPException(status_code=400, detail={"error": "PDF?�서 ?�스?��? 추출?????�습?�다."})
 
     # Strip .pdf extension for the display name
     name = file.filename.rsplit(".", 1)[0]
 
-    # AI 파싱: rawText → 구조화된 데이터 추출
+    # AI ?�싱: rawText ??구조?�된 ?�이??추출
     parsed_data: dict = {"rawText": text}
     try:
         structured = await call_llm_json(
@@ -116,7 +116,7 @@ async def upload_resume(
         if isinstance(structured, dict):
             parsed_data.update(structured)
     except Exception:
-        pass  # 파싱 실패 시 rawText만 저장
+        pass  # ?�싱 ?�패 ??rawText�??�??
 
     resume = Resume(
         id=str(uuid4()),
@@ -158,7 +158,7 @@ async def update_resume(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(status_code=404, detail={"error": "이력서를 찾을 수 없습니다."})
+        raise HTTPException(status_code=404, detail={"error": "?�력?��? 찾을 ???�습?�다."})
 
     resume.name = body.name
     await db.commit()
@@ -188,7 +188,7 @@ async def delete_resume(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(status_code=404, detail={"error": "이력서를 찾을 수 없습니다."})
+        raise HTTPException(status_code=404, detail={"error": "?�력?��? 찾을 ???�습?�다."})
 
     try:
         await db.delete(resume)
@@ -197,7 +197,7 @@ async def delete_resume(
         await db.rollback()
         raise HTTPException(
             status_code=409,
-            detail={"error": "이 이력서와 연결된 면접 기록이 있어 삭제할 수 없습니다."},
+            detail={"error": "???�력?��? ?�결??면접 기록???�어 ??��?????�습?�다."},
         )
 
     return {"success": True}

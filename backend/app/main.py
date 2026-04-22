@@ -1,4 +1,4 @@
-from contextlib import asynccontextmanager
+﻿from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
@@ -44,7 +44,7 @@ from app.routers.model_answer import router as model_answer_router
 from app.routers.speech import router as speech_router
 from app.routers.answer_assist import router as answer_assist_router
 from app.routers.admin import router as admin_router
-from app.routers.nightly_study import router as nightly_study_router
+from app.routers.learning_coach import router as learning_coach_router
 from app.routers.agent_interview import router as agent_interview_router
 
 app.include_router(health_router)
@@ -58,5 +58,5 @@ app.include_router(model_answer_router)
 app.include_router(speech_router)
 app.include_router(answer_assist_router)
 app.include_router(admin_router)
-app.include_router(nightly_study_router)
+app.include_router(learning_coach_router)
 app.include_router(agent_interview_router)

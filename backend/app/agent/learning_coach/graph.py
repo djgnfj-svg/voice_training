@@ -2,7 +2,7 @@
 
 import json
 import logging
-import os
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Annotated, AsyncGenerator, Callable, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
@@ -15,13 +15,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent import tracing
 from app.config import settings
-from app.agent.nightly_study.ns_rag import search_learning_memory, insert_learning_memory
-from app.agent.nightly_study.ns_seed import generate_and_insert_seed, normalize_goal
-from app.agent.nightly_study.ns_tools import tool_evaluate_answer
+from app.agent.learning_coach.learning_memory import search_learning_memory, insert_learning_memory
+from app.agent.learning_coach.curriculum_seed import generate_and_insert_seed, normalize_goal
+from app.agent.learning_coach.spaced_repetition import apply_proficiency_delta, compute_next_review
+from app.agent.learning_coach.session_summary import generate_session_summary, update_streak_after_session
 from app.prompts.nightly_study import AGENTIC_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
+KST = timezone(timedelta(hours=9))
 
 
 class LearningGraphState(TypedDict, total=False):
@@ -159,6 +162,88 @@ def _default_tools_schema() -> list[dict[str, Any]]:
 
 def _json_result(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
+
+
+def _trace_meta(session_id: str | None, user_id: str, graph_name: str) -> dict[str, Any]:
+    return {
+        "feature": "learning_coach",
+        "graph_name": graph_name,
+        "session_id": session_id,
+        "user_id": user_id,
+        "phase": graph_name,
+    }
+
+
+def _kst_today() -> date:
+    return datetime.now(KST).date()
+
+
+async def _apply_mastery_update(
+    db: AsyncSession,
+    user_id: str,
+    node_id: str,
+    delta: int,
+    correct: bool,
+    mode: str,
+) -> int:
+    row = (await db.execute(
+        text("""
+            SELECT proficiency, success_count, failure_count, streak_count
+            FROM node_mastery
+            WHERE user_id=:u AND node_id=:n
+        """),
+        {"u": user_id, "n": node_id},
+    )).one_or_none()
+
+    now = datetime.now(timezone.utc)
+    if row is None:
+        new_prof = apply_proficiency_delta(0, delta)
+        success = 1 if correct else 0
+        failure = 0 if correct else 1
+        streak = 1 if correct else 0
+        await db.execute(
+            text("""
+                INSERT INTO node_mastery
+                    (user_id, node_id, proficiency, success_count, failure_count,
+                     streak_count, last_studied_at, next_review_at, last_mode)
+                VALUES (:u, :n, :p, :s, :f, :sc, :ls, :nr, :lm)
+            """),
+            {
+                "u": user_id,
+                "n": node_id,
+                "p": new_prof,
+                "s": success,
+                "f": failure,
+                "sc": streak,
+                "ls": now,
+                "nr": compute_next_review(new_prof, now),
+                "lm": mode,
+            },
+        )
+    else:
+        new_prof = apply_proficiency_delta(row.proficiency, delta)
+        await db.execute(
+            text("""
+                UPDATE node_mastery
+                SET proficiency=:p, success_count=:s, failure_count=:f,
+                    streak_count=:sc, last_studied_at=:ls,
+                    next_review_at=:nr, last_mode=:lm
+                WHERE user_id=:u AND node_id=:n
+            """),
+            {
+                "p": new_prof,
+                "s": row.success_count + (1 if correct else 0),
+                "f": row.failure_count + (0 if correct else 1),
+                "sc": (row.streak_count + 1) if correct else 0,
+                "ls": now,
+                "nr": compute_next_review(new_prof, now),
+                "lm": mode,
+                "u": user_id,
+                "n": node_id,
+            },
+        )
+    await db.commit()
+    return new_prof
 
 
 def _make_tools(db: AsyncSession, session_id: str, user_id: str):
@@ -314,7 +399,7 @@ def _make_tools(db: AsyncSession, session_id: str, user_id: str):
         target_node_id = node_id or ctx.get("target_node_id")
         if not target_node_id:
             return _json_result({"error": "no_target_node"})
-        proficiency = await tool_evaluate_answer(db, user_id, target_node_id, delta, correct, mode)
+        proficiency = await _apply_mastery_update(db, user_id, target_node_id, delta, correct, mode)
         return _json_result({"node_id": target_node_id, "proficiency": proficiency})
 
     @tool("summarize_session", args_schema=SummarizeSessionArgs)
@@ -439,6 +524,49 @@ async def _pick_target_node(db: AsyncSession, user_id: str, goal_id: str | None,
     return {"id": str(row.id), "title": row.title, "description": row.description, "depth_level": row.depth_level}
 
 
+async def pick_start_node(db: AsyncSession, user_id: str, goal_id: str | None) -> dict[str, Any] | None:
+    if not goal_id:
+        return None
+    row = (await db.execute(
+        text("""
+            SELECT cn.id, cn.title, cn.description
+            FROM curriculum_nodes cn
+            LEFT JOIN node_mastery nm ON nm.node_id = cn.id AND nm.user_id=:u
+            WHERE cn.goal_id=:g
+            ORDER BY
+                CASE WHEN nm.next_review_at IS NULL OR nm.next_review_at <= NOW() THEN 0 ELSE 1 END,
+                nm.proficiency ASC NULLS FIRST,
+                cn.depth_level ASC
+            LIMIT 1
+        """),
+        {"u": user_id, "g": goal_id},
+    )).one_or_none()
+    if not row:
+        return None
+    return {"id": str(row.id), "title": row.title, "description": row.description}
+
+
+async def store_session_insights(db: AsyncSession, session_id: str, user_id: str) -> None:
+    rows = (await db.execute(
+        text("""
+            SELECT content, node_id FROM learning_messages
+            WHERE session_id=:s AND role='assistant'
+            ORDER BY message_index DESC LIMIT 2
+        """),
+        {"s": session_id},
+    )).fetchall()
+    for row in rows:
+        if row.content:
+            await insert_learning_memory(
+                db,
+                user_id=user_id,
+                category="connection",
+                content=row.content[:1000],
+                node_id=str(row.node_id) if row.node_id else None,
+                metadata={"session_id": session_id},
+            )
+
+
 def build_learning_graph(db: AsyncSession, llm: Any | None = None):
     llm = llm or DefaultToolCallingLLM()
     tools_schema = _default_tools_schema()
@@ -530,24 +658,21 @@ async def _persist_graph_turn(db: AsyncSession, state: LearningGraphState) -> di
             "n": node_id,
         },
     )
-    run_id = os.getenv("LANGSMITH_RUN_ID")
     await db.execute(
         text("""
             UPDATE learning_sessions
             SET turn_count=turn_count + :inc,
-                graph_state=CAST(:gs AS jsonb),
-                langsmith_run_id=COALESCE(:rid, langsmith_run_id)
+                graph_state=CAST(:gs AS jsonb)
             WHERE id=:s
         """),
         {
             "s": session_id,
             "inc": 1 if state.get("persist_user", True) else 0,
             "gs": json.dumps({"last_tools": tool_log}, ensure_ascii=False),
-            "rid": run_id,
         },
     )
     await db.commit()
-    return {"final_text": final_text, "tool_log": tool_log, "langsmith_run_id": run_id}
+    return {"final_text": final_text, "tool_log": tool_log}
 
 
 def _extract_tool_log(messages: list[BaseMessage]) -> list[dict[str, Any]]:
@@ -571,15 +696,146 @@ async def run_agent_turn(
     llm: Any | None = None,
 ) -> dict[str, Any]:
     graph = build_learning_graph(db, llm=llm)
-    return await graph.ainvoke(
-        {
-            "session_id": session_id,
-            "user_id": user_id,
-            "user_utterance": user_utterance,
-            "persist_user": persist_user,
-            "messages": [],
-        }
+    state = {
+        "session_id": session_id,
+        "user_id": user_id,
+        "user_utterance": user_utterance,
+        "persist_user": persist_user,
+        "messages": [],
+    }
+    result, run_id = await tracing.traced_graph_call(
+        name="learning_coach.turn",
+        metadata=_trace_meta(session_id, user_id, "turn"),
+        call=lambda: graph.ainvoke(state),
     )
+    if run_id:
+        result["langsmith_run_id"] = run_id
+        await db.execute(
+            text("UPDATE learning_sessions SET langsmith_run_id=:rid WHERE id=:s"),
+            {"rid": run_id, "s": session_id},
+        )
+        await db.commit()
+    return result
+
+
+async def run_start_graph(db: AsyncSession, user_id: str) -> dict[str, Any]:
+    async def _start() -> dict[str, Any]:
+        await db.execute(text("SELECT id FROM users WHERE id=:u FOR UPDATE"), {"u": user_id})
+        await db.execute(
+            text("UPDATE learning_sessions SET status='completed', ended_at=NOW() WHERE user_id=:u AND status='active'"),
+            {"u": user_id},
+        )
+        await db.commit()
+
+        goal_row = (await db.execute(
+            text("SELECT id, title FROM learning_goals WHERE user_id=:u AND status='active'"),
+            {"u": user_id},
+        )).one_or_none()
+        goal_id = str(goal_row.id) if goal_row else None
+        initial_mode = "learning" if goal_id else "onboarding"
+        target_node = await pick_start_node(db, user_id, goal_id) if goal_id else None
+
+        row = (await db.execute(
+            text("""
+                INSERT INTO learning_sessions
+                    (user_id, goal_id, is_free_session, status, target_node_id)
+                VALUES (:u, :g, TRUE, 'active', :n)
+                RETURNING id
+            """),
+            {"u": user_id, "g": goal_id, "n": target_node["id"] if target_node else None},
+        )).one()
+        session_id = str(row.id)
+        await db.commit()
+
+        try:
+            result = await run_agent_turn(
+                db=db,
+                session_id=session_id,
+                user_id=user_id,
+                user_utterance="세션 시작",
+                persist_user=False,
+            )
+            first_text = result.get("final_text") or ""
+        except Exception:
+            logger.exception("agentic start failed")
+            if initial_mode == "onboarding":
+                first_text = "안녕하세요. 먼저 학습 목표와 현재 준비 중인 분야를 짧게 말해 주세요."
+            elif target_node:
+                first_text = f"다시 이어가 볼게요. 오늘은 '{target_node['title']}'부터 볼까요?"
+            else:
+                first_text = "오늘 학습을 시작해 볼까요?"
+            await db.execute(
+                text("""
+                    INSERT INTO learning_messages (session_id, message_index, role, content, mode, node_id)
+                    VALUES (:s, 0, 'assistant', :c, :m, :n)
+                """),
+                {"s": session_id, "c": first_text, "m": initial_mode, "n": target_node["id"] if target_node else None},
+            )
+            await db.commit()
+
+        return {
+            "sessionId": session_id,
+            "initialMode": initial_mode,
+            "targetNode": target_node,
+            "firstMessage": first_text,
+        }
+
+    result, run_id = await tracing.traced_graph_call(
+        name="learning_coach.start",
+        metadata=_trace_meta(None, user_id, "start"),
+        call=_start,
+    )
+    if run_id:
+        await db.execute(
+            text("UPDATE learning_sessions SET langsmith_run_id=:rid WHERE id=:s"),
+            {"rid": run_id, "s": result["sessionId"]},
+        )
+        await db.commit()
+        result["langsmithRunId"] = run_id
+    return result
+
+
+async def run_end_graph(db: AsyncSession, session_id: str, user_id: str) -> dict[str, Any]:
+    async def _end() -> dict[str, Any]:
+        summary_data = await generate_session_summary(db, session_id)
+        await db.execute(
+            text("""
+                UPDATE learning_sessions
+                SET status='completed', ended_at=NOW(),
+                    summary=:sum, highlights=CAST(:h AS jsonb), voice_briefing=:vb,
+                    pending_action=NULL
+                WHERE id=:s
+            """),
+            {
+                "s": session_id,
+                "sum": summary_data["summary"],
+                "h": json.dumps(summary_data["highlights"], ensure_ascii=False),
+                "vb": summary_data["voice_briefing"],
+            },
+        )
+        await db.commit()
+        streak_state = await update_streak_after_session(db, user_id, _kst_today())
+        await store_session_insights(db, session_id, user_id)
+        return {
+            "summary": summary_data["summary"],
+            "highlights": summary_data["highlights"],
+            "voiceBriefing": summary_data["voice_briefing"],
+            "streakUpdated": streak_state,
+        }
+
+    result, run_id = await tracing.traced_graph_call(
+        name="learning_coach.end",
+        metadata=_trace_meta(session_id, user_id, "end"),
+        call=_end,
+    )
+    if run_id:
+        await db.execute(
+            text("UPDATE learning_sessions SET langsmith_run_id=:rid WHERE id=:s"),
+            {"rid": run_id, "s": session_id},
+        )
+        await db.commit()
+        result["langsmithRunId"] = run_id
+    return result
 
 
 async def stream_agent_turn(

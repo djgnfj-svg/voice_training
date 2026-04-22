@@ -1,6 +1,6 @@
 """run_fit_analysis는 skill_match + avoid_topics만 반환 (focus_topics 제거)."""
 import pytest
-from app.agent.interview.fit_analyzer import run_fit_analysis
+from app.agent.interview.fit_analysis import run_fit_analysis
 
 
 @pytest.mark.asyncio

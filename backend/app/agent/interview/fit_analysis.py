@@ -1,4 +1,4 @@
-"""Fit Analysis: 이력서↔JD 매칭. skill_match는 코드, avoid_topics는 LLM."""
+﻿"""Fit Analysis: ?대젰?쒋넄JD 留ㅼ묶. skill_match??肄붾뱶, avoid_topics??LLM."""
 from __future__ import annotations
 
 import logging
@@ -23,14 +23,14 @@ class FitAnalysis(TypedDict):
 
 
 def _normalize_skill(s: str) -> str:
-    """대소문자/구분자 차이 흡수. 'Next.js'/'NextJS'/'next js' → 'nextjs'."""
+    """??뚮Ц??援щ텇??李⑥씠 ?≪닔. 'Next.js'/'NextJS'/'next js' ??'nextjs'."""
     if not isinstance(s, str):
         return ""
     return s.lower().replace(".", "").replace("-", "").replace(" ", "").strip()
 
 
 def _extract_jd_skills(jd: dict | None) -> list[str]:
-    """JD parsedData에서 요구 스킬 리스트 추출. 다양한 키를 시도."""
+    """JD parsedData?먯꽌 ?붽뎄 ?ㅽ궗 由ъ뒪??異붿텧. ?ㅼ뼇???ㅻ? ?쒕룄."""
     if not isinstance(jd, dict):
         return []
     for key in ("requiredSkills", "skills", "required", "techStack"):
@@ -41,7 +41,7 @@ def _extract_jd_skills(jd: dict | None) -> list[str]:
 
 
 def compute_skill_match(resume_skills: list, jd_skills: list) -> SkillMatch | None:
-    """JD가 비어있으면 None. 정규화 키로 비교, 표시는 JD 원문 우선."""
+    """JD媛 鍮꾩뼱?덉쑝硫?None. ?뺢퇋???ㅻ줈 鍮꾧탳, ?쒖떆??JD ?먮Ц ?곗꽑."""
     if not jd_skills:
         return None
 
@@ -67,9 +67,9 @@ def compute_skill_match(resume_skills: list, jd_skills: list) -> SkillMatch | No
 
 
 def _summarize_resume(resume: dict | None) -> str:
-    """LLM 토큰 절약용 요약."""
+    """LLM ?좏겙 ?덉빟???붿빟."""
     if not isinstance(resume, dict):
-        return "이력서 없음"
+        return "?대젰???놁쓬"
     parts = []
     if s := resume.get("summary"):
         parts.append(f"summary: {s}")
@@ -82,18 +82,18 @@ def _summarize_resume(resume: dict | None) -> str:
         name = p.get("name", "")
         tech = ", ".join(str(t) for t in (p.get("techStack") or [])[:5])
         desc = (p.get("description") or "")[:80]
-        parts.append(f"- 프로젝트: {name} ({tech}) — {desc}")
+        parts.append(f"- ?꾨줈?앺듃: {name} ({tech}) ??{desc}")
     experience = resume.get("experience") or []
     for e in experience[:3]:
         if not isinstance(e, dict):
             continue
-        parts.append(f"- 경력: {e.get('company','')} {e.get('position','')} ({e.get('period','')})")
-    return "\n".join(parts) or "이력서 정보 없음"
+        parts.append(f"- 寃쎈젰: {e.get('company','')} {e.get('position','')} ({e.get('period','')})")
+    return "\n".join(parts) or "?대젰???뺣낫 ?놁쓬"
 
 
 def _summarize_jd(jd: dict | None) -> str:
     if not isinstance(jd, dict):
-        return "채용공고 없음"
+        return "梨꾩슜怨듦퀬 ?놁쓬"
     parts = []
     if pos := jd.get("position"):
         parts.append(f"position: {pos}")
@@ -107,13 +107,13 @@ def _summarize_jd(jd: dict | None) -> str:
     if resp := jd.get("responsibilities"):
         if isinstance(resp, list):
             parts.append("responsibilities:\n" + "\n".join(f"- {r}" for r in resp[:10]))
-    return "\n".join(parts) or "채용공고 정보 없음"
+    return "\n".join(parts) or "梨꾩슜怨듦퀬 ?뺣낫 ?놁쓬"
 
 
 async def run_fit_analysis(resume: dict | None, jd: dict | None) -> FitAnalysis:
-    """이력서↔JD Fit Analysis. skill_match는 코드, avoid_topics는 LLM.
+    """?대젰?쒋넄JD Fit Analysis. skill_match??肄붾뱶, avoid_topics??LLM.
 
-    LLM 실패 시 avoid_topics만 빈 배열로, skill_match는 반환.
+    LLM ?ㅽ뙣 ??avoid_topics留?鍮?諛곗뿴濡? skill_match??諛섑솚.
     """
     resume_skills = (resume or {}).get("skills") or []
     jd_skills = _extract_jd_skills(jd)
@@ -122,8 +122,8 @@ async def run_fit_analysis(resume: dict | None, jd: dict | None) -> FitAnalysis:
     prompt = FIT_ANALYSIS_PROMPT.format(
         resume_brief=_summarize_resume(resume),
         jd_brief=_summarize_jd(jd),
-        matched=", ".join(skill_match["matched"]) if skill_match else "(JD 없음)",
-        gap=", ".join(skill_match["gap"]) if skill_match else "(JD 없음)",
+        matched=", ".join(skill_match["matched"]) if skill_match else "(JD ?놁쓬)",
+        gap=", ".join(skill_match["gap"]) if skill_match else "(JD ?놁쓬)",
     )
 
     avoid_topics: list[str] = []
