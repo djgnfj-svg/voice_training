@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 
 
-from app.agent.ns_srs import (
+from app.agent.nightly_study.ns_srs import (
     apply_proficiency_delta,
     compute_next_review,
     update_streak_state,

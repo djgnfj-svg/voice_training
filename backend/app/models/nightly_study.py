@@ -55,6 +55,20 @@ class NodeMastery(Base):
     last_mode = Column(Text, nullable=True)
 
 
+class LearningUserProfile(Base):
+    __tablename__ = "learning_user_profiles"
+
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    current_goal = Column(Text, nullable=True)
+    domain = Column(Text, nullable=True)
+    strengths = Column(JSONB, nullable=False, default=list)
+    weaknesses = Column(JSONB, nullable=False, default=list)
+    preferences = Column(JSONB, nullable=False, default=dict)
+    summary = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class LearningSession(Base):
     __tablename__ = "learning_sessions"
 
@@ -70,6 +84,11 @@ class LearningSession(Base):
     summary = Column(Text, nullable=True)
     highlights = Column(JSONB, nullable=True)
     voice_briefing = Column(Text, nullable=True)
+    session_intent = Column(Text, nullable=True)
+    target_node_id = Column(UUID(as_uuid=True), ForeignKey("curriculum_nodes.id", ondelete="SET NULL"), nullable=True)
+    graph_state = Column(JSONB, nullable=True)
+    langsmith_run_id = Column(Text, nullable=True)
+    pending_action = Column(JSONB, nullable=True)
 
 
 class LearningMessage(Base):

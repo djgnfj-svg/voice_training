@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import logging
@@ -37,7 +37,7 @@ async def search_learning_memory(
         params["node_id"] = node_id
 
     # SAFETY: conditions contains only hardcoded SQL fragments (e.g. "category = :category").
-    # All values are passed via the parameterized `params` dict — never append
+    # All values are passed via the parameterized `params` dict ??never append
     # user-supplied strings directly to conditions.
     where_clause = " AND ".join(conditions)
 
