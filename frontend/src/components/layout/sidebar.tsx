@@ -15,7 +15,6 @@ import {
   Moon,
   Sun,
   Monitor,
-  Coins,
   GraduationCap,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
@@ -27,7 +26,6 @@ const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { href: '/interview/setup', label: '면접 연습', icon: Mic },
   { href: '/nightly-study', label: 'CS 학습 어시스트', icon: GraduationCap },
-  { href: '/credits', label: '크레딧', icon: Coins },
 ];
 
 const adminNavItems = [

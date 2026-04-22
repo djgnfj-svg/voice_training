@@ -1,10 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select, func
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,18 +19,6 @@ from app.models.enums import SessionStatus
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-async def _rollback_session(db: AsyncSession, session_id: str) -> None:
-    """크레딧 차감 실패 시 이미 커밋된 세션 정리."""
-    await db.rollback()
-    await db.execute(
-        delete(InterviewAnswer).where(InterviewAnswer.session_id == session_id)
-    )
-    await db.execute(
-        delete(InterviewSession).where(InterviewSession.id == session_id)
-    )
-    await db.commit()
 
 
 # --- POST /api/interview/setup ---
@@ -48,18 +36,10 @@ async def setup_interview(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services.credit import can_start_session, deduct_for_session, InsufficientCreditsError, FreeTrialAlreadyUsedError
     from app.services.question import plan_interview, generate_questions
     from uuid import uuid4
 
     deep_mode = body.deepMode or body.mode == "deep"
-
-    # Check credits
-    credit_check = await can_start_session(db, user.id)
-    if not credit_check["allowed"]:
-        raise HTTPException(
-            402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"}
-        )
 
     # Verify resume
     res = await db.execute(
@@ -67,17 +47,13 @@ async def setup_interview(
     )
     resume = res.scalar_one_or_none()
     if not resume:
-        raise HTTPException(404, {"error": "이력서를 찾을 수 없습니다"})
+        raise HTTPException(404, {"error": "?대젰?쒕? 李얠쓣 ???놁뒿?덈떎"})
 
     # Plan interview
     plan = await plan_interview(
         db, resume_id=body.resumeId, job_posting_id=body.jobPostingId,
         user_id=user.id, deep_mode=deep_mode,
     )
-
-    # Free trial: cap questions
-    if credit_check["usingFreeTrial"]:
-        plan["totalQuestions"] = min(plan.get("totalQuestions", 5), 3)
 
     # Generate questions
     questions = await generate_questions(
@@ -122,21 +98,6 @@ async def setup_interview(
         db.add(answer)
 
     await db.commit()
-
-    # Deduct credits
-    try:
-        await deduct_for_session(
-            db, user.id, session_id, credit_check["usingFreeTrial"]
-        )
-    except (InsufficientCreditsError, FreeTrialAlreadyUsedError):
-        await _rollback_session(db, session_id)
-        raise HTTPException(
-            402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"}
-        )
-    except Exception:
-        logger.exception("Credit deduction failed for session %s", session_id)
-        await _rollback_session(db, session_id)
-        raise HTTPException(500, {"error": "CREDIT_DEDUCTION_FAILED"})
 
     return {"sessionId": session_id, "plan": plan, "questions": questions}
 
@@ -201,7 +162,7 @@ async def get_questions(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
+        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
 
     deep_mode = any(a.question_source == "deep_technical" for a in session.answers)
 
@@ -254,7 +215,7 @@ async def get_practice(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
+        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
     if session.status != SessionStatus.COMPLETED:
         raise HTTPException(400, {"error": "세션이 아직 완료되지 않았습니다"})
 
@@ -317,7 +278,7 @@ async def evaluate_answer(
         raise HTTPException(400, {"error": "잘못된 요청입니다"})
     except Exception as e:
         logger.exception("Failed to evaluate answer")
-        raise HTTPException(500, {"error": "처리 중 오류가 발생했습니다"})
+        raise HTTPException(500, {"error": "泥섎━ 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎"})
 
 
 # --- POST /api/interview/practice-evaluate ---
@@ -338,23 +299,7 @@ async def practice_evaluate(
     db: AsyncSession = Depends(get_db),
 ):
     from app.services.evaluation import evaluate_stateless
-    from app.services.credit import (
-        deduct_for_feature,
-        get_credit_info,
-        CREDIT_COSTS,
-        InsufficientCreditsError,
-    )
-    from app.config import settings
 
-    # Check credits before AI call to fail fast
-    if not settings.is_dev:
-        info = await get_credit_info(db, user.id)
-        if info["balance"] < CREDIT_COSTS["FOLLOW_UP"]:
-            raise HTTPException(
-                402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"}
-            )
-
-    # AI 호출 먼저 — 성공 후 크레딧 차감 (설계 원칙 준수)
     result = await evaluate_stateless(
         question_text=body.questionText,
         answer_transcript=body.answerTranscript,
@@ -363,22 +308,6 @@ async def practice_evaluate(
         related_key_points=body.relatedKeyPoints,
         previous_context=body.previousContext,
     )
-
-    # AI 성공 후 크레딧 차감
-    if not settings.is_dev:
-        try:
-            await deduct_for_feature(
-                db,
-                user.id,
-                body.sessionId or "",
-                "꼬리질문 평가",
-                CREDIT_COSTS["FOLLOW_UP"],
-                "FEATURE_DEBIT",
-            )
-        except InsufficientCreditsError:
-            raise HTTPException(
-                402, {"error": "크레딧이 부족합니다", "code": "INSUFFICIENT_CREDITS"}
-            )
 
     return result
 
@@ -400,7 +329,7 @@ async def complete_interview(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
+        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
 
     session.status = SessionStatus.COMPLETED
     await db.commit()
@@ -426,10 +355,12 @@ async def get_report(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
+        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
 
     if session.report_data:
         return session.report_data
 
     report = await generate_report(db, session_id=session_id, user_id=user.id)
     return report
+
+

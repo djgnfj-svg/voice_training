@@ -9,7 +9,7 @@ import { usePracticeSession } from '@/hooks/usePracticeSession';
 import { normalizeTranscript } from '@/lib/transcript';
 import {
   Loader2, ArrowLeft, Mic, Send, Volume2,
-  SkipForward, RotateCcw, ChevronRight, CheckCircle, Sparkles,
+  RotateCcw, ChevronRight, CheckCircle, Sparkles,
 } from 'lucide-react';
 
 const sourceLabels: Record<string, string> = {

@@ -21,7 +21,6 @@ interface ActivityItem {
 
 interface DashboardData {
   userName: string | null;
-  freeTrialUsed: boolean;
   stats: {
     interviewCount: number;
     learningCount: number;
@@ -51,7 +50,7 @@ export default function DashboardPage() {
     const key = `welcome_dismissed_${data.userName ?? 'default'}`;
     if (localStorage.getItem(key)) {
       setWelcomeDismissed(true);
-    } else if (!data.freeTrialUsed && data.stats.interviewCount === 0) {
+    } else if (data.stats.interviewCount === 0) {
       setWelcomeDismissed(false);
     }
   }, [data]);

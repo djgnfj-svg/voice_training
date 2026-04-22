@@ -12,8 +12,6 @@ export interface StartResponse {
 }
 
 export interface StatusResponse {
-  dailyFreeUsed: boolean;
-  creditBalance: number;
   streak: {
     current: number;
     longest: number;

@@ -15,8 +15,6 @@ model User {
   name           String?
   image          String?
   hashedPassword String?
-  creditBalance  Int       @default(0)
-  freeTrialUsed  Boolean   @default(false)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -25,9 +23,7 @@ model User {
   jobPostings        JobPosting[]
   interviewSessions  InterviewSession[]
   resumes            Resume[]
-  creditTransactions CreditTransaction[]
   activityLogs       ActivityLog[]
-  couponUsages       CouponUsage[]
   answerAssistSessions AnswerAssistSession[]
 
   @@map("users")
@@ -118,7 +114,6 @@ model InterviewSession {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  creditDeducted Boolean         @default(false)
   textMode       Boolean         @default(false)
 
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -188,45 +183,6 @@ enum SessionStatus {
   ABANDONED
 }
 
-model CreditTransaction {
-  id          String       @id @default(uuid())
-  userId      String
-  amount      Int
-  balance     Int
-  type        CreditTxType
-  description String?
-  referenceId String?
-  createdAt   DateTime     @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@map("credit_transactions")
-}
-
-enum CreditTxType {
-  FREE_TRIAL
-  ADMIN_GRANT
-  PURCHASE
-  SESSION_DEBIT
-  FEATURE_DEBIT
-  REFUND
-  COUPON
-  LEARNING_DEBIT
-}
-
-model PaymentWishlist {
-  id        String   @id @default(uuid())
-  email     String
-  userId    String?
-  productId String?
-  createdAt DateTime @default(now())
-
-  @@index([email])
-  @@index([createdAt])
-  @@map("payment_wishlist")
-}
-
 model ActivityLog {
   id        String       @id @default(uuid())
   userId    String
@@ -262,34 +218,6 @@ enum ActivityType {
   NIGHTLY_STUDY
   LEARNING_SESSION
   LEARNING_AGENT
-}
-
-model Coupon {
-  id          String        @id @default(uuid())
-  code        String        @unique
-  credits     Int
-  maxUses     Int?
-  usedCount   Int           @default(0)
-  isActive    Boolean       @default(true)
-  expiresAt   DateTime?
-  description String?
-  createdAt   DateTime      @default(now())
-  usages      CouponUsage[]
-
-  @@map("coupons")
-}
-
-model CouponUsage {
-  id        String   @id @default(uuid())
-  couponId  String
-  userId    String
-  createdAt DateTime @default(now())
-
-  coupon Coupon @relation(fields: [couponId], references: [id])
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([couponId, userId])
-  @@map("coupon_usages")
 }
 
 model AnswerAssistSession {

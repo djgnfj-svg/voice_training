@@ -20,7 +20,7 @@ async def dashboard(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    user_result = await db.execute(select(User.name, User.free_trial_used).where(User.id == user.id))
+    user_result = await db.execute(select(User.name).where(User.id == user.id))
     user_row = user_result.one_or_none()
 
     interview_count_result = await db.execute(
@@ -86,7 +86,6 @@ async def dashboard(
 
     return {
         "userName": user_row.name if user_row else None,
-        "freeTrialUsed": user_row.free_trial_used if user_row else False,
         "stats": {
             "interviewCount": interview_count,
             "learningCount": learning_count,

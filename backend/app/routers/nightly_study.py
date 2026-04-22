@@ -11,10 +11,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.config import settings
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
-from app.services.credit import InsufficientCreditsError, deduct_for_feature, get_credit_info
 from app.agent.nightly_study.ns_graph import run_agent_turn, stream_agent_turn
 from app.agent.nightly_study.ns_seed import generate_and_insert_seed, normalize_goal
 from app.agent.nightly_study.ns_summarizer import generate_session_summary, update_streak_after_session
@@ -23,17 +21,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 KST = timezone(timedelta(hours=9))
-EXTRA_COST = 1
 
 
 def _kst_today() -> date:
     return datetime.now(KST).date()
-
-
-def _kst_today_utc_midnight() -> datetime:
-    now_kst = datetime.now(KST)
-    midnight_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
-    return midnight_kst.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 @router.post("/api/nightly-study/start")
@@ -48,18 +39,6 @@ async def start_session(
     )
     await db.commit()
 
-    is_free = True
-    if not settings.is_dev:
-        used = (await db.execute(
-            text("""
-                SELECT 1 FROM learning_sessions
-                WHERE user_id=:u AND is_free_session=TRUE AND started_at >= :m
-                LIMIT 1
-            """),
-            {"u": user.id, "m": _kst_today_utc_midnight()},
-        )).one_or_none()
-        is_free = used is None
-
     goal_row = (await db.execute(
         text("SELECT id, title FROM learning_goals WHERE user_id=:u AND status='active'"),
         {"u": user.id},
@@ -71,35 +50,18 @@ async def start_session(
     row = (await db.execute(
         text("""
             INSERT INTO learning_sessions
-                (user_id, goal_id, is_free_session, credit_deducted, status, target_node_id)
-            VALUES (:u, :g, :f, :c, 'active', :n)
+                (user_id, goal_id, is_free_session, status, target_node_id)
+            VALUES (:u, :g, TRUE, 'active', :n)
             RETURNING id
         """),
         {
             "u": user.id,
             "g": goal_id,
-            "f": is_free,
-            "c": 0 if is_free else EXTRA_COST,
             "n": target_node["id"] if target_node else None,
         },
     )).one()
     session_id = str(row.id)
     await db.commit()
-
-    if not is_free:
-        try:
-            await deduct_for_feature(
-                db=db,
-                user_id=user.id,
-                reference_id=session_id,
-                description="?ㅻ뒛???숈뒿 異붽? ?몄뀡",
-                cost=EXTRA_COST,
-                tx_type="FEATURE_DEBIT",
-            )
-        except InsufficientCreditsError:
-            await db.execute(text("DELETE FROM learning_sessions WHERE id=:s"), {"s": session_id})
-            await db.commit()
-            raise HTTPException(status_code=402, detail={"error": "크레딧이 부족해요", "code": "INSUFFICIENT_CREDITS"})
 
     try:
         result = await run_agent_turn(
@@ -257,14 +219,6 @@ async def status(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    used = (await db.execute(
-        text("""
-            SELECT 1 FROM learning_sessions
-            WHERE user_id=:u AND is_free_session=TRUE AND started_at >= :m LIMIT 1
-        """),
-        {"u": user.id, "m": _kst_today_utc_midnight()},
-    )).one_or_none()
-    credit_info = await get_credit_info(db, user.id)
     streak_row = (await db.execute(
         text("SELECT current_streak, longest_streak, total_sessions, total_nodes_learned FROM learning_streaks WHERE user_id=:u"),
         {"u": user.id},
@@ -284,8 +238,6 @@ async def status(
         {"u": user.id},
     )).fetchall()
     return {
-        "dailyFreeUsed": used is not None,
-        "creditBalance": credit_info["balance"],
         "streak": {
             "current": streak_row.current_streak if streak_row else 0,
             "longest": streak_row.longest_streak if streak_row else 0,

@@ -28,21 +28,9 @@ class ActivityType(str, enum.Enum):
     LEARNING_AGENT = "LEARNING_AGENT"
 
 
-class CreditTxType(str, enum.Enum):
-    FREE_TRIAL = "FREE_TRIAL"
-    ADMIN_GRANT = "ADMIN_GRANT"
-    PURCHASE = "PURCHASE"
-    SESSION_DEBIT = "SESSION_DEBIT"
-    FEATURE_DEBIT = "FEATURE_DEBIT"
-    REFUND = "REFUND"
-    COUPON = "COUPON"
-    LEARNING_DEBIT = "LEARNING_DEBIT"
-
-
 # SQLAlchemy ENUM types mapped to existing PostgreSQL enums (created by Prisma)
 # create_type=False tells SQLAlchemy NOT to CREATE TYPE, just reference it
 PgInterviewType = ENUM(InterviewType, name="InterviewType", create_type=False)
 PgDifficulty = ENUM(Difficulty, name="Difficulty", create_type=False)
 PgSessionStatus = ENUM(SessionStatus, name="SessionStatus", create_type=False)
 PgActivityType = ENUM(ActivityType, name="ActivityType", create_type=False)
-PgCreditTxType = ENUM(CreditTxType, name="CreditTxType", create_type=False)

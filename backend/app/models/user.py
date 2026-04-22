@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Boolean, Integer, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -14,8 +14,6 @@ class User(Base):
     name = Column(String, nullable=True)
     image = Column(String, nullable=True)
     hashed_password = Column("hashedPassword", String, nullable=True)
-    credit_balance = Column("creditBalance", Integer, default=0, nullable=False)
-    free_trial_used = Column("freeTrialUsed", Boolean, default=False, nullable=False)
     created_at = Column("createdAt", DateTime, server_default=func.now())
     updated_at = Column("updatedAt", DateTime, default=func.now(), onupdate=func.now())
 
@@ -25,9 +23,7 @@ class User(Base):
     resumes = relationship("Resume", back_populates="user", cascade="all, delete-orphan")
     job_postings = relationship("JobPosting", back_populates="user", cascade="all, delete-orphan")
     interview_sessions = relationship("InterviewSession", back_populates="user", cascade="all, delete-orphan")
-    credit_transactions = relationship("CreditTransaction", back_populates="user", cascade="all, delete-orphan")
     activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
-    coupon_usages = relationship("CouponUsage", back_populates="user", cascade="all, delete-orphan")
     answer_assist_sessions = relationship("AnswerAssistSession", back_populates="user", cascade="all, delete-orphan")
 
 

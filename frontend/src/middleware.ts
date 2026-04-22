@@ -24,7 +24,6 @@ export const config = {
     '/nightly-study/:path*',
     '/profile/:path*',
     '/history/:path*',
-    '/credits/:path*',
     '/admin/:path*',
     '/learn/:path*',
     '/progress/:path*',

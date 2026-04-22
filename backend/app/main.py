@@ -35,11 +35,8 @@ async def http_exception_handler(request, exc: HTTPException):
 # Routers
 from app.routers.health import router as health_router
 from app.routers.user import router as user_router
-from app.routers.credits import router as credits_router
 from app.routers.resume import router as resume_router
 from app.routers.dashboard import router as dashboard_router
-from app.routers.coupons import router as coupons_router
-from app.routers.payments import router as payments_router
 from app.routers.interview_audio import router as interview_audio_router
 from app.routers.job_posting import router as job_posting_router
 from app.routers.interview import router as interview_router
@@ -52,11 +49,8 @@ from app.routers.agent_interview import router as agent_interview_router
 
 app.include_router(health_router)
 app.include_router(user_router)
-app.include_router(credits_router)
 app.include_router(resume_router)
 app.include_router(dashboard_router)
-app.include_router(coupons_router)
-app.include_router(payments_router)
 app.include_router(interview_audio_router)
 app.include_router(job_posting_router)
 app.include_router(interview_router)

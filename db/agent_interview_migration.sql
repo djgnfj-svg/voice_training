@@ -28,7 +28,6 @@ CREATE TABLE agent_interview_sessions (
     "maxQuestions" INTEGER DEFAULT 7,
     "overallScore" FLOAT,
     "reportData" JSONB,
-    "creditDeducted" BOOLEAN DEFAULT FALSE,
     "textMode" BOOLEAN DEFAULT FALSE,
     "createdAt" TIMESTAMP(3) DEFAULT NOW(),
     "updatedAt" TIMESTAMP(3) DEFAULT NOW()

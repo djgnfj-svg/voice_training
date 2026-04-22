@@ -80,7 +80,6 @@ class LearningSession(Base):
     ended_at = Column(DateTime(timezone=True), nullable=True)
     turn_count = Column(Integer, nullable=False, default=0)
     is_free_session = Column(Boolean, nullable=False, default=False)
-    credit_deducted = Column(Integer, nullable=False, default=0)
     summary = Column(Text, nullable=True)
     highlights = Column(JSONB, nullable=True)
     voice_briefing = Column(Text, nullable=True)

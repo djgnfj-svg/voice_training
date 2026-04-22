@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/api/', '/dashboard', '/interview/', '/credits', '/history', '/resume', '/model-answer'],
+        disallow: ['/api/', '/dashboard', '/interview/', '/history', '/resume', '/model-answer'],
       },
     ],
     sitemap: 'https://jachana.com/sitemap.xml',

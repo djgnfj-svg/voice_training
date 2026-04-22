@@ -20,7 +20,6 @@ class AgentInterviewSession(Base):
     max_questions = Column("maxQuestions", Integer, default=7)
     overall_score = Column("overallScore", Float, nullable=True)
     report_data = Column("reportData", JSON, nullable=True)
-    credit_deducted = Column("creditDeducted", Boolean, default=False)
     text_mode = Column("textMode", Boolean, default=False)
     fit_analysis = Column("fit_analysis", JSON, nullable=True)
     phase = Column("phase", String, nullable=True)

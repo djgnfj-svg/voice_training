@@ -15,7 +15,6 @@ import {
   DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { MobileSidebar } from '@/components/layout/sidebar';
-import { CreditBadge } from '@/components/credit/credit-badge';
 import { useMobileSidebar } from '@/hooks/useMobileSidebar';
 
 export function Header() {
@@ -49,7 +48,6 @@ export function Header() {
         </Button>
         <div className="hidden md:block" />
         <div className="flex items-center gap-3">
-          <CreditBadge />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 text-sm rounded-lg px-2 py-1.5 hover:bg-accent transition-colors outline-none">

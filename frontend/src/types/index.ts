@@ -126,18 +126,3 @@ export interface ResumeItem {
   createdAt: string;
 }
 
-// Credits
-export interface CreditInfo {
-  balance: number;
-  freeTrialUsed: boolean;
-}
-
-export interface CreditTransactionItem {
-  id: string;
-  amount: number;
-  balance: number;
-  type: string;
-  description: string | null;
-  referenceId: string | null;
-  createdAt: string;
-}

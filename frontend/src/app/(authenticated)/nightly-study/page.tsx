@@ -1,11 +1,9 @@
-'use client';
+﻿'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { GraduationCap, Loader2 } from 'lucide-react';
 import {
   getStatus,
@@ -13,13 +11,11 @@ import {
   type StartResponse,
 } from '@/lib/nightly-study-api';
 import { StreakBadge } from '@/components/nightly-study/streak-badge';
-import { InsufficientCreditsDialog } from '@/components/credit/insufficient-credits-dialog';
 
 const START_CACHE_KEY = (id: string) => `ns:start:${id}`;
 
 export default function NightlyStudyLanding() {
   const router = useRouter();
-  const [showCreditDialog, setShowCreditDialog] = useState(false);
 
   const { data: status, isLoading } = useQuery({
     queryKey: ['ns-status'],
@@ -32,14 +28,9 @@ export default function NightlyStudyLanding() {
       try {
         sessionStorage.setItem(START_CACHE_KEY(s.sessionId), JSON.stringify(s));
       } catch {
-        // sessionStorage 사용 불가 시 세션 페이지가 GET으로 복원
+        // sessionStorage ?ъ슜 遺덇? ???몄뀡 ?섏씠吏媛 GET?쇰줈 蹂듭썝
       }
       router.push(`/nightly-study/session/${s.sessionId}`);
-    },
-    onError: (e: Error) => {
-      if (e.message.includes('크레딧') || e.message.includes('INSUFFICIENT_CREDITS')) {
-        setShowCreditDialog(true);
-      }
     },
   });
 
@@ -50,8 +41,8 @@ export default function NightlyStudyLanding() {
           <GraduationCap className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-bold leading-tight">CS 학습 어시스트</h1>
-          <p className="text-xs text-muted-foreground">말하며 복습하는 CS 튜터</p>
+          <h1 className="text-xl font-bold leading-tight">CS ?숈뒿 ?댁떆?ㅽ듃</h1>
+          <p className="text-xs text-muted-foreground">留먰븯硫?蹂듭뒿?섎뒗 CS ?쒗꽣</p>
         </div>
       </div>
 
@@ -71,23 +62,15 @@ export default function NightlyStudyLanding() {
               <div className="space-y-2 text-center">
                 {status.hasGoal && status.todayTargetNode ? (
                   <>
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground">오늘의 주제</p>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">?ㅻ뒛??二쇱젣</p>
                     <p className="text-lg font-semibold">{status.todayTargetNode.title}</p>
                   </>
                 ) : !status.hasGoal ? (
                   <p className="text-sm text-muted-foreground">
-                    처음이시네요. 시작하면 목표부터 물어볼게요.
+                    泥섏쓬?댁떆?ㅼ슂. ?쒖옉?섎㈃ 紐⑺몴遺??臾쇱뼱蹂쇨쾶??
                   </p>
                 ) : (
-                  <p className="text-sm text-muted-foreground">오늘 이어서 해볼까요?</p>
-                )}
-              </div>
-
-              <div className="flex justify-center">
-                {!status.dailyFreeUsed ? (
-                  <Badge variant="secondary">오늘 무료</Badge>
-                ) : (
-                  <Badge variant="outline">추가 1코인 · 잔액 {status.creditBalance}</Badge>
+                  <p className="text-sm text-muted-foreground">?ㅻ뒛 ?댁뼱???대낵源뚯슂?</p>
                 )}
               </div>
 
@@ -100,7 +83,7 @@ export default function NightlyStudyLanding() {
                 {startMut.isPending ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
-                  '시작하기'
+                  '?쒖옉?섍린'
                 )}
               </Button>
             </CardContent>
@@ -109,7 +92,7 @@ export default function NightlyStudyLanding() {
           {status.recentSessions.length > 0 && (
             <div className="space-y-2">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                지난 세션
+                吏???몄뀡
               </h2>
               <div className="space-y-2">
                 {status.recentSessions.map((s) => (
@@ -127,7 +110,7 @@ export default function NightlyStudyLanding() {
           )}
         </>
       )}
-      <InsufficientCreditsDialog open={showCreditDialog} onOpenChange={setShowCreditDialog} />
     </div>
   );
 }
+

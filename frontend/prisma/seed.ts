@@ -43,7 +43,6 @@ async function main() {
         email: testEmail,
         name: '면접관 테스트',
         hashedPassword,
-        creditBalance: 100,
       },
     });
     console.log(`테스트 계정 생성: ${testEmail} / test1234`);

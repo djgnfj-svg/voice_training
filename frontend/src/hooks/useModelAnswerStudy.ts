@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 
@@ -20,7 +20,7 @@ interface InterviewPlan {
   reasoning: string;
 }
 
-type StudyPhase = 'loading' | 'studying' | 'error' | 'insufficient_credits';
+type StudyPhase = 'loading' | 'studying' | 'error';
 
 export function useModelAnswerStudy(resumeId: string) {
   const [phase, setPhase] = useState<StudyPhase>('loading');
@@ -55,11 +55,7 @@ export function useModelAnswerStudy(resumeId: string) {
 
         if (!res.ok) {
           const data = await res.json();
-          if (res.status === 402) {
-            setPhase('insufficient_credits');
-            return;
-          }
-          throw new Error(data.error || '생성에 실패했습니다');
+          throw new Error(data.error || '?앹꽦???ㅽ뙣?덉뒿?덈떎');
         }
 
         const data = await res.json();
@@ -68,7 +64,7 @@ export function useModelAnswerStudy(resumeId: string) {
         setPhase('studying');
       } catch (error: unknown) {
         if (error instanceof Error && error.name === 'AbortError') return;
-        setErrorMessage(error instanceof Error ? error.message : '모범답안 생성 중 오류가 발생했습니다');
+        setErrorMessage(error instanceof Error ? error.message : '紐⑤쾾?듭븞 ?앹꽦 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎');
         setPhase('error');
       }
     };
@@ -137,3 +133,4 @@ export function useModelAnswerStudy(resumeId: string) {
     setNote,
   };
 }
+

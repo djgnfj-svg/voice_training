@@ -64,7 +64,6 @@ CREATE TABLE learning_sessions (
     ended_at        TIMESTAMPTZ NULL,
     turn_count      INT NOT NULL DEFAULT 0,
     is_free_session BOOL NOT NULL DEFAULT FALSE,
-    credit_deducted INT NOT NULL DEFAULT 0,
     summary         TEXT NULL,
     highlights      JSONB NULL,
     voice_briefing  TEXT NULL

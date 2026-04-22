@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { use, useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -20,7 +20,6 @@ import {
   CheckCircle,
   ArrowLeft,
   ChevronsRight,
-  Coins,
 } from 'lucide-react';
 
 export default function ModelAnswerStudyPage({
@@ -51,7 +50,7 @@ export default function ModelAnswerStudyPage({
   const [practicePhase, setPracticePhase] = useState<'idle' | 'recording' | 'done'>('idle');
   const prevIndexRef = useRef(currentIndex);
 
-  // 질문 이동 시 음성 상태 리셋
+  // 吏덈Ц ?대룞 ???뚯꽦 ?곹깭 由ъ뀑
   useEffect(() => {
     if (prevIndexRef.current !== currentIndex) {
       prevIndexRef.current = currentIndex;
@@ -84,34 +83,10 @@ export default function ModelAnswerStudyPage({
       <div className="mx-auto max-w-4xl">
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="text-lg font-medium">질문과 모범답안을 생성하고 있습니다...</p>
+          <p className="text-lg font-medium">吏덈Ц怨?紐⑤쾾?듭븞???앹꽦?섍퀬 ?덉뒿?덈떎...</p>
           <p className="text-sm text-muted-foreground">
-            이력서를 분석하여 맞춤형 면접 질문과 모범답안을 준비 중입니다
+            ?대젰?쒕? 遺꾩꽍?섏뿬 留욎땄??硫댁젒 吏덈Ц怨?紐⑤쾾?듭븞??以鍮?以묒엯?덈떎
           </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === 'insufficient_credits') {
-    return (
-      <div className="mx-auto max-w-4xl">
-        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
-          <Coins className="h-12 w-12 text-amber-500" />
-          <p className="text-lg font-medium">크레딧이 부족합니다</p>
-          <p className="text-sm text-muted-foreground">
-            모범답안 학습을 이용하려면 크레딧이 필요합니다.
-          </p>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => router.push('/interview/model-answer')}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              돌아가기
-            </Button>
-            <Button onClick={() => router.push('/credits')}>
-              <Coins className="mr-2 h-4 w-4" />
-              크레딧 충전
-            </Button>
-          </div>
         </div>
       </div>
     );
@@ -121,12 +96,11 @@ export default function ModelAnswerStudyPage({
     return (
       <div className="mx-auto max-w-4xl">
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
-          <p className="text-lg font-medium text-destructive">오류가 발생했습니다</p>
+          <p className="text-lg font-medium text-destructive">?ㅻ쪟媛 諛쒖깮?덉뒿?덈떎</p>
           <p className="text-sm text-muted-foreground">{errorMessage}</p>
           <Button variant="outline" onClick={() => router.push('/interview/model-answer')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            돌아가기
-          </Button>
+            ?뚯븘媛湲?          </Button>
         </div>
       </div>
     );
@@ -141,14 +115,13 @@ export default function ModelAnswerStudyPage({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">모범답안 학습</h1>
+          <h1 className="text-2xl font-bold">紐⑤쾾?듭븞 ?숈뒿</h1>
           <p className="text-sm text-muted-foreground">
-            질문을 보고 답변을 생각한 뒤, 모범답안을 확인하세요
-          </p>
+            吏덈Ц??蹂닿퀬 ?듬????앷컖???? 紐⑤쾾?듭븞???뺤씤?섏꽭??          </p>
         </div>
         <Button variant="outline" onClick={() => router.push('/interview/model-answer')}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          다시 설정
+          ?ㅼ떆 ?ㅼ젙
         </Button>
       </div>
 
@@ -164,7 +137,7 @@ export default function ModelAnswerStudyPage({
               </Badge>
             ))}
             <span className="text-sm text-muted-foreground">
-              총 {questions.length}개 질문
+              珥?{questions.length}媛?吏덈Ц
             </span>
           </CardContent>
         </Card>
@@ -190,7 +163,7 @@ export default function ModelAnswerStudyPage({
           onClick={revealAll}
         >
           <ChevronsRight className="mr-1 h-4 w-4" />
-          전체 공개
+          ?꾩껜 怨듦컻
         </Button>
       </div>
 
@@ -201,7 +174,7 @@ export default function ModelAnswerStudyPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <BookOpen className="h-5 w-5 text-primary" />
-                질문 {currentIndex + 1}
+                吏덈Ц {currentIndex + 1}
                 <Badge variant="outline" className="ml-2 text-xs font-normal">
                   {currentQuestion.category}
                 </Badge>
@@ -220,8 +193,8 @@ export default function ModelAnswerStudyPage({
             >
               <CardTitle className="flex items-center gap-2 text-base">
                 <Mic className="h-4 w-4" />
-                내 답변 말해보기
-                <span className="text-xs font-normal text-muted-foreground">(선택사항)</span>
+                ???듬? 留먰빐蹂닿린
+                <span className="text-xs font-normal text-muted-foreground">(?좏깮?ы빆)</span>
                 <ChevronRight
                   className={`ml-auto h-4 w-4 transition-transform ${practiceOpen ? 'rotate-90' : ''}`}
                 />
@@ -242,7 +215,7 @@ export default function ModelAnswerStudyPage({
                     <p className="text-sm text-muted-foreground">
                       {speech.isSupported
                         ? '버튼을 눌러 답변을 말해보세요'
-                        : 'Chrome 또는 Edge 브라우저에서 사용 가능합니다'}
+                        : 'Chrome ?먮뒗 Edge 釉뚮씪?곗??먯꽌 ?ъ슜 媛?ν빀?덈떎'}
                     </p>
                     {currentNote && (
                       <div className="w-full rounded-lg bg-muted p-3">
@@ -261,7 +234,7 @@ export default function ModelAnswerStudyPage({
                           <span className="text-muted-foreground">{speech.interimTranscript}</span>
                         )}
                         {!speech.transcript && !speech.interimTranscript && (
-                          <span className="text-muted-foreground">듣고 있습니다...</span>
+                          <span className="text-muted-foreground">?ｊ퀬 ?덉뒿?덈떎...</span>
                         )}
                       </p>
                     </div>
@@ -282,7 +255,7 @@ export default function ModelAnswerStudyPage({
                   <div className="space-y-3">
                     <div className="min-h-[80px] rounded-lg bg-muted p-4">
                       <p className="leading-relaxed">
-                        {currentNote || '(음성이 인식되지 않았습니다)'}
+                        {currentNote || '(?뚯꽦???몄떇?섏? ?딆븯?듬땲??'}
                       </p>
                     </div>
                     <Button
@@ -291,8 +264,7 @@ export default function ModelAnswerStudyPage({
                       onClick={retryRecording}
                     >
                       <RotateCcw className="mr-2 h-4 w-4" />
-                      다시 말하기
-                    </Button>
+                      ?ㅼ떆 留먰븯湲?                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -307,7 +279,7 @@ export default function ModelAnswerStudyPage({
               onClick={() => toggleReveal(currentIndex)}
             >
               <Eye className="mr-2 h-4 w-4" />
-              모범답안 보기
+              紐⑤쾾?듭븞 蹂닿린
             </Button>
           ) : (
             <div className="space-y-4">
@@ -316,7 +288,7 @@ export default function ModelAnswerStudyPage({
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base text-green-700 dark:text-green-400">
                     <CheckCircle className="h-4 w-4" />
-                    모범답안
+                    紐⑤쾾?듭븞
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -327,7 +299,7 @@ export default function ModelAnswerStudyPage({
               {/* Key Points */}
               {currentQuestion.keyPoints?.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-sm font-medium">핵심 포인트:</span>
+                  <span className="text-sm font-medium">?듭떖 ?ъ씤??</span>
                   {currentQuestion.keyPoints.map((point, i) => (
                     <Badge key={i} variant="secondary">
                       {point}
@@ -341,7 +313,7 @@ export default function ModelAnswerStudyPage({
                 <Card className="bg-green-50 dark:bg-green-950/20">
                   <CardHeader>
                     <CardTitle className="text-sm text-green-700 dark:text-green-400">
-                      이 답변이 좋은 이유
+                      ???듬???醫뗭? ?댁쑀
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -363,8 +335,7 @@ export default function ModelAnswerStudyPage({
                 onClick={() => toggleReveal(currentIndex)}
               >
                 <EyeOff className="mr-2 h-4 w-4" />
-                답안 숨기기
-              </Button>
+                ?듭븞 ?④린湲?              </Button>
             </div>
           )}
 
@@ -376,7 +347,7 @@ export default function ModelAnswerStudyPage({
               disabled={currentIndex === 0}
             >
               <ChevronLeft className="mr-1 h-4 w-4" />
-              이전 질문
+              ?댁쟾 吏덈Ц
             </Button>
             <span className="text-sm text-muted-foreground">
               {currentIndex + 1} / {questions.length}
@@ -386,7 +357,7 @@ export default function ModelAnswerStudyPage({
               onClick={nextQuestion}
               disabled={currentIndex === questions.length - 1}
             >
-              다음 질문
+              ?ㅼ쓬 吏덈Ц
               <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
@@ -395,3 +366,4 @@ export default function ModelAnswerStudyPage({
     </div>
   );
 }
+
