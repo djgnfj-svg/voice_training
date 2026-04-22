@@ -49,7 +49,7 @@ async def generate_model_answer(
     )
     from app.services.question import plan_interview
     from app.lib.llm_client import call_llm_json, MODELS
-    from app.agent.resume_rag import has_resume_embeddings, search_resume
+    from app.agent.interview.resume_rag import has_resume_embeddings, search_resume
     from app.prompts.model_answer import (
         QUESTION_GEN_RESUME_PROMPT,
         QUESTION_GEN_WITH_JOB_PROMPT,

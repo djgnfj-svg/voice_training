@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.resume_rag import embed_resume
+from app.agent.interview.resume_rag import embed_resume
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
 from app.lib.llm_client import call_llm_json

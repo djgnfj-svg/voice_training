@@ -1,10 +1,10 @@
-# backend/app/agent/interviewer_agent.py
+﻿# backend/app/agent/interviewer_agent.py
 from __future__ import annotations
 
 import json
 import logging
 
-from app.agent.state import DiveTopic, ScanItem
+from app.agent.interview.state import DiveTopic, ScanItem
 from app.config import settings
 from app.lib.llm_client import call_llm_json
 from app.prompts.agent import (

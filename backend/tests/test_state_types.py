@@ -1,5 +1,5 @@
 """Verify new InterviewState fields for Scan+Dive structure."""
-from app.agent.state import InterviewState, ScanItem, DiveTopic
+from app.agent.interview.state import InterviewState, ScanItem, DiveTopic
 
 
 def test_scan_item_shape():

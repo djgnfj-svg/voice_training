@@ -1,4 +1,4 @@
-"""Scan+Dive 플래너 — 순수 코드 (LLM 호출 없음).
+﻿"""Scan+Dive 플래너 — 순수 코드 (LLM 호출 없음).
 
 입력:
 - resume: dict (parsedData 형태. projects / experience 포함)
@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-from app.agent.state import DiveTopic, ScanItem
+from app.agent.interview.state import DiveTopic, ScanItem
 
 
 def _normalize(s: str) -> str:

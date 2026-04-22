@@ -1,10 +1,10 @@
-# backend/app/agent/evaluator_agent.py
+﻿# backend/app/agent/evaluator_agent.py
 from __future__ import annotations
 
 import json
 import logging
 
-from app.agent.report_aggregator import aggregate_evaluations, format_aggregate_for_prompt
+from app.agent.interview.report_aggregator import aggregate_evaluations, format_aggregate_for_prompt
 from app.config import settings
 from app.lib.llm_client import call_llm_json
 from app.prompts.agent import EVALUATOR_PROMPT, REPORT_PROMPT

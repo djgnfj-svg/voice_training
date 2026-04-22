@@ -1,5 +1,5 @@
 """Tests for build_dive_plan."""
-from app.agent.planner import build_dive_plan
+from app.agent.interview.planner import build_dive_plan
 
 
 def _scan(name: str, reason: str = "jd_match") -> dict:

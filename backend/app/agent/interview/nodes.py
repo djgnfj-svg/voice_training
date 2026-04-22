@@ -1,12 +1,12 @@
-# backend/app/agent/nodes.py
+﻿# backend/app/agent/nodes.py
 from __future__ import annotations
 
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.state import InterviewState
-from app.agent import profile_agent, interviewer_agent, evaluator_agent, resume_rag, fit_analyzer, planner
+from app.agent.interview.state import InterviewState
+from app.agent.interview import profile_agent, interviewer_agent, evaluator_agent, resume_rag, fit_analyzer, planner
 
 logger = logging.getLogger(__name__)
 

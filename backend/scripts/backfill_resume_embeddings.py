@@ -11,7 +11,7 @@ import sys
 
 from sqlalchemy import text
 
-from app.agent.resume_rag import embed_resume
+from app.agent.interview.resume_rag import embed_resume
 from app.database import async_session
 
 

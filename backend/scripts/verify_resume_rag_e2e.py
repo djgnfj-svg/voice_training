@@ -8,8 +8,8 @@ import asyncio
 
 from sqlalchemy import text
 
-from app.agent.fit_analyzer import run_fit_analysis
-from app.agent.resume_rag import embed_resume, has_resume_embeddings, search_resume
+from app.agent.interview.fit_analyzer import run_fit_analysis
+from app.agent.interview.resume_rag import embed_resume, has_resume_embeddings, search_resume
 from app.database import async_session
 
 

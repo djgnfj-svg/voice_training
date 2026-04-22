@@ -2,7 +2,7 @@
 
 실행: docker exec voice_training-backend-1 python -m scripts.verify_skill_match
 """
-from app.agent.fit_analyzer import compute_skill_match, _normalize_skill, _extract_jd_skills
+from app.agent.interview.fit_analyzer import compute_skill_match, _normalize_skill, _extract_jd_skills
 
 
 def test_normalize():

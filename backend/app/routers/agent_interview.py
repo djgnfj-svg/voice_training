@@ -13,8 +13,8 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
-from app.agent import nodes
-from app.agent.state import InterviewState
+from app.agent.interview import nodes
+from app.agent.interview.state import InterviewState
 from app.models.agent_interview import AgentInterviewSession, AgentInterviewMessage
 from app.models.resume import Resume
 from app.models.interview import JobPosting
@@ -333,11 +333,11 @@ async def submit_answer(
     question_count = last_question_msg.question_number or 1
 
     # Rebuild profile from RAG
-    from app.agent.profile_agent import load_user_profile
+    from app.agent.interview.profile_agent import load_user_profile
     user_profile = await load_user_profile(db, user.id, resume_data, job_posting_data)
 
     # 이력서 RAG / Fit Analysis 컨텍스트 복원 (Spec 4.2(b))
-    from app.agent.resume_rag import has_resume_embeddings as _has_emb
+    from app.agent.interview.resume_rag import has_resume_embeddings as _has_emb
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
 
     # Scan/Dive 페이즈 컨텍스트 복원 (Task 8-fix: session에서 직접 복원)
@@ -542,7 +542,7 @@ async def skip_question(
         if jp:
             job_posting_data = jp.parsed_data
 
-    from app.agent.profile_agent import load_user_profile
+    from app.agent.interview.profile_agent import load_user_profile
     user_profile = await load_user_profile(db, user.id, resume_data, job_posting_data)
 
     # Build conversation history from DB
@@ -562,7 +562,7 @@ async def skip_question(
     max_questions = session.max_questions or 7
 
     # 이력서 RAG / Fit Analysis 컨텍스트 복원 (Spec 4.2(b))
-    from app.agent.resume_rag import has_resume_embeddings as _has_emb
+    from app.agent.interview.resume_rag import has_resume_embeddings as _has_emb
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
     persisted_fit = session.fit_analysis
 
@@ -802,7 +802,7 @@ async def end_interview(
         if jp:
             job_posting_data = jp.parsed_data
 
-    from app.agent.profile_agent import load_user_profile
+    from app.agent.interview.profile_agent import load_user_profile
     user_profile = await load_user_profile(db, user.id, resume_data, job_posting_data)
 
     state: InterviewState = {
@@ -900,7 +900,7 @@ async def get_profile(
     db: AsyncSession = Depends(get_db),
 ):
     """Get user's AI profile summary."""
-    from app.agent.profile_agent import search_profile
+    from app.agent.interview.profile_agent import search_profile
 
     profiles = await search_profile(db, user.id, "면접 역량 종합", top_k=20)
 
@@ -929,7 +929,7 @@ async def add_profile_context(
     db: AsyncSession = Depends(get_db),
 ):
     """Add explicit user context to profile."""
-    from app.agent.profile_agent import update_profile
+    from app.agent.interview.profile_agent import update_profile
 
     entry_id = await update_profile(
         db,

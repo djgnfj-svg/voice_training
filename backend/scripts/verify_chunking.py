@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from app.agent.resume_rag import chunk_resume
+from app.agent.interview.resume_rag import chunk_resume
 
 
 def test_full_resume():

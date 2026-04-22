@@ -1,5 +1,5 @@
 """Tests for _normalize_evaluation keyword handling."""
-from app.agent.evaluator_agent import _normalize_evaluation
+from app.agent.interview.evaluator_agent import _normalize_evaluation
 
 
 def _base(scores: dict | None = None) -> dict:
