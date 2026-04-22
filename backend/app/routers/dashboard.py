@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
-from app.models.user import User
+from app.models.activity import ActivityItem, ActivityLog
 from app.models.agent_interview import AgentInterviewSession
-from app.models.journal import JournalSession
 from app.models.nightly_study import LearningSession
-from app.models.activity import ActivityLog, ActivityItem
-from app.services.analytics import get_session_history, get_activity_history
+from app.models.user import User
+from app.services.analytics import get_activity_history, get_session_history
 
 router = APIRouter()
 
@@ -21,16 +20,9 @@ async def dashboard(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # User info
-    user_result = await db.execute(
-        select(User.name, User.free_trial_used)
-        .where(User.id == user.id)
-    )
+    user_result = await db.execute(select(User.name, User.free_trial_used).where(User.id == user.id))
     user_row = user_result.one_or_none()
 
-    # ── Stats ──
-
-    # Agent interview count
     interview_count_result = await db.execute(
         select(func.count()).where(
             AgentInterviewSession.user_id == user.id,
@@ -39,16 +31,6 @@ async def dashboard(
     )
     interview_count = interview_count_result.scalar() or 0
 
-    # Journal count
-    journal_count_result = await db.execute(
-        select(func.count()).where(
-            JournalSession.user_id == user.id,
-            JournalSession.status.in_(["completed", "timeout"]),
-        )
-    )
-    journal_count = journal_count_result.scalar() or 0
-
-    # Learning count
     learning_count_result = await db.execute(
         select(func.count()).where(
             LearningSession.user_id == user.id,
@@ -57,9 +39,6 @@ async def dashboard(
     )
     learning_count = learning_count_result.scalar() or 0
 
-    # ── Recent activity (unified timeline, last 10) ──
-
-    # Agent interviews
     interview_result = await db.execute(
         select(AgentInterviewSession)
         .where(
@@ -81,29 +60,6 @@ async def dashboard(
         for s in interview_result.scalars().all()
     ]
 
-    # Journal sessions
-    journal_result = await db.execute(
-        select(JournalSession)
-        .where(
-            JournalSession.user_id == user.id,
-            JournalSession.status.in_(["completed", "timeout"]),
-        )
-        .order_by(JournalSession.created_at.desc())
-        .limit(5)
-    )
-    journal_items = [
-        {
-            "kind": "journal",
-            "id": s.id,
-            "title": "하루의 정리",
-            "subtitle": s.summary[:50] + "..." if s.summary and len(s.summary) > 50 else (s.summary or ""),
-            "status": s.status,
-            "createdAt": s.created_at.isoformat() if s.created_at else None,
-        }
-        for s in journal_result.scalars().all()
-    ]
-
-    # Learning sessions
     learning_result = await db.execute(
         select(LearningSession)
         .where(
@@ -125,20 +81,17 @@ async def dashboard(
         for s in learning_result.scalars().all()
     ]
 
-    # Merge and sort
-    recent_activity = interview_items + journal_items + learning_items
+    recent_activity = interview_items + learning_items
     recent_activity.sort(key=lambda x: x.get("createdAt") or "", reverse=True)
-    recent_activity = recent_activity[:10]
 
     return {
         "userName": user_row.name if user_row else None,
         "freeTrialUsed": user_row.free_trial_used if user_row else False,
         "stats": {
             "interviewCount": interview_count,
-            "journalCount": journal_count,
             "learningCount": learning_count,
         },
-        "recentActivity": recent_activity,
+        "recentActivity": recent_activity[:10],
     }
 
 
@@ -150,11 +103,8 @@ async def history(
 ):
     sessions = await get_session_history(db, user.id, limit)
     activities = await get_activity_history(db, user.id, limit)
-
-    # Merge and sort by createdAt descending
     merged = sessions + activities
     merged.sort(key=lambda x: x.get("createdAt", "") or "", reverse=True)
-
     return merged[:limit]
 
 
@@ -164,6 +114,7 @@ async def get_activity(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from fastapi import HTTPException
     from sqlalchemy.orm import selectinload
 
     result = await db.execute(
@@ -176,7 +127,6 @@ async def get_activity(
     )
     activity = result.scalar_one_or_none()
     if not activity:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail={"error": "활동을 찾을 수 없습니다."})
 
     return {

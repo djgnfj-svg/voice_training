@@ -29,7 +29,6 @@ model User {
   activityLogs       ActivityLog[]
   couponUsages       CouponUsage[]
   answerAssistSessions AnswerAssistSession[]
-  journalSessions    JournalSession[]
 
   @@map("users")
 }
@@ -325,40 +324,3 @@ model AnswerAssistItem {
   @@map("answer_assist_items")
 }
 
-// ========================
-// Journal & Counseling Models
-// ========================
-
-model JournalSession {
-  id               String   @id @default(uuid())
-  userId           String
-  status           String   @default("active")
-  messageCount     Int      @default(0)
-  freeMessagesUsed Int      @default(0)
-  creditsCharged   Int      @default(0)
-  summary          String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages JournalMessage[]
-
-  @@index([userId, status])
-  @@index([userId, createdAt])
-  @@map("journal_sessions")
-}
-
-model JournalMessage {
-  id           String   @id @default(uuid()) @db.Uuid
-  sessionId    String
-  messageIndex Int
-  role         String   @db.VarChar(20)
-  content      String
-  mode         String   @default("journal") @db.VarChar(20)
-  createdAt    DateTime @default(now())
-
-  session JournalSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, messageIndex])
-  @@map("journal_messages")
-}

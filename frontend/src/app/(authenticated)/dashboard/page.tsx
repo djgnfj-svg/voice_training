@@ -6,12 +6,12 @@ import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Mic, BookOpen, GraduationCap, Loader2, ArrowRight } from 'lucide-react';
+import { Mic, GraduationCap, Loader2, ArrowRight } from 'lucide-react';
 import { WelcomeDialog } from '@/components/onboarding/welcome-dialog';
 import { formatDate } from '@/lib/utils';
 
 interface ActivityItem {
-  kind: 'interview' | 'journal' | 'learning';
+  kind: 'interview' | 'learning';
   id: string;
   title: string;
   subtitle: string;
@@ -24,7 +24,6 @@ interface DashboardData {
   freeTrialUsed: boolean;
   stats: {
     interviewCount: number;
-    journalCount: number;
     learningCount: number;
   };
   recentActivity: ActivityItem[];
@@ -32,7 +31,6 @@ interface DashboardData {
 
 const kindConfig = {
   interview: { icon: Mic, label: '면접', color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/30', href: '/interview/setup' },
-  journal: { icon: BookOpen, label: '저널', color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/30', href: '/journal' },
   learning: { icon: GraduationCap, label: '학습', color: 'text-violet-500', bg: 'bg-violet-100 dark:bg-violet-900/30', href: '/nightly-study' },
 };
 
@@ -74,7 +72,7 @@ export default function DashboardPage() {
     );
   }
 
-  const totalActivity = data.stats.interviewCount + data.stats.journalCount + data.stats.learningCount;
+  const totalActivity = data.stats.interviewCount + data.stats.learningCount;
 
   return (
     <div className="space-y-6">
@@ -91,7 +89,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Start Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Link href="/interview/setup">
           <Card className="transition-all hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700">
             <CardContent className="flex items-center gap-4 py-5">
@@ -101,20 +99,6 @@ export default function DashboardPage() {
               <div className="min-w-0">
                 <p className="font-semibold">면접 연습</p>
                 <p className="text-sm text-muted-foreground">{data.stats.interviewCount}회 완료</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/journal">
-          <Card className="transition-all hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700">
-            <CardContent className="flex items-center gap-4 py-5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-                <BookOpen className="h-6 w-6 text-emerald-500" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-semibold">하루의 정리</p>
-                <p className="text-sm text-muted-foreground">{data.stats.journalCount}회 기록</p>
               </div>
             </CardContent>
           </Card>

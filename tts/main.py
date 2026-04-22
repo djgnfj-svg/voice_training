@@ -34,8 +34,6 @@ FORMAT_MEDIA_TYPES = {
 PERSONA_DEFAULT_SPEED = {
     "interviewer": 2.0,
     "tutor": 1.3,
-    "journal_friend": 1.3,
-    "journal_counselor": 1.1,
     "default": 2.0,
 }
 
@@ -45,16 +43,6 @@ PERSONA_INSTRUCTIONS = {
         "You are a professional Korean tech interviewer. "
         "Speak clearly, confidently, and at a slightly brisk pace. "
         "Tone: neutral-professional, not robotic. Natural Korean prosody."
-    ),
-    "journal_friend": (
-        "You are a warm, friendly Korean friend listening to a daily reflection. "
-        "Speak casually and with empathy, like chatting over coffee. "
-        "Pace: natural conversational speed."
-    ),
-    "journal_counselor": (
-        "You are a calm, empathetic Korean counselor. "
-        "Speak slowly and warmly, with understanding pauses where natural. "
-        "Tone: gentle, validating."
     ),
     "tutor": (
         "You are an encouraging Korean tutor explaining a concept. "

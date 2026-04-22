@@ -49,7 +49,6 @@ from app.routers.answer_assist import router as answer_assist_router
 from app.routers.admin import router as admin_router
 from app.routers.nightly_study import router as nightly_study_router
 from app.routers.agent_interview import router as agent_interview_router
-from app.routers.journal import router as journal_router
 
 app.include_router(health_router)
 app.include_router(user_router)
@@ -67,4 +66,3 @@ app.include_router(answer_assist_router)
 app.include_router(admin_router)
 app.include_router(nightly_study_router)
 app.include_router(agent_interview_router)
-app.include_router(journal_router)

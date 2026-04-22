@@ -15,7 +15,6 @@ import {
   Moon,
   Sun,
   Monitor,
-  BookOpen,
   Coins,
   GraduationCap,
 } from 'lucide-react';
@@ -32,7 +31,6 @@ const navItems = [
 ];
 
 const adminNavItems = [
-  { href: '/journal', label: '하루의 정리', icon: BookOpen },
   { href: '/admin/cunning', label: '컨닝 모드', icon: Eye },
   { href: '/admin/answer-assist', label: '답변 어시스트', icon: MessageSquare },
   { href: '/admin/voice-test', label: '음성 테스트', icon: AudioLines },

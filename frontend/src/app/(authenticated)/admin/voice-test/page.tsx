@@ -310,8 +310,6 @@ const TTS_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 
 const TTS_PERSONAS = [
   { value: 'default', label: '기본' },
   { value: 'interviewer', label: '면접관 (프로페셔널)' },
-  { value: 'journal_friend', label: '저널 친구 (편안)' },
-  { value: 'journal_counselor', label: '상담사 (차분)' },
   { value: 'tutor', label: '튜터 (활기)' },
 ];
 const TTS_MODELS = [

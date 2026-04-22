@@ -5,8 +5,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 export type TTSPersona =
   | 'default'
   | 'interviewer'
-  | 'journal_friend'
-  | 'journal_counselor'
   | 'tutor';
 
 export interface TTSSpeakOptions {

@@ -21,7 +21,6 @@ export const config = {
     '/dashboard/:path*',
     '/interview/:path*',
     '/agent-interview/:path*',
-    '/journal/:path*',
     '/nightly-study/:path*',
     '/profile/:path*',
     '/history/:path*',
