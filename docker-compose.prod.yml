@@ -22,7 +22,7 @@ services:
     expose:
       - "3000"
     env_file:
-      - ./frontend/.env
+      - ./.env
     environment:
       - BACKEND_URL=http://backend:8000
       - NODE_ENV=production
@@ -36,7 +36,7 @@ services:
     expose:
       - "8000"
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       - TTS_SERVICE_URL=http://tts:8080
       - ENVIRONMENT=production
@@ -52,7 +52,7 @@ services:
     expose:
       - "8080"
     env_file:
-      - ./backend/.env
+      - ./.env
     restart: unless-stopped
 
 volumes:

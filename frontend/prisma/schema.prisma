@@ -152,19 +152,6 @@ model InterviewAnswer {
   @@map("interview_answers")
 }
 
-model QuestionBank {
-  id          String     @id @default(uuid())
-  category    String
-  subcategory String
-  difficulty  Difficulty
-  questionText String   @db.Text
-  keyPoints   String[]
-  createdAt   DateTime  @default(now())
-
-  @@index([category, subcategory, difficulty])
-  @@map("question_bank")
-}
-
 enum InterviewType {
   TECHNICAL
   BEHAVIORAL
