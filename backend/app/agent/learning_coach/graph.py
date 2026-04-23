@@ -361,14 +361,14 @@ def _make_tools(db: AsyncSession, session_id: str, user_id: str):
             result = await db.execute(
                 text("""
                     INSERT INTO curriculum_nodes (goal_id, title, description, depth_level, source, keywords)
-                    VALUES (:g, :t, :d, 1, 'extended', CAST(:k AS text[]))
+                    VALUES (:g, :t, :d, 1, 'extended', :k)
                     RETURNING id
                 """),
                 {
                     "g": goal_id,
                     "t": title,
                     "d": description or rationale or title,
-                    "k": "{" + '"' + title.lower().replace('"', '\\"') + '"' + "}",
+                    "k": [title.lower()],
                 },
             )
             node = {"id": str(result.one().id), "title": title, "description": description or title, "depth_level": 1}
@@ -758,6 +758,7 @@ async def run_start_graph(db: AsyncSession, user_id: str) -> dict[str, Any]:
             first_text = result.get("final_text") or ""
         except Exception:
             logger.exception("agentic start failed")
+            await db.rollback()
             if initial_mode == "onboarding":
                 first_text = "안녕하세요. 먼저 학습 목표와 현재 준비 중인 분야를 짧게 말해 주세요."
             elif target_node:

@@ -49,24 +49,27 @@ async def setup_interview(
     if not resume:
         raise HTTPException(404, {"error": "?대젰?쒕? 李얠쓣 ???놁뒿?덈떎"})
 
-    # Plan interview
-    plan = await plan_interview(
-        db, resume_id=body.resumeId, job_posting_id=body.jobPostingId,
-        user_id=user.id, deep_mode=deep_mode,
-    )
-
-    # Generate questions
-    questions = await generate_questions(
-        db,
-        type_=plan.get("type", "TECHNICAL"),
-        categories=plan.get("categories", []),
-        difficulty=plan.get("difficulty", "INTERMEDIATE"),
-        total_questions=plan.get("totalQuestions", 5),
-        resume_id=body.resumeId,
-        user_id=user.id,
-        job_posting_id=body.jobPostingId,
-        deep_mode=deep_mode,
-    )
+    try:
+        plan = await plan_interview(
+            db, resume_id=body.resumeId, job_posting_id=body.jobPostingId,
+            user_id=user.id, deep_mode=deep_mode,
+        )
+        questions = await generate_questions(
+            db,
+            type_=plan.get("type", "TECHNICAL"),
+            categories=plan.get("categories", []),
+            difficulty=plan.get("difficulty", "INTERMEDIATE"),
+            total_questions=plan.get("totalQuestions", 5),
+            resume_id=body.resumeId,
+            user_id=user.id,
+            job_posting_id=body.jobPostingId,
+            deep_mode=deep_mode,
+        )
+    except ValueError as e:
+        logger.warning("Interview setup validation error: %s", e)
+        if "not found" in str(e).lower():
+            raise HTTPException(404, {"error": "요청한 리소스를 찾을 수 없습니다"})
+        raise HTTPException(400, {"error": "잘못된 요청입니다"})
 
     # Create session
     session_id = str(uuid4())

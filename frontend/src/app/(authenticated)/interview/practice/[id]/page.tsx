@@ -271,13 +271,7 @@ export default function PracticePage() {
                 <Button onClick={practice.startPractice}>
                   <Mic className="mr-2 h-4 w-4" />
                   연습 시작
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={practice.showModelAnswer}
-                >
-                  모범 답안 보기
-                </Button>
+                </Button>
               </div>
             </div>
           )}
@@ -352,16 +346,6 @@ export default function PracticePage() {
                   <p className="mb-1 text-sm font-medium text-muted-foreground">이전 답변</p>
                   <div className="rounded-lg bg-muted/50 p-3 text-sm">
                     {practice.currentAnswer.answerTranscript}
-                  </div>
-                </div>
-              )}
-
-              {/* Model answer */}
-              {practice.currentAnswer.modelAnswer && (
-                <div>
-                  <p className="mb-1 text-sm font-medium text-green-600 dark:text-green-400">모범 답안</p>
-                  <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm dark:border-green-900 dark:bg-green-950">
-                    {practice.currentAnswer.modelAnswer}
                   </div>
                 </div>
               )}

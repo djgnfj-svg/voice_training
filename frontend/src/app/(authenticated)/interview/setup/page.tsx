@@ -13,7 +13,7 @@ import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
 import { useToast } from '@/hooks/useToast';
 import {
-  Sparkles, ArrowRight, SkipForward, PlayCircle, BookOpen, Bot,
+  Sparkles, ArrowRight, SkipForward, PlayCircle, Bot,
   Mic, Upload, FileText, CheckCircle, Loader2, Trash2, Pencil,
   ChevronDown, ChevronUp,
 } from 'lucide-react';
@@ -35,7 +35,6 @@ import type { ParsedJobPosting, CompanyAnalysis, ParsedResume } from '@/types';
 // ── Types ──
 
 type Step = 'resume' | 'job-posting' | 'start';
-type InterviewMode = 'ai-coach' | 'model-answer';
 
 interface SessionItem {
   _kind: 'session';
@@ -116,7 +115,6 @@ function InterviewTab() {
   const [step, setStep] = useState<Step>('resume');
 
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [interviewMode, setInterviewMode] = useState<InterviewMode>('ai-coach');
   const [showMicCheck, setShowMicCheck] = useState(false);
   const [jobPostingData, setJobPostingData] = useState<{
     id: string;
@@ -178,20 +176,7 @@ function InterviewTab() {
       return;
     }
 
-    if (interviewMode === 'ai-coach') {
-      setShowMicCheck(true);
-      return;
-    }
-
-    if (interviewMode === 'model-answer') {
-      if (jobPostingData?.rawText) {
-        sessionStorage.setItem('model_answer_job_posting', jobPostingData.rawText);
-      } else {
-        sessionStorage.removeItem('model_answer_job_posting');
-      }
-      router.push(`/interview/model-answer/${selectedResumeId}`);
-      return;
-    }
+    setShowMicCheck(true);
   };
 
   const typeLabels: Record<string, string> = {
@@ -328,66 +313,24 @@ function InterviewTab() {
               <CardDescription>면접 유형을 선택하세요</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  className={cn(
-                    'rounded-lg border p-4 text-left transition-all',
-                    interviewMode === 'ai-coach'
-                      ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50 dark:bg-blue-950/30'
-                      : 'hover:border-muted-foreground/50'
-                  )}
-                  onClick={() => setInterviewMode('ai-coach')}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Bot className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm font-semibold">AI 코치 면접</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">맞춤형 동적 질문, 꼬리질문, 프로필 기억</p>
-                </button>
-
-                <button
-                  type="button"
-                  className={cn(
-                    'rounded-lg border p-4 text-left transition-all',
-                    interviewMode === 'model-answer'
-                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50 dark:bg-emerald-950/30'
-                      : 'hover:border-muted-foreground/50'
-                  )}
-                  onClick={() => setInterviewMode('model-answer')}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <BookOpen className="h-4 w-4 text-emerald-500" />
-                    <span className="text-sm font-semibold">모범답안 학습</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">모범답안 보며 학습</p>
-                </button>
+              <div className="rounded-lg border border-blue-500 bg-blue-50 p-4 ring-2 ring-blue-500/20 dark:bg-blue-950/30">
+                <div className="mb-2 flex items-center gap-2">
+                  <Bot className="h-4 w-4 text-blue-500" />
+                  <span className="text-sm font-semibold">AI 코치 면접</span>
+                </div>
+                <p className="text-xs text-muted-foreground">맞춤형 동적 질문, 꼬리질문, 프로필 기억</p>
               </div>
 
-              {interviewMode === 'ai-coach' && (
-                <>
-                  <div className="mt-3 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
-                    <ul className="space-y-1 text-sm text-blue-700 dark:text-blue-300">
-                      <li>- AI가 당신의 강점/약점을 기억하고 맞춤 질문</li>
-                      <li>- 답변 깊이에 따라 꼬리질문 자동 생성 (최대 2회)</li>
-                      <li>- 면접할수록 더 정확한 피드백</li>
-                    </ul>
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    질문 수는 이력서 프로젝트와 답변 깊이에 맞춰 자동으로 결정됩니다 (3~9개).
-                  </p>
-                </>
-              )}
-
-              {interviewMode === 'model-answer' && (
-                <div className="mt-3 rounded-lg bg-emerald-50 p-3 dark:bg-emerald-950/30">
-                  <ul className="space-y-1 text-sm text-emerald-700 dark:text-emerald-300">
-                    <li>- AI가 예상 질문과 모범답안을 함께 생성</li>
-                    <li>- 질문을 보고 먼저 음성으로 답변 연습</li>
-                    <li>- 모범답안을 공개하여 비교하고 학습</li>
-                  </ul>
-                </div>
-              )}
+              <div className="mt-3 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/30">
+                <ul className="space-y-1 text-sm text-blue-700 dark:text-blue-300">
+                  <li>- AI가 강점과 약점을 기억하고 맞춤 질문을 생성</li>
+                  <li>- 답변 깊이에 따라 꼬리질문 자동 생성</li>
+                  <li>- 면접할수록 더 정확한 피드백 제공</li>
+                </ul>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                질문 수는 이력서 프로젝트와 답변 깊이에 맞춰 자동으로 결정됩니다.
+              </p>
             </CardContent>
           </Card>
 
@@ -396,17 +339,8 @@ function InterviewTab() {
             className="w-full"
             onClick={startInterview}
           >
-            {interviewMode === 'ai-coach' ? (
-              <>
-                <Bot className="mr-2 h-4 w-4" />
-                AI 코치 면접 시작
-              </>
-            ) : (
-              <>
-                <BookOpen className="mr-2 h-4 w-4" />
-                모범답안 학습 시작
-              </>
-            )}
+            <Bot className="mr-2 h-4 w-4" />
+            AI 코치 면접 시작
           </Button>
         </>
       )}
@@ -484,33 +418,6 @@ function SessionCard({
   );
 }
 
-function ActivityCard({ activity }: { activity: ActivityItem }) {
-  return (
-    <Card className="transition-colors hover:bg-accent/50">
-      <Link href={`/history/activity/${activity.id}`}>
-        <CardContent className="flex items-center justify-between py-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <BookOpen className="h-4 w-4 text-emerald-500" />
-              <span className="font-medium">모범답안 학습</span>
-              <Badge variant="outline">모범답안</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {activity.resumeName && <>{activity.resumeName} | </>}
-              {activity.itemCount}개 질문 | {formatDate(activity.createdAt)}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-muted-foreground">복습하기</p>
-          </div>
-        </CardContent>
-      </Link>
-    </Card>
-  );
-}
-
-// ── Interview History Section ──
-
 const HISTORY_PREVIEW_COUNT = 5;
 
 function InterviewHistorySection({
@@ -523,21 +430,18 @@ function InterviewHistorySection({
   statusLabels: Record<string, string>;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const visible = showAll ? items : items.slice(0, HISTORY_PREVIEW_COUNT);
+  const sessionItems = items.filter((item): item is SessionItem => item._kind === 'session');
+  const visible = showAll ? sessionItems : sessionItems.slice(0, HISTORY_PREVIEW_COUNT);
 
   return (
     <div className="space-y-3">
       <h2 className="text-lg font-semibold">면접 기록</h2>
-      {visible.map((item) =>
-        item._kind === 'session' ? (
-          <SessionCard key={`s-${item.id}`} session={item} typeLabels={typeLabels} statusLabels={statusLabels} />
-        ) : (
-          <ActivityCard key={`a-${item.id}`} activity={item} />
-        )
-      )}
-      {!showAll && items.length > HISTORY_PREVIEW_COUNT && (
+      {visible.map((item) => (
+        <SessionCard key={`s-${item.id}`} session={item} typeLabels={typeLabels} statusLabels={statusLabels} />
+      ))}
+      {!showAll && sessionItems.length > HISTORY_PREVIEW_COUNT && (
         <Button variant="outline" className="w-full" onClick={() => setShowAll(true)}>
-          더보기 ({items.length - HISTORY_PREVIEW_COUNT}건)
+          더보기 ({sessionItems.length - HISTORY_PREVIEW_COUNT}건)
         </Button>
       )}
     </div>

@@ -55,6 +55,23 @@ def make_minimal_state(**overrides: Any) -> InterviewState:
 
 
 @pytest.mark.asyncio
+async def test_fit_analysis_node_uses_module(monkeypatch):
+    async def run_fit_analysis(resume, jd):
+        return {"skill_match": None, "avoid_topics": ["legacy"]}
+
+    async def has_resume_embeddings(db, resume_id):
+        return True
+
+    monkeypatch.setattr(graph.fit_analysis_module, "run_fit_analysis", run_fit_analysis)
+    monkeypatch.setattr(graph.resume_memory, "has_resume_embeddings", has_resume_embeddings)
+
+    out = await graph.fit_analysis(make_minimal_state(resume_id="resume-1"), db=object())
+
+    assert out["fit_analysis"] == {"skill_match": None, "avoid_topics": ["legacy"]}
+    assert out["has_resume_embeddings"] is True
+
+
+@pytest.mark.asyncio
 async def test_start_graph_runs_initial_interview_flow(monkeypatch):
     calls: list[str] = []
 

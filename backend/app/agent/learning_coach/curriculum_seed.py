@@ -45,7 +45,7 @@ async def generate_and_insert_seed(
         result = await db.execute(
             text("""
                 INSERT INTO curriculum_nodes (goal_id, title, description, depth_level, parent_id, source, keywords)
-                VALUES (:goal_id, :title, :description, :depth, :parent_id, 'seed', CAST(:keywords AS text[]))
+                VALUES (:goal_id, :title, :description, :depth, :parent_id, 'seed', :keywords)
                 RETURNING id
             """),
             {
@@ -54,9 +54,7 @@ async def generate_and_insert_seed(
                 "description": node.get("description", ""),
                 "depth": max(0, min(2, int(node.get("depth_level", 0)))),
                 "parent_id": parent_id,
-                "keywords": "{" + ",".join(
-                    '"' + k.replace('"', '\\"') + '"' for k in (node.get("keywords") or [])
-                ) + "}",
+                "keywords": [str(k) for k in (node.get("keywords") or [])],
             },
         )
         row = result.one()

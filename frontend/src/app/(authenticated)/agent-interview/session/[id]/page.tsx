@@ -468,15 +468,6 @@ export default function AgentInterviewSessionPage() {
                       </div>
                     )}
 
-                    {/* Model answer */}
-                    {(qa.evaluation.modelAnswer as string) && (
-                      <div>
-                        <p className="mb-1 text-sm font-medium text-muted-foreground">모범 답안</p>
-                        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm dark:border-green-900 dark:bg-green-950">
-                          {qa.evaluation.modelAnswer as string}
-                        </div>
-                      </div>
-                    )}
                   </>
                 )}
               </CardContent>

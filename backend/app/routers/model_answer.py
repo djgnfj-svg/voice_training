@@ -24,9 +24,9 @@ class ModelAnswerRequest(BaseModel):
 
 
 def _format_chunks(chunks: list[dict]) -> str:
-    """search_resume ê²°ê³¼ë¥??„ë¡¬?„íŠ¸???ìŠ¤?¸ë¡œ ì§ë ¬??"""
+    """Format resume chunks as prompt text."""
     if not chunks:
-        return "(?´ë ¥??ê´€??ì²?¬ ?†ìŒ)"
+        return "(No resume context)"
     lines = []
     for c in chunks:
         lines.append(f"- [{c['chunk_type']}] {c['content']}")
@@ -51,14 +51,14 @@ async def generate_model_answer(
     from uuid import uuid4
 
     if not body.resumeId:
-        raise HTTPException(400, {"error": "ÀÌ·Â¼­ ID°¡ ÇÊ¿äÇÕ´Ï´Ù"})
+        raise HTTPException(400, {"error": "resumeId is required"})
 
     res = await db.execute(
         select(Resume).where(Resume.id == body.resumeId, Resume.user_id == user.id)
     )
     resume = res.scalar_one_or_none()
     if not resume:
-        raise HTTPException(404, {"error": "?´ë ¥?œë? ì°¾ì„ ???†ìŠµ?ˆë‹¤"})
+        raise HTTPException(404, {"error": "Resume not found"})
 
     plan = await plan_interview(db, resume_id=body.resumeId, user_id=user.id)
 
@@ -68,7 +68,7 @@ async def generate_model_answer(
         else ""
     )
 
-    # Step 1: ì§ˆë¬¸ batch ?ì„±
+    # Step 1: generate question batch
     if body.jobPostingText:
         q_prompt = QUESTION_GEN_WITH_JOB_PROMPT.format(
             interviewType=plan["type"],
@@ -94,12 +94,12 @@ async def generate_model_answer(
         questions = q_result.get("questions", [])
     except Exception:
         logger.exception("model-answer: question batch generation failed")
-        raise HTTPException(500, {"error": "AI ?ì„±???¤íŒ¨?ˆìŠµ?ˆë‹¤"})
+        raise HTTPException(500, {"error": "AI generation failed"})
 
     if not questions:
-        raise HTTPException(500, {"error": "AI ?ì„±???¤íŒ¨?ˆìŠµ?ˆë‹¤"})
+        raise HTTPException(500, {"error": "AI generation failed"})
 
-    # Step 2: ëª¨ë²”?µì•ˆ ê°œë³„ ë³‘ë ¬ ?ì„±
+    # Step 2: generate model answers in parallel
     use_rag = await has_resume_embeddings(db, body.resumeId)
     logger.info(
         "model-answer: generating %d answers (rag=%s)", len(questions), use_rag
@@ -117,7 +117,7 @@ async def generate_model_answer(
                 )
                 resume_context = _format_chunks(chunks)
             else:
-                resume_context = parsed_resume or "(?´ë ¥???•ë³´ ?†ìŒ)"
+                resume_context = parsed_resume or "(No resume context)"
 
             prompt = MODEL_ANSWER_PROMPT.format(
                 question=q.get("text", ""),
@@ -143,7 +143,7 @@ async def generate_model_answer(
     merged = [r for r in results if r is not None and r.get("modelAnswer")]
 
     if not merged:
-        raise HTTPException(500, {"error": "AI ?ì„±???¤íŒ¨?ˆìŠµ?ˆë‹¤"})
+        raise HTTPException(500, {"error": "AI generation failed"})
 
     # ActivityLog
     activity_log_id = None
@@ -169,7 +169,7 @@ async def generate_model_answer(
         await db.commit()
         activity_log_id = log_id
     except Exception:
+        await db.rollback()
         logger.warning("Failed to create activity log for model answer", exc_info=True)
 
     return {"plan": plan, "questions": merged, "activityLogId": activity_log_id}
-

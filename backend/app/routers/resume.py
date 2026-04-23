@@ -67,7 +67,7 @@ async def get_resume(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(status_code=404, detail={"error": "?´ë ¥?œë? ì°¾ì„ ???†ìŠµ?ˆë‹¤."})
+        raise HTTPException(status_code=404, detail={"error": "Resume not found."})
     return {
         "id": resume.id,
         "userId": resume.user_id,
@@ -87,26 +87,26 @@ async def upload_resume(
     db: AsyncSession = Depends(get_db),
 ):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail={"error": "PDF ?Œì¼ë§??…ë¡œ?œí•  ???ˆìŠµ?ˆë‹¤."})
+        raise HTTPException(status_code=400, detail={"error": "Only PDF files can be uploaded."})
 
     content = await file.read()
     if len(content) > MAX_PDF_SIZE:
-        raise HTTPException(status_code=413, detail={"error": "PDF ?Œì¼???ˆë¬´ ?½ë‹ˆ??(ìµœë? 10MB)"})
+        raise HTTPException(status_code=413, detail={"error": "PDF file is too large. Max 10MB."})
 
     try:
         doc = pymupdf.open(stream=content, filetype="pdf")
         text = "".join(page.get_text() for page in doc)
         doc.close()
     except Exception:
-        raise HTTPException(status_code=400, detail={"error": "PDF ?Œì¼???½ì„ ???†ìŠµ?ˆë‹¤."})
+        raise HTTPException(status_code=400, detail={"error": "Could not read PDF file."})
 
     if not text.strip():
-        raise HTTPException(status_code=400, detail={"error": "PDF?ì„œ ?ìŠ¤?¸ë? ì¶”ì¶œ?????†ìŠµ?ˆë‹¤."})
+        raise HTTPException(status_code=400, detail={"error": "Could not extract text from PDF."})
 
     # Strip .pdf extension for the display name
     name = file.filename.rsplit(".", 1)[0]
 
-    # AI ?Œì‹±: rawText ??êµ¬ì¡°?”ëœ ?°ì´??ì¶”ì¶œ
+    # Parse resume text into structured data.
     parsed_data: dict = {"rawText": text}
     try:
         structured = await call_llm_json(
@@ -116,7 +116,7 @@ async def upload_resume(
         if isinstance(structured, dict):
             parsed_data.update(structured)
     except Exception:
-        pass  # ?Œì‹± ?¤íŒ¨ ??rawTextë§??€??
+        pass  # Keep rawText when parsing fails.
 
     resume = Resume(
         id=str(uuid4()),
@@ -158,7 +158,7 @@ async def update_resume(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(status_code=404, detail={"error": "?´ë ¥?œë? ì°¾ì„ ???†ìŠµ?ˆë‹¤."})
+        raise HTTPException(status_code=404, detail={"error": "Resume not found."})
 
     resume.name = body.name
     await db.commit()
@@ -188,7 +188,7 @@ async def delete_resume(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(status_code=404, detail={"error": "?´ë ¥?œë? ì°¾ì„ ???†ìŠµ?ˆë‹¤."})
+        raise HTTPException(status_code=404, detail={"error": "Resume not found."})
 
     try:
         await db.delete(resume)
@@ -197,7 +197,7 @@ async def delete_resume(
         await db.rollback()
         raise HTTPException(
             status_code=409,
-            detail={"error": "???´ë ¥?œì? ?°ê²°??ë©´ì ‘ ê¸°ë¡???ˆì–´ ?? œ?????†ìŠµ?ˆë‹¤."},
+            detail={"error": "Cannot delete resume because related interview records exist."},
         )
 
     return {"success": True}

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent import tracing
-from app.agent.interview import evaluation, fit_analysis, plan_builder, profile_memory, questioner, resume_memory
+from app.agent.interview import evaluation, fit_analysis as fit_analysis_module, plan_builder, profile_memory, questioner, resume_memory
 from app.agent.interview.state import InterviewState
 
 logger = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ async def fit_analysis(state: InterviewState, db: AsyncSession) -> InterviewStat
     events = list(state.get("pending_events", []))
     events.append({"event": "status", "data": {"phase": "fit_analyzing"}})
 
-    fa = await fit_analysis.run_fit_analysis(state["resume"], state.get("job_posting"))
+    fa = await fit_analysis_module.run_fit_analysis(state["resume"], state.get("job_posting"))
     has_emb = False
     rid = state.get("resume_id")
     if rid:

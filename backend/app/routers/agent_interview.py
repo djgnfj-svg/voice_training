@@ -21,6 +21,7 @@ from app.models.interview import JobPosting
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+QUESTION_ROLES = ("agent_question", "agent_followup")
 
 
 # ---------- Schemas ----------
@@ -40,7 +41,7 @@ MIN_UNIQUE_TOKENS = 3
 
 
 def _is_meaningful_answer(text: str) -> bool:
-    """ëª¨ë°”??ì¤‘ë³µ ?…ë ¥/ë°˜ë³µ ë¬¸ì ?˜ì—´??ë§‰ëŠ” ?˜ë? ?ˆëŠ” ?µë? ê°€??"""
+    """Reject very short or repetitive answers."""
     stripped = text.strip()
     if len(stripped) < MIN_ANSWER_CHARS:
         return False
@@ -49,6 +50,25 @@ def _is_meaningful_answer(text: str) -> bool:
     if len(unique) < MIN_UNIQUE_TOKENS:
         return False
     return True
+
+
+def _latest_question_number(messages: list[AgentInterviewMessage]) -> int:
+    for msg in reversed(messages):
+        if msg.role in QUESTION_ROLES and msg.question_number is not None:
+            return msg.question_number
+    return 0
+
+
+def _question_role_for_state(state: InterviewState) -> str:
+    if state.get("phase") == "dive" and state.get("current_dive_depth", 0) > 1:
+        return "agent_followup"
+    return "agent_question"
+
+
+def _follow_up_round_for_state(state: InterviewState) -> int:
+    if state.get("phase") != "dive":
+        return 0
+    return max(state.get("current_dive_depth", 0) - 1, 0)
 
 
 class ProfileContextRequest(BaseModel):
@@ -70,7 +90,7 @@ async def start_interview(
     )
     resume = result.scalar_one_or_none()
     if not resume:
-        raise HTTPException(404, {"error": "?´ë ¥?œë? ì°¾ì„ ???†ìŠµ?ˆë‹¤"})
+        raise HTTPException(404, {"error": "Resume not found"})
 
     resume_data = resume.parsed_data or {}
 
@@ -84,11 +104,12 @@ async def start_interview(
             )
         )
         jp = jp_result.scalar_one_or_none()
-        if jp:
-            job_posting_data = jp.parsed_data
+        if not jp:
+            raise HTTPException(404, {"error": "Job posting not found"})
+        job_posting_data = jp.parsed_data
 
-    # ì§ˆë¬¸ ?˜ëŠ” ?´ë ¥???„ë¡œ?íŠ¸/?µë? ê¹Šì´ë¡??™ì  ê²°ì • (scan 3 + dive ìµœë? 6 = 9).
-    # max_questions???í•œ ê°€?œë¡œë§??¬ìš©: ë¬´ë£Œì²´í—˜?€ 3(scanë§?, ?¼ë°˜?€ 9(scan+dive ?„ì²´).
+    # Use dynamic scan/dive depth for interview questions.
+    # Free trials use scan only; full sessions use scan and dive.
     effective_max_questions = 9
 
     # Create session
@@ -142,7 +163,7 @@ async def start_interview(
 
             state = await interview_graph.run_start_graph(state, db)
 
-            # Fit Analysis ?ì†????answer/skip ?ë¦„?ì„œ ?¬ì‚¬??(Spec 4.2(b))
+            # Persist Fit Analysis for answer/skip flows.
             session.fit_analysis = state.get("fit_analysis")
 
             session.phase = state.get("phase")
@@ -160,7 +181,7 @@ async def start_interview(
                 if ev.get("event") != "question":
                     yield {"event": ev["event"], "data": json.dumps(ev["data"])}
 
-            # session ?´ë²¤?¸ë? questionë³´ë‹¤ ë¨¼ì? ?„ì†¡ (?„ë¡ ?¸ì—??sessionId ?„ìš”)
+            # Send session event before question event.
             yield {
                 "event": "session",
                 "data": json.dumps({
@@ -188,7 +209,7 @@ async def start_interview(
             await db.commit()
         except Exception as e:
             logger.exception("Agent interview start failed")
-            yield {"event": "error", "data": json.dumps({"error": "ë©´ì ‘ ?œì‘???¤íŒ¨?ˆìŠµ?ˆë‹¤"})}
+            yield {"event": "error", "data": json.dumps({"error": "Failed to start interview"})}
 
     return EventSourceResponse(event_generator())
 
@@ -203,11 +224,11 @@ async def submit_answer(
     db: AsyncSession = Depends(get_db),
 ):
     """Submit answer: evaluate ??decide next ??generate next question or end."""
-    # ?µë? ?ˆì§ˆ ê°€??(?„ë¡ ???°íšŒ ë°©ì–´)
+    # Reject low-quality answers before processing.
     if not _is_meaningful_answer(body.answer):
         raise HTTPException(
             400,
-            {"error": '?µë????ˆë¬´ ì§§ê±°??ë°˜ë³µ?©ë‹ˆ?? ì¡°ê¸ˆ ??ë§ì???ì£¼ì‹œê±°ë‚˜ "ê±´ë„ˆ?°ê¸°"ë¥??ŒëŸ¬ì£¼ì„¸??'},
+            {"error": "Answer is too short or repetitive. Please add more detail or skip."},
         )
 
     # Verify session
@@ -222,7 +243,7 @@ async def submit_answer(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?¸ì…˜??ì°¾ì„ ???†ìŠµ?ˆë‹¤"})
+        raise HTTPException(404, {"error": "Session not found"})
 
     # Load resume
     resume_result = await db.execute(select(Resume).where(Resume.id == session.resume_id))
@@ -249,7 +270,7 @@ async def submit_answer(
     question_count = 0
 
     for msg in messages:
-        if msg.role in ("agent_question", "agent_followup"):
+        if msg.role in QUESTION_ROLES:
             current_question = msg.content
             question_count = msg.question_number or 0
         elif msg.role == "user_answer" and msg.evaluation:
@@ -263,12 +284,12 @@ async def submit_answer(
     # Get last question from messages
     last_question_msg = None
     for msg in reversed(messages):
-        if msg.role in ("agent_question", "agent_followup"):
+        if msg.role in QUESTION_ROLES:
             last_question_msg = msg
             break
 
     if not last_question_msg:
-        raise HTTPException(400, {"error": "ì§„í–‰ ì¤‘ì¸ ì§ˆë¬¸???†ìŠµ?ˆë‹¤"})
+        raise HTTPException(400, {"error": "No active question"})
 
     current_question = last_question_msg.content
     question_count = last_question_msg.question_number or 1
@@ -277,11 +298,11 @@ async def submit_answer(
     from app.agent.interview.profile_memory import load_user_profile
     user_profile = await load_user_profile(db, user.id, resume_data, job_posting_data)
 
-    # ?´ë ¥??RAG / Fit Analysis ì»¨í…?¤íŠ¸ ë³µì› (Spec 4.2(b))
+    # Restore resume RAG and Fit Analysis context.
     from app.agent.interview.resume_memory import has_resume_embeddings as _has_emb
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
 
-    # Scan/Dive ?˜ì´ì¦?ì»¨í…?¤íŠ¸ ë³µì› (Task 8-fix: session?ì„œ ì§ì ‘ ë³µì›)
+    # Restore Scan/Dive context from the session.
     phase = session.phase or "scan"
     scan_plan = session.scan_plan or []
     dive_plan = session.dive_plan or []
@@ -290,7 +311,7 @@ async def submit_answer(
     current_dive_depth = session.current_dive_depth or 0
     scan_evaluations = session.scan_evaluations or []
 
-    # Task 8-fix: ?ˆê±°???¸ì…˜(phase=NULL) ë°©ì–´ ??scan_plan ?†ìœ¼ë©??¬ìƒ??
+    # Rebuild scan plan for legacy sessions if missing.
     if not scan_plan:
         tmp_state: InterviewState = {
             "session_id": session_id,
@@ -368,34 +389,28 @@ async def submit_answer(
             # Update answer message with evaluation
             answer_msg.evaluation = state["current_evaluation"]
 
-            # Handle post-decide state ??Scan+Dive êµ¬ì¡°?ì„œ next_action?€
-            # scan_ask / dive_ask / build_dive_plan / end ì¤??˜ë‚˜
+            # Handle post-decide state for Scan/Dive next actions.
+            # Supported actions: scan_ask, dive_ask, build_dive_plan, end.
             action = state.get("next_action", "end")
 
             if action in ("scan_ask", "dive_ask", "build_dive_plan"):
-                # ?¥ë‹¤?´ë¸Œ depth>=2 ì§ˆë¬¸?€ agent_followup, ?˜ë¨¸ì§€??agent_question
-                is_dive_followup = (
-                    state.get("phase") == "dive"
-                    and state.get("current_dive_depth", 0) > 1
-                )
-                msg_role = "agent_followup" if is_dive_followup else "agent_question"
                 q_msg = AgentInterviewMessage(
                     id=uuid4(),
                     session_id=session_id,
                     message_index=next_message_index,
-                    role=msg_role,
+                    role=_question_role_for_state(state),
                     content=state["current_question"],
                     question_number=state["question_count"],
-                    follow_up_round=0,
+                    follow_up_round=_follow_up_round_for_state(state),
                 )
                 db.add(q_msg)
                 next_message_index += 1
 
-                # phase/scan_plan/dive_plan ?ì†??
+                # Persist phase and plans.
                 session.phase = state.get("phase")
                 session.scan_plan = state.get("scan_plan")
                 session.dive_plan = state.get("dive_plan")
-                # Task 8-fix: progress ?ì†??
+                # Persist progress.
                 session.scan_evaluations = state.get("scan_evaluations")
                 session.current_scan_idx = state.get("current_scan_idx", 0)
                 session.current_dive_idx = state.get("current_dive_idx", 0)
@@ -408,14 +423,14 @@ async def submit_answer(
                 if state.get("overall_report"):
                     session.overall_score = state["overall_report"].get("overallScore")
                 session.phase = "done"
-                # Task 8-fix: progress ?ì†??
+                # Persist progress.
                 session.current_scan_idx = state.get("current_scan_idx", 0)
                 session.current_dive_idx = state.get("current_dive_idx", 0)
                 session.current_dive_depth = state.get("current_dive_depth", 0)
 
             await db.commit()
 
-            # ?„ë¡ ???¸í™˜: ?´ë? action(scan_ask/dive_ask/build_dive_plan) ??"next_question"
+            # Map graph action to legacy frontend action.
             legacy_action = (
                 "next_question"
                 if action in ("scan_ask", "dive_ask", "build_dive_plan")
@@ -433,7 +448,7 @@ async def submit_answer(
 
         except Exception as e:
             logger.exception("Agent interview answer processing failed")
-            yield {"event": "error", "data": json.dumps({"error": "?µë? ì²˜ë¦¬???¤íŒ¨?ˆìŠµ?ˆë‹¤"})}
+            yield {"event": "error", "data": json.dumps({"error": "Failed to process answer"})}
 
     return EventSourceResponse(event_generator())
 
@@ -458,16 +473,13 @@ async def skip_question(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?¸ì…˜??ì°¾ì„ ???†ìŠµ?ˆë‹¤"})
+        raise HTTPException(404, {"error": "Session not found"})
 
     messages = sorted(session.messages, key=lambda m: m.message_index)
     next_message_index = len(messages)
 
     # Rebuild minimal state
-    question_count = 0
-    for msg in messages:
-        if msg.role == "agent_question":
-            question_count = msg.question_number or 0
+    question_count = _latest_question_number(messages)
 
     # Load resume for question generation
     resume_result = await db.execute(select(Resume).where(Resume.id == session.resume_id))
@@ -490,7 +502,7 @@ async def skip_question(
     conversation_history = []
     current_q = ""
     for msg in messages:
-        if msg.role in ("agent_question", "agent_followup"):
+        if msg.role in QUESTION_ROLES:
             current_q = msg.content
         elif msg.role == "user_answer" and msg.evaluation:
             conversation_history.append({
@@ -502,12 +514,12 @@ async def skip_question(
 
     max_questions = session.max_questions or 7
 
-    # ?´ë ¥??RAG / Fit Analysis ì»¨í…?¤íŠ¸ ë³µì› (Spec 4.2(b))
+    # Restore resume RAG and Fit Analysis context.
     from app.agent.interview.resume_memory import has_resume_embeddings as _has_emb
     has_emb = await _has_emb(db, session.resume_id) if session.resume_id else False
     persisted_fit = session.fit_analysis
 
-    # Task 8-fix: Scan/Dive progress ì§ì ‘ ë³µì› (?´ë¦¬?¤í‹± ?œê±°)
+    # Restore Scan/Dive progress directly from the session.
     phase = session.phase or "scan"
     scan_plan = session.scan_plan or []
     dive_plan = session.dive_plan or []
@@ -516,7 +528,7 @@ async def skip_question(
     current_dive_depth = session.current_dive_depth or 0
     scan_evaluations = session.scan_evaluations or []
 
-    # Task 8-fix: ?ˆê±°???¸ì…˜(phase=NULL) ë°©ì–´ ??scan_plan ?†ìœ¼ë©??¬ìƒ??
+    # Rebuild scan plan for legacy sessions if missing.
     if not scan_plan:
         tmp_state: InterviewState = {
             "session_id": session_id,
@@ -543,7 +555,7 @@ async def skip_question(
                 session_id=session_id,
                 message_index=next_message_index,
                 role="user_answer",
-                content="(ê±´ë„ˆ?€)",
+                content="(skipped)",
                 question_number=question_count,
                 follow_up_round=0,
             )
@@ -583,24 +595,24 @@ async def skip_question(
             if question_count >= max_questions:
                 should_end = True
             else:
-                # ?˜ì´ì¦ˆë³„ skip ì²˜ë¦¬
+                # Handle skip by phase.
                 if phase == "scan":
                     # scan: dummy eval push, idx++
                     new_scan_idx = current_scan_idx + 1
                     state["scan_evaluations"] = scan_evaluations + [{"scores": {"depth": 0}}]
                     state["current_scan_idx"] = new_scan_idx
                     if new_scan_idx >= len(scan_plan):
-                        # ?‘ê¸° ?Œì§„ ??dive ?„í™˜
+                        # Build dive plan after scan is complete.
                         state["next_action"] = "build_dive_plan"
                         state = await interview_graph.run_next_question_graph(state, db)
                         if not state.get("dive_plan"):
-                            # dive_plan ë¹„ì–´?ˆìœ¼ë©?ì¢…ë£Œ
+                            # End if there is no dive plan.
                             should_end = True
                     else:
                         state["next_action"] = "scan_ask"
                         state = await interview_graph.run_next_question_graph(state, db)
                 else:
-                    # dive: ?„ì¬ ì£¼ì œ ì¤‘ë‹¨ + ?¤ìŒ ì£¼ì œë¡?
+                    # Dive: skip current topic and move to next topic.
                     new_dive_idx = current_dive_idx + 1
                     if new_dive_idx >= len(dive_plan):
                         should_end = True
@@ -622,7 +634,7 @@ async def skip_question(
                 if state.get("overall_report"):
                     session.overall_score = state["overall_report"].get("overallScore")
                 session.phase = "done"
-                # Task 8-fix: progress ?ì†??
+                # Persist progress.
                 session.current_scan_idx = state.get("current_scan_idx", 0)
                 session.current_dive_idx = state.get("current_dive_idx", 0)
                 session.current_dive_depth = state.get("current_dive_depth", 0)
@@ -641,28 +653,22 @@ async def skip_question(
                     yield {"event": ev["event"], "data": json.dumps(ev["data"])}
                 state["pending_events"] = []
 
-                is_dive_followup = (
-                    state.get("phase") == "dive"
-                    and state.get("current_dive_depth", 0) > 1
-                )
-                msg_role = "agent_followup" if is_dive_followup else "agent_question"
-
                 q_msg = AgentInterviewMessage(
                     id=uuid4(),
                     session_id=session_id,
                     message_index=next_message_index,
-                    role=msg_role,
+                    role=_question_role_for_state(state),
                     content=state["current_question"],
                     question_number=state["question_count"],
-                    follow_up_round=0,
+                    follow_up_round=_follow_up_round_for_state(state),
                 )
                 db.add(q_msg)
 
-                # phase/scan_plan/dive_plan ?ì†??
+                # Persist phase and plans.
                 session.phase = state.get("phase")
                 session.scan_plan = state.get("scan_plan")
                 session.dive_plan = state.get("dive_plan")
-                # Task 8-fix: progress ?ì†??
+                # Persist progress.
                 session.scan_evaluations = state.get("scan_evaluations")
                 session.current_scan_idx = state.get("current_scan_idx", 0)
                 session.current_dive_idx = state.get("current_dive_idx", 0)
@@ -681,7 +687,7 @@ async def skip_question(
 
         except Exception:
             logger.exception("Skip question failed")
-            yield {"event": "error", "data": json.dumps({"error": "ê±´ë„ˆ?°ê¸°???¤íŒ¨?ˆìŠµ?ˆë‹¤"})}
+            yield {"event": "error", "data": json.dumps({"error": "Failed to skip question"})}
 
     return EventSourceResponse(event_generator())
 
@@ -694,7 +700,7 @@ async def end_interview(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Manually end interview early. ?„ë¡œ???…ë°?´íŠ¸ + ë¦¬í¬???ì„±ê¹Œì? ?˜í–‰."""
+    """Manually end interview early and generate a report when possible."""
     result = await db.execute(
         select(AgentInterviewSession)
         .where(
@@ -706,18 +712,17 @@ async def end_interview(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?¸ì…˜??ì°¾ì„ ???†ìŠµ?ˆë‹¤"})
+        raise HTTPException(404, {"error": "Session not found"})
 
-    # ?€???ˆìŠ¤? ë¦¬ ë³µì›
+    # Restore conversation history.
     messages = sorted(session.messages, key=lambda m: m.message_index)
     conversation_history = []
     question_count = 0
     current_q = ""
     for msg in messages:
-        if msg.role in ("agent_question", "agent_followup"):
+        if msg.role in QUESTION_ROLES:
             current_q = msg.content
-            if msg.role == "agent_question":
-                question_count = msg.question_number or question_count
+            question_count = msg.question_number or question_count
         elif msg.role == "user_answer" and msg.evaluation:
             conversation_history.append({
                 "question": current_q,
@@ -726,7 +731,7 @@ async def end_interview(
                 "question_number": msg.question_number,
             })
 
-    # ë¦¬ì†Œ??ë¡œë“œ (?„ë¡œ???…ë°?´íŠ¸ ë°?ë¦¬í¬???ì„±??
+    # Load resources for profile update and report generation.
     resume_result = await db.execute(select(Resume).where(Resume.id == session.resume_id))
     resume = resume_result.scalar_one_or_none()
     resume_data = resume.parsed_data if resume else {}
@@ -767,7 +772,7 @@ async def end_interview(
         "current_resume_chunks": [],
     }
 
-    # ?€???´ì—­???†ìœ¼ë©?ë¦¬í¬???ì„± ê±´ë„ˆ?€ (LLM ?¸ì¶œ ??¹„ + ?˜ë? ?†ëŠ” ë¦¬í¬??ë°©ì?)
+    # Skip report generation when there is no conversation history.
     if conversation_history:
         try:
             state = await interview_graph.run_end_graph(state, db)
@@ -804,7 +809,7 @@ async def get_session(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?¸ì…˜??ì°¾ì„ ???†ìŠµ?ˆë‹¤"})
+        raise HTTPException(404, {"error": "Session not found"})
 
     messages = sorted(session.messages, key=lambda m: m.message_index)
 
@@ -842,7 +847,7 @@ async def get_profile(
     """Get user's AI profile summary."""
     from app.agent.interview.profile_memory import search_profile
 
-    profiles = await search_profile(db, user.id, "ë©´ì ‘ ??Ÿ‰ ì¢…í•©", top_k=20)
+    profiles = await search_profile(db, user.id, "interview overall summary", top_k=20)
 
     CATEGORY_KEY = {"strength": "strengths", "weakness": "weaknesses", "pattern": "patterns", "context": "context"}
     organized: dict[str, list[str]] = {
@@ -879,4 +884,3 @@ async def add_profile_context(
         {"source": "user_input"},
     )
     return {"id": entry_id, "status": "saved"}
-
