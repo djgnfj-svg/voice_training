@@ -3,5 +3,4 @@ from app.models.user import User, Account, AuthSession  # noqa: F401
 from app.models.resume import Resume  # noqa: F401
 from app.models.interview import JobPosting, InterviewSession, InterviewAnswer  # noqa: F401
 from app.models.activity import ActivityLog, ActivityItem  # noqa: F401
-from app.models.answer_assist import AnswerAssistSession, AnswerAssistItem  # noqa: F401
 from app.models.nightly_study import LearningGoal, CurriculumNode, NodeMastery, LearningSession, LearningMessage, LearningStreak  # noqa: F401

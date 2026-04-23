@@ -19,4 +19,3 @@ class Resume(Base):
     user = relationship("User", back_populates="resumes")
     interview_sessions = relationship("InterviewSession", back_populates="resume")
     activity_logs = relationship("ActivityLog", back_populates="resume")
-    answer_assist_sessions = relationship("AnswerAssistSession", back_populates="resume")

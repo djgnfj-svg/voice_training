@@ -10,8 +10,6 @@ import {
   Mic,
   LogOut,
   AudioLines,
-  Eye,
-  MessageSquare,
   Moon,
   Sun,
   Monitor,
@@ -29,8 +27,6 @@ const navItems = [
 ];
 
 const adminNavItems = [
-  { href: '/admin/cunning', label: '컨닝 모드', icon: Eye },
-  { href: '/admin/answer-assist', label: '답변 어시스트', icon: MessageSquare },
   { href: '/admin/voice-test', label: '음성 테스트', icon: AudioLines },
   { href: '/admin/ns-test', label: 'NS 테스트', icon: GraduationCap },
 ];

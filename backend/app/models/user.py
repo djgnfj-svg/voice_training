@@ -24,7 +24,6 @@ class User(Base):
     job_postings = relationship("JobPosting", back_populates="user", cascade="all, delete-orphan")
     interview_sessions = relationship("InterviewSession", back_populates="user", cascade="all, delete-orphan")
     activity_logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
-    answer_assist_sessions = relationship("AnswerAssistSession", back_populates="user", cascade="all, delete-orphan")
 
 
 class Account(Base):
