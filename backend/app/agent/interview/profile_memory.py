@@ -126,16 +126,16 @@ async def load_user_profile(
     if isinstance(resume_data, dict):
         skills = resume_data.get("skills", [])
         if skills:
-            search_parts.append("湲곗닠: " + ", ".join(skills[:10]))
+            search_parts.append("기술: " + ", ".join(skills[:10]))
         projects = resume_data.get("projects", [])
         if projects:
-            search_parts.append("?꾨줈?앺듃: " + ", ".join(p.get("name", "") for p in projects[:3]))
+            search_parts.append("프로젝트: " + ", ".join(p.get("name", "") for p in projects[:3]))
     if job_posting_data and isinstance(job_posting_data, dict):
         position = job_posting_data.get("position", "")
         if position:
-            search_parts.append("?ъ??? " + position)
+            search_parts.append("직무: " + position)
 
-    query = " ".join(search_parts) if search_parts else "硫댁젒 以鍮?湲곗닠 ??웾"
+    query = " ".join(search_parts) if search_parts else "면접 준비 기술 역량"
 
     profiles = await search_profile(db, user_id, query)
 
@@ -170,7 +170,7 @@ async def save_session_insights(
         if entry.get("question") and entry.get("evaluation"):
             score = entry["evaluation"].get("overall_score", 0) or entry["evaluation"].get("overallScore", 0)
             summary_parts.append(
-                f"吏덈Ц: {entry['question']}\n?먯닔: {score}\n?쇰뱶諛? {entry['evaluation'].get('briefFeedback', '')}"
+                f"질문: {entry['question']}\n점수: {score}\n피드백: {entry['evaluation'].get('briefFeedback', '')}"
             )
 
     if not summary_parts:
@@ -178,22 +178,22 @@ async def save_session_insights(
 
     summary = "\n---\n".join(summary_parts)
 
-    prompt = f"""?ㅼ쓬 硫댁젒 ?몄뀡 寃곌낵瑜?遺꾩꽍?섏뿬 ???ъ슜?먯쓽 ?꾨줈???몄궗?댄듃瑜?異붿텧?섏꽭??
+    prompt = f"""다음 면접 세션 결과를 분석하여 이 사용자의 프로필 인사이트를 추출하세요.
 
 <session_results>
 {summary}
 </session_results>
 
-?ㅼ쓬 JSON ?뺤떇?쇰줈 諛섑솚?섏꽭??
+다음 JSON 형식으로 반환하세요.
 {{
-  "strengths": ["媛뺤젏 1", "媛뺤젏 2"],
-  "weaknesses": ["?쎌젏 1", "?쎌젏 2"],
-  "patterns": ["?⑦꽩 1"]
+  "strengths": ["강점 1", "강점 2"],
+  "weaknesses": ["약점 1", "약점 2"],
+  "patterns": ["패턴 1"]
 }}
 
-- 媛???ぉ? 援ъ껜?곸씠怨?湲곗닠?곸쑝濡??묒꽦 (?? "React useState/useReducer ?ㅻ챸???뺥솗?섍퀬 ?ㅻТ ?щ? ?띾?")
-- ?대쾲 ?몄뀡?먯꽌 ?덈줈 諛쒓껄??寃껊쭔 ?ы븿
-- ?대떦 移댄뀒怨좊━???몄궗?댄듃媛 ?놁쑝硫?鍮?諛곗뿴
+- 각 항목은 구체적이고 기술적으로 작성하세요. 예: "React useState/useReducer 설명은 정확하지만 실무 적용은 약함"
+- 이번 세션에서 새로 발견한 것만 포함하세요.
+- 해당 카테고리에 인사이트가 없으면 빈 배열을 반환하세요.
 """
 
     try:

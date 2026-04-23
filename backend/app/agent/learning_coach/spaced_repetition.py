@@ -9,7 +9,7 @@ def apply_proficiency_delta(current: int, delta: int) -> int:
 
 
 def compute_next_review(proficiency: int, now: datetime) -> datetime:
-    """Proficiency-based interval: low ??soon, high ??later."""
+    """Proficiency-based interval: low means soon, high means later."""
     if proficiency < 30:
         days = 1
     elif proficiency < 70:

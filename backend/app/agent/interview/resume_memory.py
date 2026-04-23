@@ -1,5 +1,5 @@
 ﻿# backend/app/agent/resume_rag.py
-"""?대젰??RAG: 泥?궧, ?꾨쿋?? 寃??"""
+"""이력서 RAG: 청크, 임베딩, 검색."""
 from __future__ import annotations
 
 import json
@@ -19,29 +19,29 @@ ChunkType = Literal["summary", "project", "experience", "education"]
 
 class Chunk(TypedDict):
     chunk_type: ChunkType
-    # ?먮낯 諛곗뿴 ?몃뜳??(嫄대꼫????ぉ ?덉쓣 ??鍮꾩뿰??. DB UNIQUE("resumeId", chunk_type, chunk_index) ?ㅻ줈 ?ъ슜.
+    # 원본 배열 인덱스. 건너뛴 항목이 있어도 DB UNIQUE("resumeId", chunk_type, chunk_index)에 사용한다.
     chunk_index: int
     content: str
     metadata: dict
 
 
 def _join_nonempty(parts: list[str], sep: str = " | ") -> str:
-    """鍮?segment ?쒓굅 ??join."""
+    """빈 segment를 제거하고 join한다."""
     return sep.join(p for p in parts if p)
 
 
 def _format_list(values: list, max_items: int = 10) -> str:
-    """由ъ뒪??achievements/techStack)瑜?', '濡?join. 鍮?媛?臾댁떆."""
+    """리스트(achievements/techStack)를 ', '로 join한다. 빈 값은 무시한다."""
     if not isinstance(values, list):
         return ""
     return ", ".join(str(v).strip() for v in values[:max_items] if str(v).strip())
 
 
 def chunk_resume(parsed_data: dict | None) -> list[Chunk]:
-    """?대젰??parsedData瑜?泥?겕 由ъ뒪?몃줈 蹂??
+    """이력서 parsedData를 청크 리스트로 변환한다.
 
-    Spec D3: summary/project/experience/education留??꾨쿋?? skills ?쒖쇅.
-    媛??꾨줈?앺듃/寃쎈젰? description + achievements瑜???泥?겕濡??듯빀 (留λ씫 蹂댁〈).
+    Spec D3: summary/project/experience/education만 임베딩하고 skills는 제외한다.
+    각 프로젝트/경력은 description + achievements를 한 청크로 통합한다.
     """
     if not isinstance(parsed_data, dict):
         return []
@@ -71,12 +71,12 @@ def chunk_resume(parsed_data: dict | None) -> list[Chunk]:
             description = (p.get("description") or "").strip()
             achievements = _format_list(p.get("achievements") or [])
             content = _join_nonempty([
-                f"[?꾨줈?앺듃] {name}" if name else "",
+                f"[프로젝트] {name}" if name else "",
                 period,
-                f"湲곗닠: {tech}" if tech else "",
-                f"??븷: {role}" if role else "",
+                f"기술: {tech}" if tech else "",
+                f"역할: {role}" if role else "",
                 description,
-                f"?깃낵: {achievements}" if achievements else "",
+                f"성과: {achievements}" if achievements else "",
             ])
             if not content:
                 continue
@@ -106,11 +106,11 @@ def chunk_resume(parsed_data: dict | None) -> list[Chunk]:
             achievements = _format_list(e.get("achievements") or [])
             header = " ".join(s for s in [company, position] if s)
             content = _join_nonempty([
-                f"[寃쎈젰] {header}" if header else "",
+                f"[경력] {header}" if header else "",
                 period,
-                f"湲곗닠: {tech}" if tech else "",
+                f"기술: {tech}" if tech else "",
                 description,
-                f"?깃낵: {achievements}" if achievements else "",
+                f"성과: {achievements}" if achievements else "",
             ])
             if not content:
                 continue
@@ -139,7 +139,7 @@ def chunk_resume(parsed_data: dict | None) -> list[Chunk]:
             gpa = ed.get("gpa")
             header = " ".join(s for s in [school, major, degree] if s)
             content = _join_nonempty([
-                f"[?숇젰] {header}" if header else "",
+                f"[학력] {header}" if header else "",
                 period,
                 f"GPA {gpa}" if gpa not in (None, "", 0) else "",
             ])
@@ -160,7 +160,7 @@ def chunk_resume(parsed_data: dict | None) -> list[Chunk]:
 
 
 async def _embed_batch(contents: list[str]) -> list[list[float]]:
-    """OpenAI 諛곗튂 ?꾨쿋??(1???몄텧). 鍮??낅젰? API ?몄텧 ?놁씠 [] 諛섑솚."""
+    """OpenAI 배치 임베딩(1회 호출). 빈 입력은 API 호출 없이 []를 반환한다."""
     if not contents:
         return []
     client = _get_openai_client()
@@ -173,7 +173,7 @@ def _vec_str(v: list[float]) -> str:
 
 
 async def has_resume_embeddings(db: AsyncSession, resume_id: str) -> bool:
-    """?대젰?쒖뿉 ?꾨쿋?⑹씠 1嫄댁씠?쇰룄 ?덈뒗吏 ?뺤씤. 硫댁젒 ?쒖옉 ??SLIM/FALLBACK 遺꾧린 ?먯젙??"""
+    """이력서에 임베딩이 1건이라도 있는지 확인한다. 면접 시작 시 SLIM/FALLBACK 분기에 사용한다."""
     r = await db.execute(
         text('SELECT 1 FROM resume_embeddings WHERE "resumeId" = :rid LIMIT 1'),
         {"rid": resume_id},
@@ -182,14 +182,14 @@ async def has_resume_embeddings(db: AsyncSession, resume_id: str) -> bool:
 
 
 async def embed_resume(resume_id: str, user_id: str, parsed_data: dict | None) -> int:
-    """泥?궧 ??諛곗튂 ?꾨쿋?????꾨웾 援먯껜. BackgroundTask濡??몄텧?섎ŉ ?먯껜 ?몄뀡 ?ъ슜.
+    """청크를 배치 임베딩하고 전량 교체한다. BackgroundTask에서 호출하며 자체 세션을 사용한다.
 
-    Returns: ??λ맂 泥?겕 媛쒖닔.
+    Returns: 저장된 청크 개수.
     """
     chunks = chunk_resume(parsed_data)
     async with async_session() as db:
         try:
-            # ?꾨웾 援먯껜
+            # 전량 교체
             await db.execute(
                 text('DELETE FROM resume_embeddings WHERE "resumeId" = :rid'),
                 {"rid": resume_id},
@@ -223,8 +223,8 @@ async def embed_resume(resume_id: str, user_id: str, parsed_data: dict | None) -
             logger.info("embed_resume: stored %d chunks for resume_id=%s", len(chunks), resume_id)
             return len(chunks)
         except Exception:
-            # BackgroundTask 而⑦뀓?ㅽ듃 ???몄텧?먯뿉寃??꾪뙆?????놁쑝誘濡?濡쒓렇 + 0 諛섑솚.
-            # ?섎룄??愿묐쾾??catch (醫곹엳硫?worker ?ㅻ젅??二쎌쓬). logger.exception濡?stack trace 蹂댁〈.
+            # BackgroundTask 컨텍스트라 호출자에게 전파할 수 없으므로 로그 후 0을 반환한다.
+            # 의도적인 broad catch다. logger.exception으로 stack trace를 보존한다.
             await db.rollback()
             logger.exception("embed_resume failed: resume_id=%s", resume_id)
             return 0
@@ -237,7 +237,7 @@ async def search_resume(
     query: str,
     top_k: int = 3,
 ) -> list[dict]:
-    """?대젰??泥?겕 肄붿궗???좎궗??寃??"""
+    """이력서 청크를 코사인 유사도로 검색한다."""
     if not query or not query.strip():
         return []
     client = _get_openai_client()

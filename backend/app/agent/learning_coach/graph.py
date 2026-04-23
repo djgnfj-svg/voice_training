@@ -625,7 +625,7 @@ class _DynamicToolNode:
 async def _persist_graph_turn(db: AsyncSession, state: LearningGraphState) -> dict[str, Any]:
     session_id = state["session_id"]
     user_utterance = state.get("user_utterance") or ""
-    final_text = (state.get("final_text") or "").strip() or "醫뗭븘?? 怨꾩냽 ?댁뼱媛 蹂쇨쾶??"
+    final_text = (state.get("final_text") or "").strip() or "좋아요. 계속 이어가 볼게요."
     last_idx = (await db.execute(
         text("SELECT COALESCE(MAX(message_index), -1) AS idx FROM learning_messages WHERE session_id=:s"),
         {"s": session_id},

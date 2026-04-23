@@ -47,7 +47,7 @@ async def setup_interview(
     )
     resume = res.scalar_one_or_none()
     if not resume:
-        raise HTTPException(404, {"error": "?대젰?쒕? 李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "이력서를 찾을 수 없습니다"})
 
     try:
         plan = await plan_interview(
@@ -165,7 +165,7 @@ async def get_questions(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
     deep_mode = any(a.question_source == "deep_technical" for a in session.answers)
 
@@ -218,7 +218,7 @@ async def get_practice(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
     if session.status != SessionStatus.COMPLETED:
         raise HTTPException(400, {"error": "세션이 아직 완료되지 않았습니다"})
 
@@ -281,7 +281,7 @@ async def evaluate_answer(
         raise HTTPException(400, {"error": "잘못된 요청입니다"})
     except Exception as e:
         logger.exception("Failed to evaluate answer")
-        raise HTTPException(500, {"error": "泥섎━ 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎"})
+        raise HTTPException(500, {"error": "처리 중 오류가 발생했습니다"})
 
 
 # --- POST /api/interview/practice-evaluate ---
@@ -332,7 +332,7 @@ async def complete_interview(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
     session.status = SessionStatus.COMPLETED
     await db.commit()
@@ -358,7 +358,7 @@ async def get_report(
     )
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(404, {"error": "?몄뀡??李얠쓣 ???놁뒿?덈떎"})
+        raise HTTPException(404, {"error": "세션을 찾을 수 없습니다"})
 
     if session.report_data:
         return session.report_data

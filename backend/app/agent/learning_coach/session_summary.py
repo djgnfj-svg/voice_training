@@ -32,7 +32,7 @@ async def generate_session_summary(
         {"s": session_id},
     )).fetchall()
     transcript = "\n".join(
-        f"{'?좎?' if r.role == 'user' else 'AI'}: {r.content}" for r in msg_rows
+        f"{'유저' if r.role == 'user' else 'AI'}: {r.content}" for r in msg_rows
     )
 
     # Collect mastery changes in session
@@ -77,16 +77,16 @@ async def generate_session_summary(
         highlights = result.get("highlights") or {}
         voice_briefing = result.get("voice_briefing", "")
     except Exception:
-        logger.exception("summary LLM failed ??falling back")
+        logger.exception("summary LLM failed; falling back")
         summary = ""
         highlights = {
-            "headline": "?ㅻ뒛 ?숈뒿??留덉낀?댁슂",
+            "headline": "오늘 학습을 마쳤어요",
             "learned": [],
             "improved": [],
         }
-        voice_briefing = "?ㅻ뒛???숈뒿??留덉낀?댁슂. ?섍퀬?섏뀲?댁슂."
+        voice_briefing = "오늘의 학습을 마쳤어요. 수고하셨어요."
 
-    # ?쒕쾭 媛?? learned??success_count > 0???몃뱶 title?먮쭔 ?덉슜
+    # 서버에서도 learned는 success_count > 0인 노드 title만 허용한다.
     succeeded_titles = {m["title"] for m in mastery_changes if (m.get("success") or 0) > 0}
     raw_learned = highlights.get("learned") or []
     highlights["learned"] = [t for t in raw_learned if t in succeeded_titles][:3]
