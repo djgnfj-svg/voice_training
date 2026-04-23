@@ -18,7 +18,7 @@
 - `_run_seed_bg` 실패 시 silent drop. 실패하면 goal은 생성됐지만 nodes=0. 증상은 A-3과 겹침
 
 ### 선행 필수
-- `backend/migrations/2026-04-20-nightly-study-pending-action.sql`: Supabase SQL Editor에서 실행 안 하면 Task 3 (목표 변경) 500 에러
+- `db/migrations/2026-04-20-nightly-study-pending-action.sql`: Supabase SQL Editor에서 실행 안 하면 Task 3 (목표 변경) 500 에러
 
 ---
 
