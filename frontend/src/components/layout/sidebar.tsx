@@ -2,14 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut, useSession } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 import { cn } from '@/lib/utils';
-import { isAdmin } from '@/lib/admin';
 import {
   LayoutDashboard,
   Mic,
   LogOut,
-  AudioLines,
   Moon,
   Sun,
   Monitor,
@@ -24,11 +22,6 @@ const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { href: '/interview/setup', label: '면접 연습', icon: Mic },
   { href: '/nightly-study', label: 'CS 학습 어시스트', icon: GraduationCap },
-];
-
-const adminNavItems = [
-  { href: '/admin/voice-test', label: '음성 테스트', icon: AudioLines },
-  { href: '/admin/ns-test', label: 'NS 테스트', icon: GraduationCap },
 ];
 
 function ThemeToggle() {
@@ -58,8 +51,6 @@ function ThemeToggle() {
 
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const pathname = usePathname();
-  const { data: session } = useSession();
-  const showAdmin = isAdmin(session?.user?.email);
 
   return (
     <div className="flex h-full flex-col">
@@ -93,30 +84,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
           );
         })}
 
-        {showAdmin && (
-          <>
-            <div className="my-3 border-t" />
-            {adminNavItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavClick}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                    isActive
-                      ? 'bg-primary/10 text-primary shadow-sm'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:translate-x-0.5'
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </>
-        )}
       </nav>
 
       {/* User section */}

@@ -42,7 +42,6 @@ from app.routers.job_posting import router as job_posting_router
 from app.routers.interview import router as interview_router
 from app.routers.model_answer import router as model_answer_router
 from app.routers.speech import router as speech_router
-from app.routers.admin import router as admin_router
 from app.routers.learning_coach import router as learning_coach_router
 from app.routers.agent_interview import router as agent_interview_router
 
@@ -55,6 +54,5 @@ app.include_router(job_posting_router)
 app.include_router(interview_router)
 app.include_router(model_answer_router)
 app.include_router(speech_router)
-app.include_router(admin_router)
 app.include_router(learning_coach_router)
 app.include_router(agent_interview_router)
