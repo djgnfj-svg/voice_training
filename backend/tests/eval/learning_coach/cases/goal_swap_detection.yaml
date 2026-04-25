@@ -1,0 +1,24 @@
+id: goal_swap_detection
+description: 목표 변경 신호를 코치가 인식하고 확인하는가
+
+fixture:
+  goal: "DB 인덱스 마스터하기"
+  subject: "Database"
+  current_topic: "B-Tree 인덱스"
+  proficiency: 30
+  recent_messages: []
+  user_message: "사실 저 이제 Kubernetes 공부하고 싶어요"
+
+rules:
+  must_not_contain: ["```"]
+  must_address_any: ["Kubernetes", "쿠버네티스", "목표", "변경"]
+  must_have_question: true
+  max_chars: 500
+
+judge:
+  criteria: |
+    학습자가 명시적으로 다른 주제로 전환을 요청한 상황. 응답이:
+    1. 목표 변경 의도를 명확히 인식하고 확인하는가
+    2. 현재 진행 중인 학습을 마무리할지 즉시 전환할지 학습자에게 묻는가
+    3. 강요나 거절 없이 학습자 주도성을 존중하는가
+  pass_threshold: 3

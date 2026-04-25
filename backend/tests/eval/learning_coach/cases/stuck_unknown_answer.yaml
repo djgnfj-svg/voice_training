@@ -1,0 +1,26 @@
+id: stuck_unknown_answer
+description: 사용자가 "모르겠다"고 했을 때 코치가 막힌 부분을 풀어주는가
+
+fixture:
+  goal: "DB 인덱스 마스터하기"
+  subject: "Database"
+  current_topic: "B-Tree 인덱스"
+  proficiency: 10
+  recent_messages:
+    - role: assistant
+      content: "B-Tree와 Hash 인덱스의 차이를 설명해보실 수 있나요?"
+  user_message: "B-Tree랑 Hash 차이 모르겠어요"
+
+rules:
+  must_not_contain: ["```", "##"]
+  must_address_any: ["B-Tree", "비트리", "해시", "Hash"]
+  must_have_question: true
+  max_chars: 700
+
+judge:
+  criteria: |
+    사용자가 "모르겠다"고 한 상황. 응답이:
+    1. 두 자료구조의 핵심 차이를 음성으로 듣기 좋게 설명하는가
+    2. 학습자가 따라올 수 있는 비유나 예시를 쓰는가
+    3. 다음 학습 단계로 이끄는 질문을 던지는가
+  pass_threshold: 3

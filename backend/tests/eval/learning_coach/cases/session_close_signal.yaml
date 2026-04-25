@@ -1,0 +1,27 @@
+id: session_close_signal
+description: 사용자가 종료 의향을 보일 때 코치가 정리·요약을 제안하는가
+
+fixture:
+  goal: "DB 인덱스 마스터하기"
+  subject: "Database"
+  current_topic: "B-Tree 인덱스"
+  proficiency: 40
+  recent_messages:
+    - role: user
+      content: "B-Tree 노드 분할 이해했어요"
+    - role: assistant
+      content: "잘하셨어요. 인덱스 갱신 비용도 같이 볼까요?"
+  user_message: "오늘은 여기까지 할게요"
+
+rules:
+  must_not_contain: ["```"]
+  must_address_any: ["오늘", "정리", "요약", "마무리"]
+  max_chars: 500
+
+judge:
+  criteria: |
+    학습자가 종료 의향을 표현한 상황. 응답이:
+    1. 종료 의사를 존중하며 강요하지 않는가
+    2. 오늘 학습한 핵심을 한두 문장으로 정리해주거나 정리할지 묻는가
+    3. 다음 학습으로 자연스럽게 이어가는 격려를 포함하는가
+  pass_threshold: 3
