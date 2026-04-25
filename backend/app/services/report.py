@@ -7,7 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.lib.transcript import count_filler_words
+from app.lib.transcript_normalize import count_filler_words
 from app.models.interview import InterviewSession, InterviewAnswer, JobPosting
 
 

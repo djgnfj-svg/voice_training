@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.lib.llm_client import call_llm_json, MODELS
-from app.lib.transcript_server import correct_transcript
+from app.lib.transcript_correct import correct_transcript
 from app.models.interview import InterviewSession, InterviewAnswer
 from app.prompts.evaluation import (
     TECHNICAL_EVALUATION_PROMPT,
