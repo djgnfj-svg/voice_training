@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 
 from app.lib.llm_client import call_llm
@@ -69,6 +70,14 @@ async def _call_judge_llm(prompt: str) -> str:
     return await call_llm(prompt, model=JUDGE_MODEL, temperature=0)
 
 
+def _extract_json(text: str) -> str:
+    """Extract a JSON object from LLM output that may be wrapped in markdown fences or prose."""
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        return text.strip()
+    return match.group(0)
+
+
 async def check_judge(response: str, judge: Judge, fixture: Fixture) -> JudgeResult:
     prompt = _JUDGE_PROMPT.format(
         user_message=fixture.user_message,
@@ -78,7 +87,7 @@ async def check_judge(response: str, judge: Judge, fixture: Fixture) -> JudgeRes
     for attempt in (1, 2):
         try:
             raw = await _call_judge_llm(prompt)
-            data = json.loads(raw.strip().strip("`"))
+            data = json.loads(_extract_json(raw))
             score = int(data["score"])
             reason = str(data.get("reason", ""))
             return JudgeResult(
