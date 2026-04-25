@@ -19,7 +19,7 @@ from app.agent import tracing
 from app.config import settings
 from app.agent.learning_coach.learning_memory import search_learning_memory, insert_learning_memory
 from app.agent.learning_coach.curriculum_seed import generate_and_insert_seed, normalize_goal
-from app.agent.learning_coach.spaced_repetition import apply_proficiency_delta, compute_next_review
+from app.agent.learning_coach.spaced_repetition import compute_next_review
 from app.agent.learning_coach.session_summary import generate_session_summary, update_streak_after_session
 from app.prompts.learning_coach import AGENTIC_SYSTEM_PROMPT
 
@@ -197,7 +197,7 @@ async def _apply_mastery_update(
 
     now = datetime.now(timezone.utc)
     if row is None:
-        new_prof = apply_proficiency_delta(0, delta)
+        new_prof = max(0, min(100, delta))
         success = 1 if correct else 0
         failure = 0 if correct else 1
         streak = 1 if correct else 0
@@ -221,7 +221,7 @@ async def _apply_mastery_update(
             },
         )
     else:
-        new_prof = apply_proficiency_delta(row.proficiency, delta)
+        new_prof = max(0, min(100, row.proficiency + delta))
         await db.execute(
             text("""
                 UPDATE node_mastery

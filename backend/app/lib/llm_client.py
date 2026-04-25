@@ -27,15 +27,6 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
-# 호환용 alias — 모든 태스크가 동일 모델을 쓰도록 AGENT_MODEL로 통일.
-# 특정 태스크만 다른 모델을 쓰고 싶으면 여기를 개별 env로 빼면 됨.
-MODELS = {
-    "ANALYSIS": settings.AGENT_MODEL,
-    "EVALUATION": settings.AGENT_MODEL,
-    "QUESTION_GEN": settings.AGENT_MODEL,
-}
-
-
 async def call_llm(
     prompt: str,
     *,

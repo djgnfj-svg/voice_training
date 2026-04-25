@@ -40,7 +40,7 @@ async def generate_model_answer(
     db: AsyncSession = Depends(get_db),
 ):
     from app.services.question import plan_interview
-    from app.lib.llm_client import call_llm_json, MODELS
+    from app.lib.llm_client import call_llm_json
     from app.agent.interview.resume_memory import has_resume_embeddings, search_resume
     from app.prompts.model_answer import (
         QUESTION_GEN_RESUME_PROMPT,
@@ -89,7 +89,7 @@ async def generate_model_answer(
 
     try:
         q_result = await call_llm_json(
-            q_prompt, model=MODELS["QUESTION_GEN"], max_tokens=3000, temperature=0.7
+            q_prompt, max_tokens=3000, temperature=0.7
         )
         questions = q_result.get("questions", [])
     except Exception:
@@ -127,7 +127,7 @@ async def generate_model_answer(
                 jobPostingBlock=job_block,
             )
             result = await call_llm_json(
-                prompt, model=MODELS["QUESTION_GEN"], max_tokens=2048, temperature=0.7
+                prompt, max_tokens=2048, temperature=0.7
             )
             return {
                 **q,

@@ -2,19 +2,9 @@ from datetime import datetime, timezone, timedelta
 
 
 from app.agent.learning_coach.spaced_repetition import (
-    apply_proficiency_delta,
     compute_next_review,
     update_streak_state,
 )
-
-
-def test_proficiency_clamped_0_to_100():
-    # clamp low
-    assert apply_proficiency_delta(current=10, delta=-30) == 0
-    # clamp high
-    assert apply_proficiency_delta(current=90, delta=30) == 100
-    # normal
-    assert apply_proficiency_delta(current=50, delta=8) == 58
 
 
 def test_next_review_proficiency_based():

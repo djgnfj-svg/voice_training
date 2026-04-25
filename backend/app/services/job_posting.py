@@ -9,7 +9,7 @@ from uuid import uuid4
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.lib.llm_client import call_llm_json, call_llm_vision, MODELS
+from app.lib.llm_client import call_llm_json, call_llm_vision
 from app.models.interview import JobPosting
 from app.prompts.job_posting import (
     JOB_POSTING_ANALYSIS_PROMPT,
@@ -91,7 +91,6 @@ async def _parse_job_posting(raw_text: str) -> dict[str, Any]:
     prompt = JOB_POSTING_ANALYSIS_PROMPT.replace("{jobPostingText}", raw_text)
     raw = await call_llm_json(
         prompt,
-        model=MODELS["ANALYSIS"],
         temperature=0.3,
     )
     if not isinstance(raw, dict):
@@ -109,7 +108,6 @@ async def _analyze_company(
     )
     raw = await call_llm_json(
         prompt,
-        model=MODELS["ANALYSIS"],
         temperature=0.5,
     )
     if not isinstance(raw, dict):
@@ -172,7 +170,6 @@ async def extract_text_from_image(image_data_url: str) -> str:
     text = await call_llm_vision(
         JOB_POSTING_IMAGE_EXTRACT_PROMPT,
         image_data_url,
-        model=MODELS["ANALYSIS"],
         temperature=0.0,
         detail="auto",
     )

@@ -3,29 +3,19 @@ from __future__ import annotations
 
 import logging
 
-from openai import AsyncOpenAI
-
 from app.config import settings
+from app.lib.llm_client import _get_client
 
 logger = logging.getLogger(__name__)
 
-_client: AsyncOpenAI | None = None
-
 EMBEDDING_MODEL = "text-embedding-3-small"
-
-
-def _get_openai_client() -> AsyncOpenAI:
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-    return _client
 
 
 async def create_embedding(text: str) -> list[float]:
     """Create embedding vector for given text using OpenAI."""
     if not settings.OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY is required for embeddings")
-    client = _get_openai_client()
+    client = _get_client()
     response = await client.embeddings.create(
         model=EMBEDDING_MODEL,
         input=text,

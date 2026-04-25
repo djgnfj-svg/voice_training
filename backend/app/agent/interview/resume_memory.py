@@ -9,7 +9,8 @@ from typing import Literal, TypedDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.embeddings import _get_openai_client, EMBEDDING_MODEL
+from app.agent.embeddings import EMBEDDING_MODEL
+from app.lib.llm_client import _get_client as _get_openai_client
 from app.database import async_session
 
 logger = logging.getLogger(__name__)

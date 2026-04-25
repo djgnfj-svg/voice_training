@@ -3,11 +3,6 @@
 from datetime import datetime, date, timedelta
 
 
-def apply_proficiency_delta(current: int, delta: int) -> int:
-    """Apply delta and clamp to [0, 100]."""
-    return max(0, min(100, current + delta))
-
-
 def compute_next_review(proficiency: int, now: datetime) -> datetime:
     """Proficiency-based interval: low means soon, high means later."""
     if proficiency < 30:

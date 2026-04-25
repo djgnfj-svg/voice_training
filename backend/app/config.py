@@ -17,10 +17,6 @@ class Settings(BaseSettings):
     AGENT_MODEL: str = "gpt-4o-mini"
 
     @property
-    def is_dev(self) -> bool:
-        return self.ENVIRONMENT == "development"
-
-    @property
     def admin_email_list(self) -> list[str]:
         if not self.ADMIN_EMAILS:
             return []

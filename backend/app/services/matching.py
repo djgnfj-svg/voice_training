@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.lib.llm_client import call_llm_json, MODELS
+from app.lib.llm_client import call_llm_json
 from app.prompts.matching import MATCHING_ANALYSIS_PROMPT
 
 
@@ -23,7 +23,6 @@ async def analyze_match(
 
     raw = await call_llm_json(
         prompt,
-        model=MODELS["ANALYSIS"],
         temperature=0.4,
     )
 

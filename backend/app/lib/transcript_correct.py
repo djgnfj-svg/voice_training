@@ -2,20 +2,17 @@ from __future__ import annotations
 
 import logging
 
-from app.lib.llm_client import call_llm, MODELS
+from app.lib.llm_client import call_llm
 
 logger = logging.getLogger(__name__)
 
 
 async def correct_transcript(
     raw_transcript: str, question_context: str | None = None
-) -> dict:
-    """
-    Correct a Korean speech-to-text transcript using Claude.
-    Returns {"corrected_text": str, "was_changed": bool}.
-    """
+) -> str:
+    """Correct a Korean speech-to-text transcript. Returns corrected text (or raw on failure)."""
     if len(raw_transcript) < 10:
-        return {"corrected_text": raw_transcript, "was_changed": False}
+        return raw_transcript
 
     try:
         context_hint = ""
@@ -36,19 +33,9 @@ async def correct_transcript(
             f"텍스트: {raw_transcript}"
         )
 
-        corrected_text = await call_llm(
-            prompt,
-            model=MODELS["ANALYSIS"],
-            temperature=0,
-        )
-        corrected_text = corrected_text.strip()
-
-        if not corrected_text:
-            return {"corrected_text": raw_transcript, "was_changed": False}
-
-        was_changed = corrected_text != raw_transcript
-        return {"corrected_text": corrected_text, "was_changed": was_changed}
+        corrected_text = (await call_llm(prompt, temperature=0)).strip()
+        return corrected_text or raw_transcript
 
     except Exception:
         logger.exception("Transcript correction failed")
-        return {"corrected_text": raw_transcript, "was_changed": False}
+        return raw_transcript
