@@ -4,10 +4,10 @@
 - `frontend/` — Next.js 프론트엔드 + NextAuth 인증만
 - `backend/` — FastAPI 백엔드 (API, 서비스, 프롬프트, AI 로직 전부)
 - `tts/` — OpenAI TTS 래퍼 서비스 (FastAPI + gpt-4o-mini-tts)
-- `db/` — DB 초기화 스크립트
+- `db/` — DB 초기화 + 마이그레이션 (`db/init/`, `db/migrations/`)
 - `docker-compose.yml` — **Dev 전용** (프로젝트명 `voice_training`, 포트 81). nginx + frontend(`next dev`) + backend(`--reload` + volume mount) + tts
 - `docker-compose.prod.yml` — **Prod 전용** (프로젝트명 `voiceprep-prod`, 포트 82). nginx + frontend(production 빌드) + backend(volume mount 없이 빌드된 이미지) + tts
-- Dev/Prod 완전 격리: 컨테이너 이름, 네트워크, 볼륨 모두 분리. 공유되는 건 Supabase DB + OpenAI 쿼터 + `.env` 파일뿐. DB는 Supabase 호스팅
+- Dev/Prod 완전 격리: 컨테이너 이름, 네트워크, 볼륨 모두 분리. 공유되는 건 Supabase DB + OpenAI 쿼터 + 루트 `.env`뿐. DB는 Supabase 호스팅
 - `nginx/` — nginx 리버스 프록시 (`/api/auth` → frontend, `/api/*` → backend, 나머지 → frontend)
 
 ## 개발 규칙
@@ -15,17 +15,15 @@
 - Prod 기동: `docker compose -f docker-compose.prod.yml up -d` (nginx:82 + frontend[prod build] + backend[baked image] + tts).
 - Dev/Prod 동시 기동 가능 (프로젝트/네트워크/볼륨 격리). 내릴 때도 각 파일에 `-f` 명시하여 `down`.
 - 접속: **dev = `http://localhost:81`**, **prod = `http://localhost:82`**. frontend/backend/tts는 외부 포트 노출 없이 Docker 내부 네트워크만 사용.
-- Cloudflare Tunnel은 `~/.cloudflared/config.yml` 에서 `jachana.com` → `http://localhost:82` (prod)로 라우팅 권장. dev는 로컬 확인용.
-- 프로덕션 빌드는 `NEXT_PUBLIC_*` 환경변수를 빌드 타임에 번들에 인라인. **루트 `.env`** 에 값 둠 (docker-compose `args` 로 빌드 스테이지에 전달). `frontend/.env`와 동기화 필요.
+- Cloudflare Tunnel은 `~/.cloudflared/config.yml` 에서 `jachana.com` → `http://localhost:82` (prod)로 라우팅. dev는 로컬 확인용.
+- **환경변수는 루트 `.env` 단일 소스** (`.env.example` 참고). docker-compose가 dev/prod 모두 루트 `.env`를 읽고 frontend 빌드 args + backend env_file로 주입. `frontend/.env`/`backend/.env`는 사용하지 않음 (로컬 직접 실행 때만 별도 셋업).
+- 프로덕션 빌드는 `NEXT_PUBLIC_*` 환경변수를 빌드 타임에 번들에 인라인. 변경 시 prod 프론트 **rebuild 필수**.
 - 로컬 직접 실행 시: `cd frontend && PORT=3001 npm run dev` / `cd backend && uvicorn app.main:app --reload --port 8000`
-- prisma 명령 실행 시 `cd frontend && set -a && source .env && set +a` 후 실행.
+- prisma 명령 실행 시 `cd frontend && set -a && source ../.env && set +a` 후 실행.
 - `node.exe` 프로세스를 함부로 죽이지 말 것 (dev 서버가 꺼짐).
 - Dev 프론트 수정: `docker compose build frontend && docker compose up -d frontend`. Prod 프론트 수정: `docker compose -f docker-compose.prod.yml build frontend && docker compose -f docker-compose.prod.yml up -d frontend`.
 - **Dev 백엔드**는 `./backend` 볼륨 마운트 + `--reload`라 코드 수정 시 자동 반영 (rebuild 불필요). **Prod 백엔드**는 baked image라 배포 시 매번 rebuild: `docker compose -f docker-compose.prod.yml build backend && docker compose -f docker-compose.prod.yml up -d backend`.
-- NEXT_PUBLIC_* 환경변수 변경 시:
-  - `frontend/.env` (dev 런타임) + 루트 `.env` (prod 빌드 args) 둘 다 수정
-  - Dev: `docker compose up -d --force-recreate frontend`
-  - Prod는 빌드 타임 인라인이라 **rebuild 필수**: `docker compose -f docker-compose.prod.yml build frontend && docker compose -f docker-compose.prod.yml up -d frontend`
+- NEXT_PUBLIC_* 변경 시 Dev: `docker compose up -d --force-recreate frontend`. Prod는 빌드 타임 인라인이라 **rebuild 필수**.
 - 인증 필요 페이지는 `src/app/(authenticated)/layout.tsx` 의 `export const dynamic = 'force-dynamic'`로 프로덕션 빌드 시 prerender 회피.
 
 ## 코드 규칙
@@ -33,12 +31,9 @@
 - 불필요한 파일 생성 금지. 기존 파일 수정 우선.
 - 데드코드, 미사용 import 남기지 말 것.
 - **API 로직은 backend/에 작성**. frontend/src/app/api/에는 auth만 존재.
-- 크레딧 차감은 반드시 AI 호출 성공 **후** 수행. 선차감 금지 (실패 시 환불 누락 방지).
-- 무료 체험 차감은 `WHERE free_trial_used = False` 조건부 UPDATE로 원자적 처리 (동시 요청 방어).
 - DB 리소스 조회 시 반드시 `user_id` 소유권 검증 포함 (JobPosting, Resume 등).
 - 에러 응답에 내부 예외 메시지 노출 금지 — 고정 문자열 사용.
 - HTTPException detail은 `{"error": "메시지"}` 딕셔너리 형태로 통일 (프론트에서 `data.error`로 읽음).
-- 무료 체험 마킹은 `credit.py`의 `mark_free_trial_used()` 헬퍼 사용 (중복 구현 금지).
 - `eslint-disable` 대신 `useRef`로 stable function reference 유지.
 - 파일 업로드 UI는 `document.createElement('input')` 대신 hidden `<input ref={...}>` 사용.
 - 삭제 등 위험 액션은 `window.confirm` 대신 shadcn `AlertDialog` 사용.
@@ -53,16 +48,16 @@
   - Google 로그인 → PrismaAdapter가 User/Account 자동 생성
   - 미들웨어에서 세션 쿠키 체크 (`__Secure-authjs.session-token`)
   - `allowDangerousEmailAccountLinking` 사용 금지 (계정 탈취 벡터)
-- Prisma — NextAuth PrismaAdapter용으로만 사용 (`frontend/src/lib/prisma.ts`, `frontend/src/lib/auth.ts`)
+- Prisma — NextAuth PrismaAdapter 전용 (`frontend/src/lib/prisma.ts`, `frontend/src/lib/auth.ts`). 에이전트/학습 테이블은 SQLAlchemy + raw SQL 마이그레이션으로 관리
 
 ### 백엔드 (`backend/`)
 - FastAPI (Python)
-- SQLAlchemy / Prisma 호환 PostgreSQL (Supabase)
+- SQLAlchemy / PostgreSQL (Supabase 호스팅)
 - NextAuth JWE 토큰 복호화: `joserfc` + HKDF (Python 네이티브, Node.js 서브프로세스 불필요)
-- OpenAI API — 모든 LLM 호출 통합 (기본 `gpt-4o-mini`). `backend/.env`의 `AGENT_MODEL`로 런타임 교체 가능 (예: `gpt-4.1-mini`, `gpt-4.1-nano`). 공용 클라이언트: `backend/app/lib/llm_client.py` (call_llm / call_llm_json / call_llm_stream)
-- 에이전트 오케스트레이션 — 수동 상태 머신 (면접/저널/학습). 패턴은 LangGraph 스타일이나 패키지 의존성은 없음
-- **pgvector** — Postgres 확장 기반 RAG (프로필 + 저널 임베딩, OpenAI text-embedding-3-small). raw SQL로 코사인 유사도 검색
-- TTS — **OpenAI `gpt-4o-mini-tts`** (voice `sage`, speed 2.0x, 페르소나 5종: default/interviewer/journal_friend/journal_counselor/tutor). 별도 `tts` Docker 서비스가 래핑. 실패 시 edge-tts로 자동 폴백
+- OpenAI API — 모든 LLM 호출 통합 (기본 `gpt-4o-mini`). `AGENT_MODEL` 환경변수로 런타임 교체 가능. 공용 클라이언트: `backend/app/lib/llm_client.py` (call_llm / call_llm_json / call_llm_stream)
+- 에이전트 오케스트레이션 — **LangGraph 기반 그래프** (`backend/app/agent/interview/graph.py`, `backend/app/agent/learning_coach/graph.py`). `tracing.py`로 노드 단위 트레이싱
+- **pgvector** — Postgres 확장 기반 RAG (프로필 + 이력서 임베딩, OpenAI text-embedding-3-small). raw SQL로 코사인 유사도 검색
+- TTS — **OpenAI `gpt-4o-mini-tts`** (voice `sage`, speed 2.0x, 페르소나: default/interviewer/tutor). 별도 `tts` Docker 서비스가 래핑. 실패 시 edge-tts로 자동 폴백
 - Whisper API (선택적 — 음성인식, 없으면 Web Speech API만 사용)
 
 ### TTS 서비스 (`tts/`)
@@ -70,7 +65,6 @@
 - 엔드포인트: `POST /synthesize {text, voice?, persona?, speed?, model?}` → audio/mpeg
 - 페르소나는 `gpt-4o-mini-tts`의 `instructions` 파라미터로 톤 지시 (같은 보이스도 다르게 들림)
 - 속도: gpt-4o-mini-tts는 `speed` 파라미터를 거의 무시 → instructions에 "very fast" 힌트로 보완. 실제 속도 빠르게 원하면 `tts-1` 모델 사용 (페르소나는 무시됨)
-- 어드민 테스트: `/admin/voice-test` 의 "TTS 발화" 탭 (모델/보이스/페르소나/속도 조합 비교)
 
 ### 프론트↔백엔드 통신
 - **Docker**: nginx가 `/api/auth` → frontend, `/api/*` → backend로 라우팅
@@ -90,58 +84,68 @@
   - **AI 코치 면접**: 에이전트 기반 동적 면접. 프로필 RAG로 사용자 기억, 완전 동적 질문 생성, 꼬리질문 자동
   - **모범답안 학습**: AI가 질문+모범답안 생성 → 음성 연습 → 모범답안 공개
 - **AI 코치 면접 (에이전트 시스템)**:
-  - 3개 에이전트: 프로필(RAG) + 면접관(질문생성/흐름결정) + 평가(답변평가/리포트)
-  - 오케스트레이터: LangGraph 상태 머신 (규칙 기반 분기, LLM 호출 없음)
+  - 모듈 (`backend/app/agent/interview/`):
+    - `graph.py` — LangGraph 오케스트레이션 (전체 그래프 정의)
+    - `state.py` — 그래프 상태
+    - `plan_builder.py` — Scan/Dive 플랜 빌더 (순수 코드)
+    - `questioner.py` — 질문 생성 (LLM)
+    - `evaluation.py` — 답변 평가 (LLM + 정규화/가드)
+    - `profile_memory.py` — 프로필 RAG (pgvector)
+    - `resume_memory.py` — 이력서 RAG (pgvector, chunk_type별)
+    - `fit_analysis.py` — JD↔이력서 적합도 분석
+    - `report_metrics.py` — 리포트 집계
   - 프로필 RAG: pgvector + OpenAI Embeddings, 강점/약점/패턴/맥락 카테고리
-  - **이력서 RAG (2026-04-13 신규)**: `resume_embeddings` 테이블 (chunk_type: summary/project/experience/education). 이력서 저장 시 BackgroundTask로 자동 청킹+임베딩. 매 질문 직전 scan/dive 플랜의 project_ref+techStack 쿼리로 top-3 retrieve
-  - **Scan+Dive 2페이즈 (2026-04-14 신규)**: 실제 면접관처럼 훑기→딥다이브 구조로 전환.
-    - **Phase 1 (Scan)**: `build_scan_plan` 순수 코드가 이력서 프로젝트 3개 선정. JD 있음 → 매칭 상위 2 + 비매칭 1(JD 필터로 놓치던 영역 강제 커버). JD 없음 → projects[0..2] 순서. projects 부족시 experience로 보충
-    - **Phase 2 (Dive)**: `build_dive_plan`이 훑기 답변의 depth 점수로 약점(최저) + 강점(최고) 2주제 선정. JD 매칭 프로젝트 내에서만 선별. 주제당 1~3질문 적응형 (depth<70이면 계속 파기, depth>=3이면 next_topic 강제). 주제가 같으면 weakness/strength 각도로 분리
+  - **이력서 RAG**: `resume_embeddings` 테이블 (chunk_type: summary/project/experience/education). 이력서 저장 시 BackgroundTask로 자동 청킹+임베딩. 매 질문 직전 scan/dive 플랜의 project_ref+techStack 쿼리로 top-3 retrieve
+  - **Scan+Dive 2페이즈**: 실제 면접관처럼 훑기→딥다이브 구조.
+    - **Phase 1 (Scan)**: `build_scan_plan` 순수 코드가 이력서 프로젝트 3개 선정. JD 있음 → 매칭 상위 2 + 비매칭 1. JD 없음 → projects[0..2] 순서. projects 부족시 experience로 보충
+    - **Phase 2 (Dive)**: `build_dive_plan`이 훑기 답변의 depth 점수로 약점(최저) + 강점(최고) 2주제 선정. JD 매칭 프로젝트 내에서만 선별. 주제당 1~3질문 적응형 (depth<70이면 계속 파기, depth>=3이면 next_topic 강제)
     - 총 질문 수 가변 (projects 수에 따라 3~9). 프론트에 `max_questions` SSE event로 전달
-    - SSE `question` event에 `phase: "scan"|"dive"`, `phaseLabel` (예: "훑기 2/3 · 크롤링") 포함 → UI 배지
+    - SSE `question` event에 `phase: "scan"|"dive"`, `phaseLabel` 포함
     - 세션 영속화: `agent_interview_sessions`에 `phase`, `scan_plan`, `dive_plan`, `scan_evaluations` JSONB + `current_scan_idx`/`current_dive_idx`/`current_dive_depth` 정수 3컬럼
-  - **Fit Analysis (2026-04-13 도입, 2026-04-14 축소)**: 면접 시작 시 1회 산출 → `agent_interview_sessions.fit_analysis` JSONB 영속화. **skill_match(코드) + avoid_topics**만 반환 (focus_topics는 planner로 이관). 플래너가 skill_match로 scan 선정
-  - **프롬프트 분기**: `INTERVIEWER_QUESTION_PROMPT_SLIM` (임베딩 있을 때, `current_topic_plan` 블록에 scan/dive 플랜 주입) / `_FALLBACK` (임베딩 없을 때)
-  - 완전 동적 질문: 플래너가 주제는 결정, LLM이 문장 생성
+  - **Fit Analysis**: 면접 시작 시 1회 산출 → `agent_interview_sessions.fit_analysis` JSONB 영속화. **skill_match(코드) + avoid_topics**만 반환. 플래너가 skill_match로 scan 선정
+  - **프롬프트 분기**: `INTERVIEWER_QUESTION_PROMPT_SLIM` (임베딩 있을 때) / `_FALLBACK` (없을 때). `backend/app/prompts/agent.py`
   - SSE 스트림: `phase` 값 `loading_profile → profile_loaded → fit_analyzing → fit_analyzed → scan_plan_ready → generating_question → question → evaluating → dive_plan_ready → ...`
   - 세션 종료 시 프로필 자동 업데이트 (인사이트 추출 → RAG 저장)
-  - 코드: `backend/app/agent/` (state, nodes, planner, profile_agent, interviewer_agent, evaluator_agent, embeddings, resume_rag, fit_analyzer)
-  - 프롬프트: `backend/app/prompts/agent.py`
   - API: `/api/agent-interview/{start,answer,skip,end,{id}}`, `/api/profile`, `/api/profile/context`
   - UI: `frontend/src/components/agent-interview/`, `frontend/src/app/(authenticated)/agent-interview/`
-  - **평가 파이프라인 (2026-04-14 정비 완료)**:
+  - **평가 파이프라인**:
     - EVALUATOR_PROMPT: 각 역량 0~100 독립 채점 + 저품질 답변 규칙(반복/무관/포기/단답에 카테고리별 0~40 cap 명시)
-    - `evaluator_agent._normalize_evaluation(evaluation, answer)`: scores 0~100 clamp + `_quality_cap(answer)` 후처리(char_ratio/token unique_ratio 기반) + **overallScore = Σ(score_i × weight_i) 서버 강제 계산** (LLM 출력 무시)
+    - `evaluation._normalize_evaluation(evaluation, answer)`: scores 0~100 clamp + `_quality_cap(answer)` 후처리(char_ratio/token unique_ratio 기반) + **overallScore = Σ(score_i × weight_i) 서버 강제 계산** (LLM 출력 무시)
     - 가중치: clarity 30%, accuracy 25%, practicality 25%, depth 15%, completeness 5%
-  - **페이즈/주제 제어 (Scan+Dive)**: `nodes.MAX_DIVE_DEPTH = 3`. `decide_in_topic_node`가 LLM 결정 후 한계치 강제(depth >= 3 → next_topic, 마지막 주제면 end). DECIDE 임계 depth < 70. 훑기 간 전환은 `scan_next`가 코드로 처리(LLM 없음)
-  - **답변 가드**: 프론트 `lib/transcript.ts`의 `hasMeaningfulContent`(정규화 후 10자/3 유니크 토큰) + 인라인 경고 UI, 백엔드 `_is_meaningful_answer`로 400 반환 (우회 방어). `SILENCE_TIMEOUT_MS = 30000`
-  - **모바일 중복 입력 방어**: `useSpeechRecognition.appendWithOverlap`으로 prev 끝과 새 final overlap 제거 (Android Chrome 동일 final 반복 emit 대응). `transcript.ts`의 `collapseImmediateRepeats`/`collapseRepeatedPhrases`
-  - **/end 핸들러**: 수동 종료도 `update_profile` + `generate_report` 호출 후 reportData 저장. 프론트 `endAgentInterview`는 `AbortSignal.timeout(30000)`
-  - **히스토리 통합**: `services/analytics.get_session_history`가 InterviewSession + AgentInterviewSession 병합. agent는 `type: 'ai-coach'`, `status` 대문자 통일. `SessionCard`가 `isAgent` 분기로 `/agent-interview/session/{id}` 라우팅
+  - **답변 가드**: 프론트 `lib/transcript.ts`의 `hasMeaningfulContent` + 인라인 경고 UI, 백엔드 `_is_meaningful_answer`로 400 반환. `SILENCE_TIMEOUT_MS = 30000`
+  - **모바일 중복 입력 방어**: `useSpeechRecognition.appendWithOverlap`으로 prev 끝과 새 final overlap 제거. `transcript.ts`의 `collapseImmediateRepeats`/`collapseRepeatedPhrases`
+  - **/end 핸들러**: 수동 종료도 프로필 업데이트 + 리포트 생성 후 reportData 저장. 프론트 `endAgentInterview`는 `AbortSignal.timeout(30000)`
+  - **히스토리 통합**: `services/analytics.get_session_history`가 InterviewSession + AgentInterviewSession 병합. agent는 `type: 'ai-coach'`. `SessionCard`가 `isAgent` 분기로 `/agent-interview/session/{id}` 라우팅
   - **레이아웃**: `authenticated-content.isFullscreenSession`에 `/agent-interview/session/` 포함 (면접 중 Header 숨김)
-  - **알려진 제약 (`docs/TODO.md`)**:
-    - 모바일 중복 입력 완전 제거 불가 — 대부분 해소되지만 공백 없이 붙은 chunk 일부 잔존
-    - `/end` 리포트 생성 실패 시 status=completed + reportData=NULL 세션 남을 수 있음 (프론트 방어 있음)
-    - 400 응답이 SSE error로 빠져 재개 경로 없음 (이중 가드라 실제 발동 드묾)
-- **기존 면접 (레거시, 코드 유지)**: 일반/심화 모드는 UI에서 제거됨. 백엔드 API는 그대로 남아있음
-- **멀티라운드 꼬리질문** (기존): 메인 답변 → 꼬리질문 최대 2회 연쇄
+- **기존 면접 (레거시)**: 일반/심화 모드. 백엔드 API 유지
+- **멀티라운드 꼬리질문**: 메인 답변 → 꼬리질문 최대 2회 연쇄
   - 깊이 사다리: what → why → tradeoffs/alternatives
   - depth < 80이면 followUpQuestion 필수 생성
-  - `followUpRound` (0=메인, 1=1차, 2=2차), `followUpEvaluations: AnswerEvaluation[]`
-  - API: `/api/interview/practice-evaluate` (stateless, previousContext 전달)
-- **답변 녹음 재생**: 음성 답변 녹음 → fire-and-forget 업로드 → 리포트에서 재생 버튼
+  - API: `/api/interview/practice-evaluate` (stateless)
+- **답변 녹음 재생**: 녹음 → fire-and-forget 업로드 → 리포트에서 재생
   - `InterviewAnswer.audioUrl` 필드
   - API: `POST /api/interview/audio` (multipart, 세션 소유권 검증)
-- **모범답안 학습**: 이력서 선택 → AI가 질문+모범답안 생성 → 질문별 음성 답변 연습 → 모범답안 공개
-- **대시보드**: 성장 분석(점수 추이 차트 + 카테고리별 성과 차트)이 대시보드에 통합됨.
-- **온보딩**: 첫 방문 시(sessionCount=0 && !freeTrialUsed) 웰컴 다이얼로그 3단계 표시
-  - `components/onboarding/welcome-dialog.tsx`
+- **모범답안 학습**: 이력서 선택 → AI가 질문+모범답안 생성 → 음성 답변 연습 → 모범답안 공개
+- **대시보드**: 성장 분석(점수 추이 차트 + 카테고리별 성과 차트) 통합
+- **온보딩**: 첫 방문 시 웰컴 다이얼로그 3단계 표시 (`components/onboarding/welcome-dialog.tsx`)
+
+## CS 학습 어시스트 (Learning Coach) 시스템
+- **개요**: 목표 기반 agentic 학습 에이전트. SRS 기반 복습. 모바일 전용 UI. 세션 중 목표 변경 감지 + curriculum swap 지원
+- **모듈** (`backend/app/agent/learning_coach/`):
+  - `graph.py` — LangGraph 그래프 (plan → action 루프, RAG 이어가기 인사, goal swap, SRS)
+  - `curriculum_seed.py` — 초기 종목/토픽 시드
+  - `learning_memory.py` — 학습 기억 (UserKnowledge proficiency)
+  - `spaced_repetition.py` — SRS 스케줄링 (nextReviewAt 계산)
+  - `session_summary.py` — 세션 종료 요약
+- **프롬프트**: `backend/app/prompts/learning_coach.py`
+- **API**: `/api/learning-coach/{start, {session_id}/respond, {session_id}/end, status, history}`
+- **UI**: `/learning-coach` (사이드바 라벨 "CS 학습 어시스트")
+- **음성 전용**: 코드 블록/마크다운 렌더링 없음. 답변은 음성으로 듣고 검색해서 학습
 
 ## 레이아웃
-- **사이드바**: `components/layout/sidebar.tsx` — 대시보드, 면접 연습, 하루의 정리, 오늘의 학습 (4개 단일 항목)
+- **사이드바** (`components/layout/sidebar.tsx`): 대시보드, 면접 연습, CS 학습 어시스트 (3개)
 - **면접 연습 페이지**: 탭 구조 — [면접] (셋업 + 면접 기록 인라인) / [이력서 관리]. `/profile` → `/interview/setup?tab=resume`, `/history` → `/interview/setup` 리다이렉트
-- **히스토리 인라인**: 하루의 정리, 오늘의 학습, 면접 기록 모두 랜딩 페이지에 5건 미리보기 + 더보기 버튼
-- **푸터**: `components/layout/footer.tsx` — 문의 이메일 + 저작권 (인증된 레이아웃 하단)
+- **푸터** (`components/layout/footer.tsx`): 문의 이메일 + 저작권
 
 ## 평가 프롬프트 (`backend/app/prompts/evaluation.py`)
 - **기술면접**: clarity 30% + accuracy 25% + practicality 25% + depth 15% + completeness 5%
@@ -149,131 +153,54 @@
 - **인성면접**: situation 15% + task 15% + action 30% + result 25% + communication 15%
 - **꼬리질문 전용**: `FOLLOWUP_EVALUATION_PROMPT` — previousContext 기반 평가
 
-## 크레딧 & 결제 시스템
-- **과금 모델**: 크레딧 충전제. 세션 1회 = 10코인, 꼬리질문 1코인 (면접/모범답안 동일)
-- **무료 체험**: 신규 유저 1회 무료 (질문 3개 제한). `User.freeTrialUsed` boolean으로 관리
-- **Dev 모드**: `ENVIRONMENT=development`면 크레딧 체크 스킵 (backend config)
-- **원자적 차감**: `WHERE credit_balance >= cost` 조건부 UPDATE + rowcount 체크. 무료 체험도 `WHERE free_trial_used = False` 원자적 처리
-- **차감 시점**: AI 생성 성공 후 차감 (실패 시 미차감). 크레딧 차감 실패 시 세션 삭제 + 에러 반환
-- **API**: `GET /api/credits` (잔액), `GET /api/credits/transactions` (내역)
-- **쿠폰**: 프로모션 코드로 크레딧 지급
-  - API: `POST /api/coupons/redeem`
-  - UI: `/credits` 페이지에 쿠폰 입력 카드
-- **게이팅 라우트**: `/api/interview/setup`, `/api/model-answer/generate`
-- **402 응답**: `{ error: '...', code: 'INSUFFICIENT_CREDITS' }` → UI에서 크레딧 부족 다이얼로그/페이지 표시
-- **UI**: `components/credit/credit-badge.tsx` (헤더), `components/credit/insufficient-credits-dialog.tsx`, `/credits` 페이지
-- **결제 기능 미구현** (출시 예정): `/credits` 페이지에 상품 표시만 있고, 버튼 클릭 시 **출시 알림 wishlist** 이메일 등록
-  - API: `POST /api/payments/wishlist` (로그인 필요)
-  - 테이블: `payment_wishlist` (email, userId, productId)
-  - 결제 준비되면 해당 이메일로 알림 발송 예정
-  - **wishlist 확인**: Supabase SQL Editor에서 아래 쿼리 실행 (관리자 UI/알림 없음 — 수동 확인)
-    ```sql
-    -- 전체 등록자 (최신순)
-    SELECT email, "userId", "productId", "createdAt"
-    FROM payment_wishlist
-    ORDER BY "createdAt" DESC;
-
-    -- 총 몇 명 (중복 제외 / 전체)
-    SELECT COUNT(DISTINCT email) AS unique_emails, COUNT(*) AS total_entries
-    FROM payment_wishlist;
-
-    -- 상품별 집계
-    SELECT "productId", COUNT(*) AS count
-    FROM payment_wishlist GROUP BY "productId" ORDER BY count DESC;
-    ```
-
-## 오늘의 학습 (Nightly Study) 시스템
-- **Subject** — 학습 종목 (시스템 7개 + 커스텀, parentId 계층 구조). 시스템: CS기초, JavaScript, React, Next.js, TypeScript심화, DB심화, DevOps
-- **Topic** — 종목 내 세부 개념 (난이도, keyPoints, metadata)
-- **UserKnowledge** — 사용자별 토픽별 숙련도 (proficiency 0-100, successCount, failureCount, streakCount, nextReviewAt)
-- **LearningAgentSession** — 학습 에이전트 세션 (userId, topic, status, llmCallCount, creditDeducted, isFreeSession)
-- **LearningAgentMessage** — 학습 대화 메시지 (sessionId, messageIndex, role, content, phase, assessment)
-- **DailyProgress** — 일별 학습 요약 (totalSessions, totalQuestions, totalCorrect, totalMinutes, topicsStudied[], subjectsStudied[], streakDay)
-- **API**: `/api/nightly-study/{start, {session_id}/respond, {session_id}/end, status, history}`
-- **UI**: `/nightly-study`
-- 코드: `backend/app/agent/` (learning_nodes, learning_planner, learning_state, tutor_agent)
-
-## 하루의 정리 (Journal) 시스템
-- **개요**: AI 대화형 음성 일기. 듀얼 모드(일기/상담) 자동 전환, pgvector RAG로 과거 대화 기억
-- **듀얼 모드**:
-  - **일기 모드**: 가벼운 반말 대화, 일상 이벤트 기록 ("친구" 페르소나)
-  - **상담 모드**: 공감적 존댓말, 깊은 감정 탐색 (키워드 감지 + LLM 분류)
-- **과금**: 세션당 10개 무료 메시지, 이후 메시지당 1크레딧
-- **에이전트** (`backend/app/agent/`):
-  - `journal_state.py` — 상태 머신 (세션, 대화, 모드, RAG 컨텍스트)
-  - `journal_nodes.py` — 노드 오케스트레이션 (plan → action → plan, 최대 3루프)
-  - `journal_planner.py` — LLM 기반 행동 결정 (search_past/classify_mode/respond)
-  - `journal_router_agent.py` — 일기/상담 모드 분류기
-  - `journal_extractor.py` — 인사이트 추출 → RAG 저장 (비동기)
-  - `journal_summarizer.py` — 세션 요약 + 기분 + 하이라이트 생성
-  - `journal_rag.py` — pgvector 코사인 유사도 검색, 30일 윈도우, 유사 항목 upsert (>=0.85)
-- **프롬프트**: `backend/app/prompts/journal.py`
-- **API**: `/api/journal/{start, {session_id}/message, {session_id}/end, history, {session_id}}`
-- **UI**: `/journal` (메인), `/journal/history` (지난 기록)
-  - `components/journal/` (journal-panel, journal-message, mode-indicator, session-summary-card, voice-input-bar)
-  - `hooks/useJournalSession.ts`, `lib/journal-api.ts`
-
 ## DB 모델 (핵심)
-- `User` — 계정 (Google OAuth + 이메일/비밀번호 로그인, creditBalance, freeTrialUsed)
+- `User` — 계정 (Google OAuth)
 - `Account` — OAuth 계정 (PrismaAdapter 관리)
-- `Resume` — 복수 이력서 (userId, name, parsedData, fileUrl은 optional). `GET /api/resume?detail=true`로 parsedData 포함 조회
+- `Resume` — 복수 이력서 (userId, name, parsedData, fileUrl optional). `GET /api/resume?detail=true`로 parsedData 포함 조회
 - `JobPosting` — 채용공고
-- `InterviewSession` — 면접 세션 (userId, resumeId 필수, jobPostingId 선택, type, categories[], difficulty, status, creditDeducted, textMode, overallScore, reportData, durationSeconds, totalQuestions)
-- `InterviewAnswer` — 답변/평가 (audioUrl: 녹음 파일 경로)
-- `CreditTransaction` — 크레딧 거래 내역 (amount, balance, type: CreditTxType, referenceId)
-- `PaymentWishlist` — 결제 출시 알림 신청 (email, userId, productId) — 결제 기능 구현 전 관심 유저 수집
-- `Coupon` — 쿠폰 (code unique, credits, maxUses, usedCount, isActive, expiresAt)
-- `CouponUsage` — 쿠폰 사용 기록 (couponId+userId unique → 중복 사용 방지)
-- `Subject` — 학습 종목 (slug unique, isSystem, parentId 계층)
-- `Topic` — 종목 내 토픽 (difficulty, keyPoints[])
-- `UserKnowledge` — 사용자별 토픽별 학습 기억 (proficiency, successCount, failureCount, streakCount, nextReviewAt)
-- `LearningAgentSession` — 학습 에이전트 세션 (userId, topic, status, llmCallCount, creditDeducted)
-- `LearningAgentMessage` — 학습 대화 메시지 (sessionId, messageIndex, role, content, phase, assessment)
-- `DailyProgress` — 일별 진도 (userId+date unique)
+- `InterviewSession` — 면접 세션 (userId, resumeId 필수, jobPostingId 선택, type, categories[], difficulty, status, textMode, overallScore, reportData, durationSeconds, totalQuestions)
+- `InterviewAnswer` — 답변/평가 (audioUrl)
 - `AgentInterviewSession` — 에이전트 면접 세션 (resumeId, jobPostingId, maxQuestions, status, reportData, fitAnalysis JSONB, phase/scanPlan/divePlan/scanEvaluations JSONB, currentScanIdx/currentDiveIdx/currentDiveDepth Int)
 - `AgentInterviewMessage` — 에이전트 면접 메시지 (sessionId, messageIndex, role, content, evaluation JSON)
 - `UserProfileEmbedding` — 사용자 프로필 벡터 (userId, category, content, embedding VECTOR(1536), metadata)
-- `JournalSession` — 저널 세션 (userId, status, messageCount, freeMessagesUsed, creditsCharged, summary)
-- `JournalMessage` — 저널 대화 메시지 (sessionId, messageIndex, role, content, mode: journal/counseling)
-- `journal_embeddings` — 저널 RAG 벡터 (userId, category, content, embedding VECTOR(1536), metadata). 카테고리: emotion/event/growth/concern/relationship/goal
+- `resume_embeddings` — 이력서 RAG 벡터 (chunk_type: summary/project/experience/education)
+- 학습 시스템 테이블 (SQLAlchemy 관리, raw SQL 마이그레이션): Subject, Topic, UserKnowledge, LearningAgentSession, LearningAgentMessage, DailyProgress
 - `ActivityLog` + `ActivityItem` — 활동 추적 로그
-- `AnswerAssistSession` + `AnswerAssistItem` — AI 답변 도우미 세션
-- `QuestionBank` — 문제은행 (category, subcategory, difficulty, questionText, keyPoints)
+- 마이그레이션: `db/migrations/*.sql` (날짜별 + feature별)
 
 ## 배포
 - **방식**: 로컬 PC + Cloudflare Tunnel (PC 로그인 상태에서만 서비스)
 - **도메인**: `jachana.com` (Cloudflare 관리)
-- **배포 설정**: `docker compose -f docker-compose.prod.yml up -d` → `cloudflared tunnel run` (터널은 prod:82만 바라봄. dev:81은 로컬 확인용)
-- **터널 config**: `~/.cloudflared/config.yml` — `jachana.com` → `http://localhost:82` (prod). 로컬 dev는 `http://localhost:81` 직접 접속
+- **배포 설정**: `docker compose -f docker-compose.prod.yml up -d` → `cloudflared tunnel run` (터널은 prod:82만 바라봄)
+- **터널 config**: `~/.cloudflared/config.yml` — `jachana.com` → `http://localhost:82`
 - **nginx**: `/api/auth` rate limit 5r/s, `/api/` rate limit 10r/s
 - **음성 파일**: Docker named volume — dev/prod 각각 별도 (`voice_training_audio-storage`, `voiceprep-prod_audio-storage`)
+- **CI 없음**: 로컬 PC + Cloudflare Tunnel 배포라 GitHub Actions 사용 안 함
 
 ### 자동 시작 (로그인 시 자동 기동)
-- **Docker Desktop**: `%APPDATA%\Docker\settings-store.json`의 `AutoStart: true`로 로그인 시 자동 실행. 모든 컨테이너는 `restart: unless-stopped`로 자동 복구. 다만 prod 컴포즈 프로젝트는 한 번이라도 `docker compose -f docker-compose.prod.yml up -d`로 띄운 이력이 있어야 Docker Desktop이 재기동. 따라서 prod를 `down`으로 내린 뒤엔 반드시 다시 `up -d`로 기동해둘 것 (재부팅 시 자동 복구되도록)
-- **Cloudflared**: Windows Startup 폴더에 VBS 스크립트 배치 — 콘솔창 없이 백그라운드 실행
+- **Docker Desktop**: `%APPDATA%\Docker\settings-store.json`의 `AutoStart: true`. 모든 컨테이너는 `restart: unless-stopped`. prod 컴포즈 프로젝트는 한 번이라도 `up -d`로 띄운 이력이 있어야 Docker Desktop이 재기동
+- **Cloudflared**: Windows Startup 폴더에 VBS 스크립트 — 콘솔창 없이 백그라운드 실행
   - 경로: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\VoicePrep-Cloudflared.vbs`
-  - 내용: `WshShell.Run """...\cloudflared.exe"" tunnel run", 0, False` (창 숨김 + 비동기)
-  - cloudflared 실행 파일 경로가 바뀌면(winget 업데이트 등) VBS의 경로도 수정 필요
-- **동작 순서**: Windows 로그인 → Docker Desktop 기동 → 컨테이너 자동 복구 → VBS가 cloudflared 기동 → `jachana.com` 온라인 (대략 30초~1분)
-- **주의**: 로그아웃/잠금 상태에서는 서비스 중단. 자동 로그인 설정 권장. Docker Desktop 수동 종료 시 컨테이너도 같이 내려감. VBS 중복 실행 금지(cloudflared 프로세스 충돌)
+  - 내용: `WshShell.Run """...\cloudflared.exe"" tunnel run", 0, False`
+  - cloudflared 경로가 바뀌면 VBS도 수정
+- **동작 순서**: Windows 로그인 → Docker Desktop 기동 → 컨테이너 자동 복구 → VBS가 cloudflared 기동 → `jachana.com` 온라인 (30초~1분)
 
 ## 음성 처리
-- **transcript 정규화**: `frontend/src/lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 + `countFillerWords()` (필러워드 카운트, 클라이언트용)
+- **transcript 정규화**: `frontend/src/lib/transcript.ts` — 필러워드/더듬기/부분반복 제거 + `countFillerWords()`
 - **AI 교정**: `backend/app/lib/transcript_server.py` — 서버 측 transcript 교정
 - **음성인식 (하이브리드)**:
   - 실시간 표시: Web Speech API (`maxAlternatives=3` + confidence 기반 최적 대안 선택)
   - 최종 전사: Whisper API (선택적) — 답변 제출 시 녹음 데이터를 Whisper로 전사, 실패 시 Web Speech API 폴백
   - 클라이언트 래퍼: `frontend/src/lib/whisper-client.ts`
   - 녹음 훅: `frontend/src/hooks/useAudioRecorder.ts` (MediaRecorder API)
-  - API: `POST /api/transcribe` (FastAPI, 오디오 확장자 화이트리스트 검증: webm/wav/mp3/ogg/mp4/m4a)
+  - API: `POST /api/transcribe` (오디오 확장자 화이트리스트: webm/wav/mp3/ogg/mp4/m4a)
 - **실시간 발화 분석**: `hooks/useSpeechAnalytics.ts` — 답변 중 실시간 비언어적 피드백
   - `SpeechMetrics`: wpm (음절/분), fillerCount, silenceSec, silenceRatio, elapsedSec
 
-## 환경 변수
-- `frontend/.env` — DB, NextAuth (`NEXTAUTH_URL=https://jachana.com`, `AUTH_TRUST_HOST=true`), Google OAuth, BACKEND_URL
-- `backend/.env` — DB, OpenAI API 키(필수, LLM 전체+임베딩+Whisper), Tavily(선택)
-- Frontend 필수: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_TRUST_HOST=true`, `BACKEND_URL`
-- Frontend 선택: `NEXT_PUBLIC_ADMIN_EMAILS` (쉼표 구분, 어드민 메뉴 노출용 — **반드시 `NEXT_PUBLIC_` 접두어** 필요. 클라이언트 번들에 인라인됨)
-- Backend 필수: `DATABASE_URL`, `NEXTAUTH_SECRET`, `OPENAI_API_KEY`
-- Backend 선택: `ENVIRONMENT`, `AGENT_MODEL` (기본 `gpt-4o-mini`), `ADMIN_EMAILS`
-- TTS 서비스는 `backend/.env`의 `OPENAI_API_KEY`를 공유 (docker-compose의 `env_file`로 전달)
+## 환경 변수 (루트 `.env` 단일 소스, `.env.example` 참고)
+- **공통**: `DATABASE_URL`, `DIRECT_URL`
+- **Auth (Frontend)**: `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `AUTH_TRUST_HOST=true`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `BACKEND_URL=http://backend:8000`
+- **Backend AI**: `OPENAI_API_KEY` (필수, LLM+임베딩+Whisper+TTS 공유), `TAVILY_API_KEY` (선택), `ENVIRONMENT`, `AGENT_MODEL` (기본 `gpt-4o-mini`), `ADMIN_EMAILS`
+- **Public (빌드 타임 인라인)**: `NEXT_PUBLIC_ADMIN_EMAILS`, `NEXT_PUBLIC_GA_MEASUREMENT_ID`
+- **TTS 오버라이드 (선택)**: `TTS_MODEL`, `TTS_DEFAULT_VOICE`, `TTS_FORMAT`, `TTS_SPEED`
+- TTS 서비스는 루트 `.env`의 `OPENAI_API_KEY`를 docker-compose `env_file`로 공유

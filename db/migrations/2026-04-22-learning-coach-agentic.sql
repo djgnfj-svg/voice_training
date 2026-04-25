@@ -1,5 +1,5 @@
--- Agentic LangGraph nightly-study additions.
--- Legacy tables were dropped in 2026-04-17-nightly-study-v2.sql; keep this migration additive.
+-- Agentic LangGraph learning-coach additions.
+-- Legacy tables were dropped in 2026-04-17-learning-coach-v2.sql; keep this migration additive.
 
 CREATE TABLE IF NOT EXISTS learning_user_profiles (
     user_id      TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

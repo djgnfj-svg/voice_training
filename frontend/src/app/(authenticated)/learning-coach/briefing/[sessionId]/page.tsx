@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import { getSessionDetail, type EndResponse } from '@/lib/nightly-study-api';
-import { BriefingView } from '@/components/nightly-study/briefing-view';
+import { getSessionDetail, type EndResponse } from '@/lib/learning-coach-api';
+import { BriefingView } from '@/components/learning-coach/briefing-view';
 
 const END_CACHE_KEY = (id: string) => `ns:end:${id}`;
 
@@ -63,7 +63,7 @@ export default function BriefingPage() {
       // ignore
     }
     qc.invalidateQueries({ queryKey: ['ns-status'] });
-    router.replace('/nightly-study');
+    router.replace('/learning-coach');
   };
 
   if (!result) {
@@ -72,7 +72,7 @@ export default function BriefingPage() {
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 p-8">
           <p className="text-sm text-muted-foreground">브리핑을 찾을 수 없어요.</p>
           <button
-            onClick={() => router.replace('/nightly-study')}
+            onClick={() => router.replace('/learning-coach')}
             className="text-sm text-primary underline"
           >
             돌아가기

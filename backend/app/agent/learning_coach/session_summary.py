@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.lib.llm_client import call_llm_json
-from app.prompts.nightly_study import SESSION_SUMMARY_PROMPT
+from app.prompts.learning_coach import SESSION_SUMMARY_PROMPT
 from app.agent.learning_coach.spaced_repetition import update_streak_state
 
 logger = logging.getLogger(__name__)

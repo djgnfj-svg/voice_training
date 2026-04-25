@@ -17,7 +17,7 @@ export interface PhaseEvent {
   label: string;
 }
 
-export interface UseNightlyStudyStreamOptions {
+export interface UseLearningCoachStreamOptions {
   sessionId: string;
   onText: (text: string) => void;
   onMeta: (meta: TurnMeta) => void;
@@ -26,7 +26,7 @@ export interface UseNightlyStudyStreamOptions {
   onEnd: (turnCount: number) => void;
 }
 
-export function useNightlyStudyStream(opts: UseNightlyStudyStreamOptions) {
+export function useLearningCoachStream(opts: UseLearningCoachStreamOptions) {
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -51,7 +51,7 @@ export function useNightlyStudyStream(opts: UseNightlyStudyStreamOptions) {
     abortRef.current = ctrl;
 
     try {
-      const res = await fetch(`/api/nightly-study/${opts.sessionId}/turn`, {
+      const res = await fetch(`/api/learning-coach/${opts.sessionId}/turn`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
         body: JSON.stringify({ userUtterance }),

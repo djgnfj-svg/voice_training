@@ -9,7 +9,7 @@ export function AuthenticatedContent({ children }: { children: React.ReactNode }
   const isFullscreenSession =
     pathname.startsWith('/interview/session/') ||
     pathname.startsWith('/agent-interview/session/') ||
-    pathname.startsWith('/nightly-study/session/');
+    pathname.startsWith('/learning-coach/session/');
 
   if (isFullscreenSession) {
     return (

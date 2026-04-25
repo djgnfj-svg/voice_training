@@ -10,7 +10,7 @@ from unittest.mock import patch, AsyncMock
 @pytest.mark.asyncio
 async def test_start_creates_session_in_onboarding_mode(client, auth_headers, db):
     # Precondition: no goal
-    resp = await client.post("/api/nightly-study/start", headers=auth_headers)
+    resp = await client.post("/api/learning-coach/start", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["initialMode"] == "onboarding"
@@ -21,8 +21,8 @@ async def test_start_creates_session_in_onboarding_mode(client, auth_headers, db
 @pytest.mark.skip(reason="fixture missing: client, auth_headers, db not in conftest")
 @pytest.mark.asyncio
 async def test_start_closes_previous_active_session(client, auth_headers, db):
-    r1 = await client.post("/api/nightly-study/start", headers=auth_headers)
-    r2 = await client.post("/api/nightly-study/start", headers=auth_headers)
+    r1 = await client.post("/api/learning-coach/start", headers=auth_headers)
+    r2 = await client.post("/api/learning-coach/start", headers=auth_headers)
     assert r1.status_code == 200 and r2.status_code == 200
     assert r1.json()["sessionId"] != r2.json()["sessionId"]
     # r1 should be completed now
@@ -37,10 +37,10 @@ async def test_start_closes_previous_active_session(client, auth_headers, db):
 @pytest.mark.skip(reason="fixture missing: auth_headers_other not in conftest")
 @pytest.mark.asyncio
 async def test_ownership_403_on_foreign_session(client, auth_headers_other, auth_headers, db):
-    r = await client.post("/api/nightly-study/start", headers=auth_headers)
+    r = await client.post("/api/learning-coach/start", headers=auth_headers)
     sid = r.json()["sessionId"]
     r2 = await client.post(
-        f"/api/nightly-study/{sid}/end",
+        f"/api/learning-coach/{sid}/end",
         json={"reason": "user"},
         headers=auth_headers_other,
     )
@@ -50,7 +50,7 @@ async def test_ownership_403_on_foreign_session(client, auth_headers_other, auth
 @pytest.mark.skip(reason="fixture missing: client, auth_headers, db not in conftest")
 @pytest.mark.asyncio
 async def test_status_reflects_streak(client, auth_headers, db):
-    r = await client.get("/api/nightly-study/status", headers=auth_headers)
+    r = await client.get("/api/learning-coach/status", headers=auth_headers)
     assert r.status_code == 200
     data = r.json()
     assert "streak" in data

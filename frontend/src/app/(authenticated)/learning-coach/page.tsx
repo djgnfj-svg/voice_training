@@ -9,12 +9,12 @@ import {
   getStatus,
   startSession,
   type StartResponse,
-} from '@/lib/nightly-study-api';
-import { StreakBadge } from '@/components/nightly-study/streak-badge';
+} from '@/lib/learning-coach-api';
+import { StreakBadge } from '@/components/learning-coach/streak-badge';
 
 const START_CACHE_KEY = (id: string) => `ns:start:${id}`;
 
-export default function NightlyStudyLanding() {
+export default function LearningCoachLanding() {
   const router = useRouter();
 
   const { data: status, isLoading } = useQuery({
@@ -30,7 +30,7 @@ export default function NightlyStudyLanding() {
       } catch {
         // sessionStorage ?ъ슜 遺덇? ???몄뀡 ?섏씠吏媛 GET?쇰줈 蹂듭썝
       }
-      router.push(`/nightly-study/session/${s.sessionId}`);
+      router.push(`/learning-coach/session/${s.sessionId}`);
     },
   });
 

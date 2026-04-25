@@ -48,7 +48,7 @@ export interface EndResponse {
 }
 
 export async function startSession(): Promise<StartResponse> {
-  const res = await fetch('/api/nightly-study/start', { method: 'POST' });
+  const res = await fetch('/api/learning-coach/start', { method: 'POST' });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail?.error || body.error || '세션을 시작할 수 없어요');
@@ -57,7 +57,7 @@ export async function startSession(): Promise<StartResponse> {
 }
 
 export async function endSession(sessionId: string, reason: 'user' | 'ai_suggested' = 'user'): Promise<EndResponse> {
-  const res = await fetch(`/api/nightly-study/${sessionId}/end`, {
+  const res = await fetch(`/api/learning-coach/${sessionId}/end`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ reason }),
@@ -69,13 +69,13 @@ export async function endSession(sessionId: string, reason: 'user' | 'ai_suggest
 }
 
 export async function getStatus(): Promise<StatusResponse> {
-  const res = await fetch('/api/nightly-study/status');
+  const res = await fetch('/api/learning-coach/status');
   if (!res.ok) throw new Error('상태 로드 실패');
   return res.json();
 }
 
 export async function setGoal(title: string): Promise<{ goalId: string; seedNodeCount: number }> {
-  const res = await fetch('/api/nightly-study/goal', {
+  const res = await fetch('/api/learning-coach/goal', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title }),
@@ -85,7 +85,7 @@ export async function setGoal(title: string): Promise<{ goalId: string; seedNode
 }
 
 export async function getSessionDetail(id: string) {
-  const res = await fetch(`/api/nightly-study/sessions/${id}`);
+  const res = await fetch(`/api/learning-coach/sessions/${id}`);
   if (!res.ok) throw new Error('세션 로드 실패');
   return res.json();
 }

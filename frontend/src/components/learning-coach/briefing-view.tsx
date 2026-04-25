@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Flame, Sparkles, TrendingUp } from 'lucide-react';
-import type { EndResponse } from '@/lib/nightly-study-api';
+import type { EndResponse } from '@/lib/learning-coach-api';
 
 interface Props {
   result: EndResponse;

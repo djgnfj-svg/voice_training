@@ -10,8 +10,8 @@ import {
   type EndResponse,
   type StartResponse,
   type TargetNode,
-} from '@/lib/nightly-study-api';
-import { SessionView } from '@/components/nightly-study/session-view';
+} from '@/lib/learning-coach-api';
+import { SessionView } from '@/components/learning-coach/session-view';
 
 const START_CACHE_KEY = (id: string) => `ns:start:${id}`;
 const END_CACHE_KEY = (id: string) => `ns:end:${id}`;
@@ -79,10 +79,10 @@ export default function SessionPage() {
       } catch {
         // 실패해도 브리핑 페이지가 GET으로 fallback
       }
-      router.replace(`/nightly-study/briefing/${sessionId}`);
+      router.replace(`/learning-coach/briefing/${sessionId}`);
     },
     onError: () => {
-      router.replace('/nightly-study');
+      router.replace('/learning-coach');
     },
   });
 
@@ -107,7 +107,7 @@ export default function SessionPage() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 p-8">
         <p className="text-sm text-muted-foreground">세션을 찾을 수 없어요.</p>
         <button
-          onClick={() => router.replace('/nightly-study')}
+          onClick={() => router.replace('/learning-coach')}
           className="text-sm text-primary underline"
         >
           돌아가기

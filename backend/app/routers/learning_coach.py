@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/api/nightly-study/start")
+@router.post("/api/learning-coach/start")
 async def start_session(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -32,7 +32,7 @@ class GoalBody(BaseModel):
     title: str = Field(min_length=1, max_length=200)
 
 
-@router.post("/api/nightly-study/goal")
+@router.post("/api/learning-coach/goal")
 async def set_goal(
     body: GoalBody,
     user: AuthUser = Depends(get_current_user),
@@ -74,7 +74,7 @@ class TurnBody(BaseModel):
     userUtterance: str = Field(min_length=1, max_length=5000)
 
 
-@router.post("/api/nightly-study/{session_id}/turn")
+@router.post("/api/learning-coach/{session_id}/turn")
 async def turn(
     session_id: str,
     body: TurnBody,
@@ -105,7 +105,7 @@ class EndBody(BaseModel):
     reason: str = Field(default="user")
 
 
-@router.post("/api/nightly-study/{session_id}/end")
+@router.post("/api/learning-coach/{session_id}/end")
 async def end_session(
     session_id: str,
     body: EndBody,
@@ -122,7 +122,7 @@ async def end_session(
     return await run_end_graph(db, session_id, user.id)
 
 
-@router.get("/api/nightly-study/status")
+@router.get("/api/learning-coach/status")
 async def status(
     user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -166,7 +166,7 @@ async def status(
     }
 
 
-@router.get("/api/nightly-study/sessions/{session_id}")
+@router.get("/api/learning-coach/sessions/{session_id}")
 async def get_session_detail(
     session_id: str,
     user: AuthUser = Depends(get_current_user),

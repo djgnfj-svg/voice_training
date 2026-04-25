@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useNightlyStudyStream } from '@/hooks/useNightlyStudyStream';
+import { useLearningCoachStream } from '@/hooks/useLearningCoachStream';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 
@@ -75,7 +75,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     resetTranscript,
   } = speech;
 
-  const { isStreaming, sendTurn } = useNightlyStudyStream({
+  const { isStreaming, sendTurn } = useLearningCoachStream({
     sessionId,
     onText: (text) => {
       setPhase(null);

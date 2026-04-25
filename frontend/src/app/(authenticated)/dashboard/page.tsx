@@ -30,7 +30,7 @@ interface DashboardData {
 
 const kindConfig = {
   interview: { icon: Mic, label: '면접', color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/30', href: '/interview/setup' },
-  learning: { icon: GraduationCap, label: '학습', color: 'text-violet-500', bg: 'bg-violet-100 dark:bg-violet-900/30', href: '/nightly-study' },
+  learning: { icon: GraduationCap, label: '학습', color: 'text-violet-500', bg: 'bg-violet-100 dark:bg-violet-900/30', href: '/learning-coach' },
 };
 
 export default function DashboardPage() {
@@ -103,7 +103,7 @@ export default function DashboardPage() {
           </Card>
         </Link>
 
-        <Link href="/nightly-study">
+        <Link href="/learning-coach">
           <Card className="transition-all hover:shadow-md hover:border-violet-300 dark:hover:border-violet-700">
             <CardContent className="flex items-center gap-4 py-5">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-100 dark:bg-violet-900/30">

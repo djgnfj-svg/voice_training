@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.lib.llm_client import call_llm_json
-from app.prompts.nightly_study import SEED_CURRICULUM_PROMPT
+from app.prompts.learning_coach import SEED_CURRICULUM_PROMPT
 
 logger = logging.getLogger(__name__)
 

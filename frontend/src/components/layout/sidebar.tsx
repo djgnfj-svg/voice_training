@@ -21,7 +21,7 @@ import { useMobileSidebar } from '@/hooks/useMobileSidebar';
 const navItems = [
   { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
   { href: '/interview/setup', label: '면접 연습', icon: Mic },
-  { href: '/nightly-study', label: 'CS 학습 어시스트', icon: GraduationCap },
+  { href: '/learning-coach', label: 'CS 학습 어시스트', icon: GraduationCap },
 ];
 
 function ThemeToggle() {
@@ -107,7 +107,7 @@ export function Sidebar() {
   if (
     pathname.startsWith('/interview/session/') ||
     pathname.startsWith('/agent-interview/session/') ||
-    pathname.startsWith('/nightly-study/session/')
+    pathname.startsWith('/learning-coach/session/')
   ) return null;
 
   return (
@@ -124,7 +124,7 @@ export function MobileSidebar() {
   if (
     pathname.startsWith('/interview/session/') ||
     pathname.startsWith('/agent-interview/session/') ||
-    pathname.startsWith('/nightly-study/session/')
+    pathname.startsWith('/learning-coach/session/')
   ) return null;
 
   return (

@@ -8,7 +8,7 @@ from app.database import get_db
 from app.dependencies import AuthUser, get_current_user
 from app.models.activity import ActivityItem, ActivityLog
 from app.models.agent_interview import AgentInterviewSession
-from app.models.nightly_study import LearningSession
+from app.models.learning_coach import LearningSession
 from app.models.user import User
 from app.services.analytics import get_activity_history, get_session_history
 

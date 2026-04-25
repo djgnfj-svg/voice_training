@@ -21,7 +21,7 @@ from app.agent.learning_coach.learning_memory import search_learning_memory, ins
 from app.agent.learning_coach.curriculum_seed import generate_and_insert_seed, normalize_goal
 from app.agent.learning_coach.spaced_repetition import apply_proficiency_delta, compute_next_review
 from app.agent.learning_coach.session_summary import generate_session_summary, update_streak_after_session
-from app.prompts.nightly_study import AGENTIC_SYSTEM_PROMPT
+from app.prompts.learning_coach import AGENTIC_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
