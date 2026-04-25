@@ -8,8 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, ArrowLeft, CheckCircle, TrendingUp, AlertCircle, Target, Sparkles } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { getGrade } from '@/lib/utils';
+import { cn, getGrade } from '@/lib/utils';
 import { scoreText } from '@/lib/score-colors';
 import { AgentInterviewPanel } from '@/components/agent-interview/agent-interview-panel';
 import { getAgentSession } from '@/lib/agent-interview-api';
@@ -134,7 +133,7 @@ export default function AgentInterviewSessionPage() {
   }
 
   // Calculate average scores across all evaluations
-  const allEvals = qaPairs.filter(qa => qa.evaluation && qa.answer !== '(건너뜀)').map(qa => qa.evaluation!);
+  const allEvals = qaPairs.filter(qa => qa.evaluation && qa.answer !== '(skipped)').map(qa => qa.evaluation!);
   const avgScores: Record<string, number> = {};
   if (allEvals.length > 0) {
     const scoreKeys = ['clarity', 'accuracy', 'practicality', 'depth', 'completeness'];
@@ -184,7 +183,7 @@ export default function AgentInterviewSessionPage() {
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-blue-500 sm:text-4xl">
-                {qaPairs.filter(qa => qa.answer !== '(건너뜀)').length}
+                {qaPairs.filter(qa => qa.answer !== '(skipped)').length}
               </div>
               <p className="text-sm text-muted-foreground">답변한 질문</p>
             </div>
@@ -409,13 +408,13 @@ export default function AgentInterviewSessionPage() {
                 <div>
                   <p className="mb-1 text-sm font-medium text-muted-foreground">내 답변</p>
                   <div className="rounded-lg bg-muted/50 p-3 text-sm">
-                    {qa.answer === '(건너뜀)' ? (
+                    {qa.answer === '(skipped)' ? (
                       <span className="text-muted-foreground italic">건너뜀</span>
                     ) : qa.answer}
                   </div>
                 </div>
 
-                {qa.evaluation && qa.answer !== '(건너뜀)' && (
+                {qa.evaluation && qa.answer !== '(skipped)' && (
                   <>
                     {/* Scores */}
                     {(qa.evaluation.scores as Record<string, number>) && (
