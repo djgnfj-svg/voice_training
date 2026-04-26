@@ -52,6 +52,6 @@ npx playwright test specs/visual.spec.ts --update-snapshots
 ```
 Review the updated PNGs under `specs/visual.spec.ts-snapshots/` before committing.
 
-## Skill
+## Claude Code Skill
 
-A `voiceprep-e2e` Claude Code skill (Task 14) wraps execution + result interpretation.
+`voiceprep-e2e` skill at `~/.claude/skills/voiceprep-e2e/SKILL.md` wraps execution + result interpretation. Trigger with `/e2e`, `/e2e <name>`, or natural-language requests like "E2E 돌려줘".
