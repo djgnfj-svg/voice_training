@@ -1,5 +1,19 @@
 # Project: VoicePrep (보이스프렙)
 
+## 하네스: VoicePrep 서비스 개발
+
+**목표:** 측정 기반 기능 개발(포트폴리오 어필 카피 자동 생성) + 다영역 병렬 코드 리뷰.
+
+**트리거:**
+- 코드 변경 작업(기능 추가/버그 수정/리팩터/최적화) 요청 시 `voiceprep-feature` 스킬 사용.
+- 코드 리뷰/검토 요청 시 `voiceprep-review` 스킬 사용.
+- 단순 질문/탐색은 직접 응답 가능.
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-04-25 | 초기 구성 (planner/baseliner/implementer/measurer + voiceprep-feature/review/metrics 스킬) | 전체 | 측정 기반 개발 + 통합 리뷰 자동화 |
+
 ## 구조
 - `frontend/` — Next.js 프론트엔드 + NextAuth 인증만
 - `backend/` — FastAPI 백엔드 (API, 서비스, 프롬프트, AI 로직 전부)
