@@ -7,7 +7,7 @@ import logging
 from app.agent.interview.report_metrics import aggregate_evaluations, format_aggregate_for_prompt
 from app.config import settings
 from app.lib.llm_client import call_llm_json
-from app.prompts.agent import EVALUATOR_PROMPT, REPORT_PROMPT
+from app.prompts.agent import build_evaluation_messages, build_report_messages
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ async def evaluate_answer(
             history_parts.append(f"A: {entry['answer']}")
     history_str = "\n".join(history_parts) if history_parts else "첫 질문입니다."
 
-    prompt = EVALUATOR_PROMPT.format(
+    stable, variable = build_evaluation_messages(
         question=question,
         answer=answer,
         strengths=strengths,
@@ -153,9 +153,11 @@ async def evaluate_answer(
     )
 
     evaluation = await call_llm_json(
-        prompt,
+        cached_context=stable,
+        variable=variable,
         model=settings.AGENT_MODEL,
         temperature=0.3,
+        tag="interview.evaluation.evaluate_answer",
     )
 
     return _normalize_evaluation(evaluation, answer)
@@ -189,7 +191,7 @@ async def generate_report(
             )
         history_parts.append("---")
 
-    prompt = REPORT_PROMPT.format(
+    stable, variable = build_report_messages(
         aggregate_block=aggregate_block,
         conversation_history="\n".join(history_parts),
         strengths="\n".join(user_profile.get("strengths", [])) or "데이터 없음",
@@ -197,9 +199,11 @@ async def generate_report(
     )
 
     report = await call_llm_json(
-        prompt,
+        cached_context=stable,
+        variable=variable,
         model=settings.AGENT_MODEL,
         temperature=0.3,
+        tag="interview.evaluation.final_report",
     )
 
     # LLM 산술 오류 방지: 집계 수치는 서버가 계산한 값으로 덮어씀

@@ -10,6 +10,7 @@ from app.lib.llm_client import call_llm_json
 from app.prompts.agent import (
     INTERVIEWER_DECIDE_IN_TOPIC_PROMPT,
     INTERVIEWER_FOLLOWUP_PROMPT,
+    build_question_messages,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,8 +76,6 @@ async def generate_scan_question(
     avoid_topics: list[str],
 ) -> dict:
     """훑기 페이즈 질문 생성."""
-    from app.prompts.agent import INTERVIEWER_QUESTION_PROMPT_SLIM
-
     profile_str = _format_profile(user_profile)
     history_str = _format_history(conversation_history)
     job_str = json.dumps(job_posting, ensure_ascii=False, indent=2) if job_posting else "채용공고 없음"
@@ -84,20 +83,26 @@ async def generate_scan_question(
     plan_str = _format_scan_plan(scan_item, scan_idx, total_scans)
     avoid_str = ", ".join(avoid_topics) or "(없음)"
 
-    prompt = INTERVIEWER_QUESTION_PROMPT_SLIM.format(
+    stable, variable = build_question_messages(
         summary=resume.get("summary", "") if isinstance(resume, dict) else "",
         skills=", ".join(str(s) for s in (resume.get("skills") or [])) if isinstance(resume, dict) else "",
-        resume_chunks=chunks_str,
         job_posting=job_str,
-        current_topic_plan=plan_str,
         strengths=profile_str["strengths"],
         weaknesses=profile_str["weaknesses"],
         patterns=profile_str["patterns"],
+        resume_chunks=chunks_str,
+        current_topic_plan=plan_str,
         conversation_history=history_str,
         avoid_topics=avoid_str,
     )
 
-    return await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.7)
+    return await call_llm_json(
+        cached_context=stable,
+        variable=variable,
+        model=settings.AGENT_MODEL,
+        temperature=0.7,
+        tag="interview.questioner.scan_question",
+    )
 
 
 async def generate_dive_question(
@@ -111,8 +116,6 @@ async def generate_dive_question(
     avoid_topics: list[str],
 ) -> dict:
     """딥다이브 페이즈 질문 생성 (depth=0일 때는 주제 시작 질문, >=1일 때는 파고드는 질문)."""
-    from app.prompts.agent import INTERVIEWER_QUESTION_PROMPT_SLIM
-
     profile_str = _format_profile(user_profile)
     history_str = _format_history(conversation_history)
     job_str = json.dumps(job_posting, ensure_ascii=False, indent=2) if job_posting else "채용공고 없음"
@@ -120,20 +123,26 @@ async def generate_dive_question(
     plan_str = _format_dive_plan(dive_topic, current_depth)
     avoid_str = ", ".join(avoid_topics) or "(없음)"
 
-    prompt = INTERVIEWER_QUESTION_PROMPT_SLIM.format(
+    stable, variable = build_question_messages(
         summary=resume.get("summary", "") if isinstance(resume, dict) else "",
         skills=", ".join(str(s) for s in (resume.get("skills") or [])) if isinstance(resume, dict) else "",
-        resume_chunks=chunks_str,
         job_posting=job_str,
-        current_topic_plan=plan_str,
         strengths=profile_str["strengths"],
         weaknesses=profile_str["weaknesses"],
         patterns=profile_str["patterns"],
+        resume_chunks=chunks_str,
+        current_topic_plan=plan_str,
         conversation_history=history_str,
         avoid_topics=avoid_str,
     )
 
-    return await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.7)
+    return await call_llm_json(
+        cached_context=stable,
+        variable=variable,
+        model=settings.AGENT_MODEL,
+        temperature=0.7,
+        tag="interview.questioner.dive_question",
+    )
 
 
 async def decide_in_topic(
@@ -151,7 +160,12 @@ async def decide_in_topic(
         last_evaluation=json.dumps(last_evaluation, ensure_ascii=False),
         remaining_topics=remaining_topics,
     )
-    return await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.3)
+    return await call_llm_json(
+        prompt,
+        model=settings.AGENT_MODEL,
+        temperature=0.3,
+        tag="interview.questioner.decide_in_topic",
+    )
 
 
 async def generate_dig_deeper(
@@ -163,4 +177,9 @@ async def generate_dig_deeper(
         conversation_history=_format_history(conversation_history),
         last_evaluation=json.dumps(last_evaluation, ensure_ascii=False),
     )
-    return await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.7)
+    return await call_llm_json(
+        prompt,
+        model=settings.AGENT_MODEL,
+        temperature=0.7,
+        tag="interview.questioner.dig_deeper",
+    )

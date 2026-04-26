@@ -1,0 +1,16 @@
+{
+  "company": "TechFlow",
+  "position": "Senior Backend Engineer",
+  "requiredSkills": ["Python", "FastAPI", "PostgreSQL", "Kafka", "Kubernetes"],
+  "requirements": [
+    "5년 이상 백엔드 개발 경험",
+    "대규모 트래픽 처리 경험",
+    "이벤트 기반 아키텍처 설계 경험",
+    "관찰 가능성(observability) 도구 운영 경험"
+  ],
+  "responsibilities": [
+    "검색/추천 플랫폼 핵심 서비스 개발",
+    "성능 최적화 및 SLA 관리",
+    "시니어로서 주니어 멘토링"
+  ]
+}

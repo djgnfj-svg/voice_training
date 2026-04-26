@@ -6,7 +6,7 @@ from typing import TypedDict
 
 from app.config import settings
 from app.lib.llm_client import call_llm_json
-from app.prompts.agent import FIT_ANALYSIS_PROMPT
+from app.prompts.agent import build_fit_messages
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ async def run_fit_analysis(resume: dict | None, jd: dict | None) -> FitAnalysis:
     jd_skills = _extract_jd_skills(jd)
     skill_match = compute_skill_match(resume_skills, jd_skills)
 
-    prompt = FIT_ANALYSIS_PROMPT.format(
+    stable, variable = build_fit_messages(
         resume_brief=_summarize_resume(resume),
         jd_brief=_summarize_jd(jd),
         matched=", ".join(skill_match["matched"]) if skill_match else "(JD 없음)",
@@ -128,7 +128,13 @@ async def run_fit_analysis(resume: dict | None, jd: dict | None) -> FitAnalysis:
 
     avoid_topics: list[str] = []
     try:
-        result = await call_llm_json(prompt, model=settings.AGENT_MODEL, temperature=0.4)
+        result = await call_llm_json(
+            cached_context=stable,
+            variable=variable,
+            model=settings.AGENT_MODEL,
+            temperature=0.4,
+            tag="interview.fit_analysis",
+        )
         raw_avoid = result.get("avoid_topics") or []
         avoid_topics = [str(s).strip() for s in raw_avoid[:3] if str(s).strip()]
     except Exception:

@@ -27,7 +27,7 @@ async def generate_and_insert_seed(
     # .format() crashes if goal_title contains `{`; use .replace() for safety
     prompt = SEED_CURRICULUM_PROMPT.replace("{goal_title}", goal_title)
     # call_llm_json takes prompt as first positional arg (no system param)
-    data = await call_llm_json(prompt)
+    data = await call_llm_json(prompt, tag="learning_coach.curriculum_seed")
 
     nodes = data.get("nodes") if isinstance(data, dict) else None
     if not isinstance(nodes, list) or len(nodes) == 0:

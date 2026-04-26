@@ -252,14 +252,16 @@ def _shape_for_json(prompt: str) -> dict | list:
         return _decide_shape()
     if "꼬리질문" in p:
         return _followup_shape()
-    if "면접 설계 전문가" in p or "avoid_topics" in p:
-        return _fit_shape()
+    # 더 구체적인 builder들을 먼저 검사. fit은 마지막 fallback으로 둬야 question/eval/report의
+    # variable 슬롯 안에 들어간 "avoid_topics"가 잘못 매칭되는 것을 막을 수 있다.
     if "면접 질문" in p and "지원자 답변" in p and "demonstratedKeywords" in p:
         return _agent_evaluation_shape()
-    if "종합 리포트를 생성" in p or "questionHighlights" in p:
+    if "종합 리포트를 생성" in p or "questionHighlights" in p or "면접 종합 리포트 생성기" in p:
         return _report_shape()
-    if "다음 질문 1개를 생성" in p or "current_topic_plan" in p or "현재 주제 플랜" in p:
+    if "다음 질문 1개를 생성" in p or "current_topic_plan" in p or "현재 주제 플랜" in p or "다음 면접 질문 1개를 생성" in p:
         return _question_shape()
+    if "면접 설계 전문가" in p:
+        return _fit_shape()
     if "프로필 인사이트를 추출" in p:
         return _profile_insight_shape()
 
@@ -297,15 +299,29 @@ def _shape_for_json(prompt: str) -> dict | list:
 # Public mock entry points (mirror llm_client signatures)
 # ---------------------------------------------------------------------------
 
-async def call_llm(prompt: str, **kwargs: Any) -> str:
+def _resolve_prompt(prompt: str | None, kwargs: dict[str, Any]) -> str:
+    """call_llm*의 새 슬롯(cached_context/variable)을 mock 분기에서 단일 문자열로 합친다.
+
+    실제 클라이언트와 동일한 의미를 유지: stable_prefix + variable. 키워드 dispatch는
+    합쳐진 텍스트 안에서 동작한다.
+    """
+    if prompt:
+        return prompt
+    parts = [kwargs.get("system") or "", kwargs.get("cached_context") or "", kwargs.get("variable") or ""]
+    return "\n".join(p for p in parts if p)
+
+
+async def call_llm(prompt: str | None = None, **kwargs: Any) -> str:
+    _resolve_prompt(prompt, kwargs)  # 일관성 유지를 위해 호출만
     return "Mocked response."
 
 
-async def call_llm_json(prompt: str, **kwargs: Any) -> dict | list:
-    return _shape_for_json(prompt)
+async def call_llm_json(prompt: str | None = None, **kwargs: Any) -> dict | list:
+    return _shape_for_json(_resolve_prompt(prompt, kwargs))
 
 
-async def call_llm_stream(prompt: str, **kwargs: Any) -> AsyncIterator[str]:
+async def call_llm_stream(prompt: str | None = None, **kwargs: Any) -> AsyncIterator[str]:
+    _resolve_prompt(prompt, kwargs)
     for chunk in ["Mocked", " response", "."]:
         await asyncio.sleep(0.01)
         yield chunk

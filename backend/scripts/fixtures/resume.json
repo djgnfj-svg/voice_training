@@ -1,0 +1,25 @@
+{
+  "summary": "5년차 백엔드 개발자. Python/FastAPI 기반 마이크로서비스와 PostgreSQL 운영 경험. 검색/추천 도메인에서 트래픽 처리 최적화 다수.",
+  "skills": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "Kubernetes", "AWS", "Elasticsearch"],
+  "projects": [
+    {
+      "name": "실시간 검색 서비스",
+      "techStack": ["FastAPI", "Elasticsearch", "Redis", "PostgreSQL"],
+      "description": "월간 1억건 검색 처리, p95 250ms 달성. 인덱싱 파이프라인 재설계로 색인 지연 30분 -> 2분 단축."
+    },
+    {
+      "name": "추천 시스템 리팩터",
+      "techStack": ["Python", "Kafka", "FastAPI", "PostgreSQL"],
+      "description": "레거시 모놀리식 추천 엔진을 이벤트 기반 마이크로서비스로 분리. 재배포 시간 40분 -> 5분."
+    },
+    {
+      "name": "결제 정산 자동화",
+      "techStack": ["Python", "PostgreSQL", "Airflow"],
+      "description": "월말 수동 정산 작업을 Airflow DAG로 자동화. 정산 오차 0.3% -> 0.001%."
+    }
+  ],
+  "experience": [
+    {"company": "AcmeSearch", "position": "Senior Backend Engineer", "period": "2022-현재"},
+    {"company": "DataCorp", "position": "Backend Engineer", "period": "2020-2022"}
+  ]
+}

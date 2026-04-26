@@ -72,7 +72,7 @@ async def generate_session_summary(
 
     try:
         # call_llm_json takes prompt as first positional arg
-        result = await call_llm_json(prompt)
+        result = await call_llm_json(prompt, tag="learning_coach.session_summary")
         summary = result.get("summary", "")
         highlights = result.get("highlights") or {}
         voice_briefing = result.get("voice_briefing", "")
