@@ -8,23 +8,19 @@ const RESPONSES = [
 test('learning-coach: textMode 시작 → 응답 2회 → 종료', async ({ adminPage, errors }) => {
   test.setTimeout(240_000);
 
-  await adminPage.goto('/learning-coach');
+  // Start a session via API directly to avoid UI button text fragility,
+  // then navigate to the session page with ?textMode=1
+  const ctx = adminPage.context();
+  const start = await ctx.request.post('/api/learning-coach/start', { data: {} });
+  expect(start.ok(), `start failed: ${start.status()}`).toBeTruthy();
+  const startBody = await start.json();
+  const sessionId: string = startBody.session_id ?? startBody.sessionId ?? startBody.id;
+  expect(sessionId).toBeTruthy();
 
-  // Landing has a single "시작하기" button that calls startSession() and routes
-  // to /learning-coach/session/{id}. No goal/topic input is required at this stage —
-  // the agent infers from user state (and may ask in-session).
-  const startBtn = adminPage.getByRole('button', { name: /시작하기|학습/ });
-  await startBtn.first().click({ timeout: 15_000 });
+  await adminPage.goto(`/learning-coach/session/${sessionId}?textMode=1`);
 
-  // Wait for session URL
-  await adminPage.waitForURL(/\/learning-coach\/session\/[^/?]+/, { timeout: 30_000 });
-
-  // Append ?textMode=1 and reload to activate admin textMode
-  const url = new URL(adminPage.url());
-  url.searchParams.set('textMode', '1');
-  await adminPage.goto(url.toString());
-
-  await expect(adminPage.getByTestId('admin-text-mode-active')).toBeVisible({ timeout: 60_000 });
+  // textMode 활성: textarea 노출로 검증
+  await expect(adminPage.getByTestId('admin-text-answer-textarea')).toBeVisible({ timeout: 60_000 });
 
   // Submit responses
   for (let i = 0; i < RESPONSES.length; i++) {

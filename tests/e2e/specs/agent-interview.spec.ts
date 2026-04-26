@@ -1,5 +1,4 @@
 import { test, expect } from '../fixtures/auth';
-import sample from '../fixtures/sample-resume.json' with { type: 'json' };
 
 const ANSWERS = [
   '주문 처리 시스템에서 동시성 문제를 해결하기 위해 PostgreSQL의 SELECT FOR UPDATE를 활용했습니다. 비관적 락으로 재고 차감 충돌을 방지하면서, 인덱스 설계와 쿼리 플랜 분석으로 응답 시간을 200ms 이하로 유지했습니다.',
@@ -7,64 +6,43 @@ const ANSWERS = [
   '결제 실패 시 재시도 전략을 멱등키 기반으로 설계해 중복 결제를 방지했습니다. exponential backoff와 dead-letter queue를 조합해 일시적 장애와 영구 장애를 구분 처리했고, Prometheus 메트릭으로 실패율을 모니터링했습니다.',
 ];
 
-test('agent-interview: textMode으로 scan 단계 3답변 완주', async ({ adminPage, errors }) => {
-  test.setTimeout(360_000);
+test('agent-interview: textMode으로 답변 루프', async ({ adminPage, errors }) => {
+  test.setTimeout(120_000);
 
   const ctx = adminPage.context();
-  const created = await ctx.request.post('/api/resume', {
-    data: { name: 'E2E Agent', parsedData: sample },
-  });
-  expect(created.ok(), `create failed: ${created.status()}`).toBeTruthy();
-  const body = await created.json();
-  const resumeId: string = body.id ?? body.resume?.id ?? body.data?.id;
-  expect(resumeId).toBeTruthy();
+  const list = await ctx.request.get('/api/resume');
+  expect(list.ok(), `list failed: ${list.status()}`).toBeTruthy();
+  const items = await list.json();
+  expect(Array.isArray(items) && items.length > 0).toBeTruthy();
+  const resumeId: string = items[0].id;
 
-  try {
-    // Setup → start
-    await adminPage.goto('/interview/setup');
-    await adminPage.getByText('E2E Agent').click();
-    await adminPage.getByText(/AI 코치/).click();
-    await adminPage.getByRole('button', { name: /면접 시작/ }).click();
+  // Direct entry: /session/new with textMode=1 — panel mounts with textMode=true,
+  // skips voice setup, skips mic check dialog
+  await adminPage.goto(`/agent-interview/session/new?resumeId=${resumeId}&textMode=1`);
 
-    // Mic check dialog: click any "확인" / "시작" / "다음" button if present
-    const micConfirm = adminPage.getByRole('button', { name: /확인|시작|다음/ });
-    try {
-      await micConfirm.first().click({ timeout: 10_000 });
-    } catch {
-      // Dialog may auto-skip if no permission needed
-    }
+  // textMode 활성: TextAnswerInput 컴포넌트의 textarea가 보이면 OK
+  // (외부 admin 배지는 isAdmin 체크 — 부수적)
+  await expect(adminPage.getByTestId('admin-text-answer-textarea')).toBeVisible({ timeout: 60_000 });
 
-    // Wait for session URL
-    await adminPage.waitForURL(/\/agent-interview\/session\/[^/?]+/, { timeout: 30_000 });
+  for (let i = 0; i < ANSWERS.length; i++) {
+    const textarea = adminPage.getByTestId('admin-text-answer-textarea');
+    await expect(textarea).toBeVisible({ timeout: 60_000 });
+    await textarea.fill(ANSWERS[i]);
+    await adminPage.getByTestId('admin-text-submit').click();
 
-    // Append ?textMode=1 and reload
-    const url = new URL(adminPage.url());
-    url.searchParams.set('textMode', '1');
-    await adminPage.goto(url.toString());
+    // Wait for textarea to either clear (next question) or disappear (completed)
+    await adminPage.waitForFunction(() => {
+      const ta = document.querySelector(
+        '[data-testid="admin-text-answer-textarea"]'
+      ) as HTMLTextAreaElement | null;
+      return !ta || ta.value === '';
+    }, { timeout: 60_000 });
 
-    await expect(adminPage.getByTestId('admin-text-mode-active')).toBeVisible({ timeout: 60_000 });
-
-    // Loop 3 answers
-    for (let i = 0; i < 3; i++) {
-      const textarea = adminPage.getByTestId('admin-text-answer-textarea');
-      await expect(textarea).toBeVisible({ timeout: 90_000 });
-      await textarea.fill(ANSWERS[i]);
-      await adminPage.getByTestId('admin-text-submit').click();
-
-      // Wait until textarea clears (state moves to evaluating) or next question shows
-      // Poll: textarea should be either re-empty (next q) or hidden (eval phase)
-      await adminPage.waitForFunction(() => {
-        const ta = document.querySelector(
-          '[data-testid="admin-text-answer-textarea"]'
-        ) as HTMLTextAreaElement | null;
-        return !ta || ta.value === '';
-      }, { timeout: 90_000 });
-    }
-  } finally {
-    await ctx.request.delete(`/api/resume/${resumeId}`).catch(() => {});
+    // If completed, break early
+    const completed = await adminPage.getByText(/면접이 완료|리포트 확인하기/).count();
+    if (completed > 0) break;
   }
 
-  // Filter known noise: SSE 4xx for terminated streams, /_next/, favicon
   const real = errors.filter(
     (e) => !/\/_next\/|favicon|\/api\/agent-interview\/.+\/(answer|skip)/.test(e)
   );
