@@ -217,4 +217,16 @@
 - **Backend AI**: `OPENAI_API_KEY` (필수, LLM+임베딩+Whisper+TTS 공유), `TAVILY_API_KEY` (선택), `ENVIRONMENT`, `AGENT_MODEL` (기본 `gpt-4o-mini`), `ADMIN_EMAILS`
 - **Public (빌드 타임 인라인)**: `NEXT_PUBLIC_ADMIN_EMAILS`, `NEXT_PUBLIC_GA_MEASUREMENT_ID`
 - **TTS 오버라이드 (선택)**: `TTS_MODEL`, `TTS_DEFAULT_VOICE`, `TTS_FORMAT`, `TTS_SPEED`
+- **E2E (선택)**: `E2E_MOCK_LLM=1` (백엔드, mock LLM/임베딩 활성화)
 - TTS 서비스는 루트 `.env`의 `OPENAI_API_KEY`를 docker-compose `env_file`로 공유
+
+## E2E 테스트 (`tests/e2e/`)
+- **스택**: Playwright (`@playwright/test`), 3 viewport (desktop 1440 / tablet 768 / Pixel 5 mobile)
+- **인증 우회**: `tests/e2e/fixtures/auth.ts`가 NextAuth 세션 쿠키를 직접 굽기 (`@auth/core/jwt encode`, salt = cookie 이름). dev=http면 `authjs.session-token`, https면 `__Secure-authjs.session-token`. Google OAuth UI 우회.
+- **음성 우회 (admin 전용)**: 면접/학습 세션 URL에 `?textMode=1` 부착 시 마이크/TTS 대신 `<TextAnswerInput>` 노출. agent-interview는 `/agent-interview/session/new?resumeId=...&textMode=1`로 직접 진입. learning-coach는 `POST /api/learning-coach/start` 후 `/learning-coach/session/<id>?textMode=1`. admin 판별: `frontend/src/lib/admin.ts` + `useIsAdmin()` 훅이 `NEXT_PUBLIC_ADMIN_EMAILS` 체크
+- **LLM mock**: `E2E_MOCK_LLM=1` 환경변수 셋업 시 `backend/app/lib/llm_client.py`의 `call_llm/call_llm_json/call_llm_stream/call_llm_vision` + `app/agent/embeddings.py`의 `create_embedding`이 `app/lib/llm_mock.py`로 스위치. 프롬프트 키워드(평가/질문/꼬리질문/fit/insight/summary 등)로 dispatch해 결정적 JSON 셰이프 반환. OpenAI 비용 0
+- **시각 회귀**: `tests/e2e/specs/visual.spec.ts` + baseline `*.spec.ts-snapshots/`. 4 페이지 × 3 viewport = 12장. baseline 갱신은 `npx playwright test specs/visual.spec.ts --update-snapshots` (사용자 승인 후만)
+- **콘솔/HTTP 가드**: `auth.ts` fixture가 `errors` 배열 수집 → 각 spec에서 `expect(errors.filter(...)).toEqual([])` 로 회귀 검증
+- **실행 환경변수** (`tests/e2e/.env`): `NEXTAUTH_SECRET`(루트와 동일), `E2E_ADMIN_USER_ID`(DB의 admin User.id), `E2E_ADMIN_EMAIL`, `E2E_BASE_URL=http://localhost:81`
+- **실행**: `cd tests/e2e && set -a && source .env && set +a && npx playwright test`. 단일 spec: `npx playwright test specs/agent-interview.spec.ts --project=desktop`. mock 모드 토글: `.env`에 `E2E_MOCK_LLM=1` 추가 후 `docker compose up -d --force-recreate backend && docker compose restart nginx`
+- **스킬**: `~/.claude/skills/voiceprep-e2e/SKILL.md` (홈 디렉토리). "/e2e", "회귀 테스트", "프론트 깨졌나" 트리거
