@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils';
 import { useLearningCoachStream } from '@/hooks/useLearningCoachStream';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
+import { TextAnswerInput } from '@/components/admin/text-answer-input';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -43,6 +45,12 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
   const lastHeardRef = useRef<string>('');
   const micRetryRef = useRef(0);
   const micRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isAdmin = useIsAdmin();
+  const [textMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('textMode') === '1';
+  });
 
   const tts = useTextToSpeech({ persona: 'tutor' });
   const { speak: ttsSpeak, stop: ttsStop, isSpeaking: isAiSpeaking } = tts;
@@ -143,6 +151,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
 
   // AI 메시지가 추가되면 TTS 재생 후 자동으로 듣기 시작
   useEffect(() => {
+    if (textMode) return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== 'assistant') return;
 
@@ -164,7 +173,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
       lastHeardRef.current = '';
       tryStartMic();
     })();
-  }, [messages, sessionId, ttsSpeak, resetTranscript, tryStartMic]);
+  }, [messages, sessionId, ttsSpeak, resetTranscript, tryStartMic, textMode]);
 
   // 세션 종료 시 모듈 캐시 정리
   useEffect(() => {
@@ -175,12 +184,13 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
 
   // AI 발화 시작 시 듣기 중지
   useEffect(() => {
+    if (textMode) return;
     if (isAiSpeaking && isListening) {
       stopListening();
       resetTranscript();
       lastHeardRef.current = '';
     }
-  }, [isAiSpeaking, isListening, stopListening, resetTranscript]);
+  }, [isAiSpeaking, isListening, stopListening, resetTranscript, textMode]);
 
   // 무음 감지 → 자동 전송
   // interim이 있으면 사용자가 말하는 중 → 타이머 취소.
@@ -193,6 +203,11 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
       }
       setCountdownSec(null);
     };
+
+    if (textMode) {
+      cancel();
+      return;
+    }
 
     if (!isListening || isStreaming) {
       cancel();
@@ -216,7 +231,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
       setCountdownSec(null);
       void handleSendRef.current?.();
     }, SILENCE_MS);
-  }, [transcript, interimTranscript, isListening, isStreaming]);
+  }, [transcript, interimTranscript, isListening, isStreaming, textMode]);
 
   // 카운트다운 초 단위 감소 (표시용)
   useEffect(() => {
@@ -245,10 +260,19 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     };
   }, [ttsStop]);
 
-  const showInterim = isListening && (transcript || interimTranscript);
+  const showInterim = !textMode && isListening && (transcript || interimTranscript);
 
   return (
     <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col bg-background">
+      {isAdmin && textMode && (
+        <div
+          data-testid="admin-text-mode-active"
+          className="shrink-0 border-b border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+        >
+          Admin 텍스트 모드 활성 (URL ?textMode=1)
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -326,7 +350,14 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
         <div className="mx-auto w-full max-w-3xl px-4 py-3">
           <Card>
             <CardContent className="flex min-h-[92px] items-center justify-center py-5">
-              {isAiSpeaking ? (
+              {textMode ? (
+                <div className="w-full">
+                  <TextAnswerInput
+                    onSubmit={(text) => void handleSend(text)}
+                    disabled={isStreaming}
+                  />
+                </div>
+              ) : isAiSpeaking ? (
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                     <Volume2 className="h-5 w-5 animate-pulse text-primary" />
