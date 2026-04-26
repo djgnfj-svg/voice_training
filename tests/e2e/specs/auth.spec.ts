@@ -2,5 +2,5 @@ import { test, expect } from '../fixtures/auth';
 
 test('admin session loads dashboard', async ({ adminPage }) => {
   await adminPage.goto('/dashboard');
-  await expect(adminPage.getByRole('heading', { name: /대시보드/ })).toBeVisible({ timeout: 15_000 });
+  await expect(adminPage.getByRole('heading', { level: 1, name: /안녕하세요/ })).toBeVisible({ timeout: 15_000 });
 });
