@@ -1,0 +1,14 @@
+{
+  "name": "voiceprep-e2e",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:visual": "playwright test specs/visual.spec.ts",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@auth/core": "^0.37.0"
+  }
+}
