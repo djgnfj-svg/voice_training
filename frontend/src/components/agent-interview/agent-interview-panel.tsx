@@ -18,6 +18,8 @@ import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { normalizeTranscript, hasMeaningfulContent } from '@/lib/transcript';
 import { scoreBg, scoreText } from '@/lib/score-colors';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
+import { TextAnswerInput } from '@/components/admin/text-answer-input';
 
 // 답변 중 침묵 자동 제출 타이머. 3s는 사용자가 잠깐 생각만 해도 제출되어 "급해서 연습 안 됨" 피드백의 원인. 30s로 완화.
 const SILENCE_TIMEOUT_MS = 30000;
@@ -46,6 +48,12 @@ export function AgentInterviewPanel({
     endEarly,
   } = useAgentInterview();
 
+  const isAdmin = useIsAdmin();
+  const [textMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('textMode') === '1';
+  });
+
   const tts = useTextToSpeech({ persona: 'interviewer' });
   const speech = useSpeechRecognition();
   const { speak: ttsSpeak, stop: ttsStop } = tts;
@@ -72,12 +80,13 @@ export function AgentInterviewPanel({
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    start({ resumeId, jobPostingId, textMode: false });
-  }, [resumeId, jobPostingId, start]);
+    start({ resumeId, jobPostingId, textMode });
+  }, [resumeId, jobPostingId, start, textMode]);
 
   // Auto-speak questions, then start listening
   useEffect(() => {
     if (phase !== 'waiting_answer') return;
+    if (textMode) return;
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg) return;
     if (lastMsg.role !== 'agent_question' && lastMsg.role !== 'agent_followup') return;
@@ -93,10 +102,11 @@ export function AgentInterviewPanel({
       setAnswerWarning(null);
       speechStart();
     })();
-  }, [phase, messages, ttsSpeak, speechReset, speechStart]);
+  }, [phase, messages, ttsSpeak, speechReset, speechStart, textMode]);
 
   // Stop listening when leaving waiting_answer phase
   useEffect(() => {
+    if (textMode) return;
     if (phase !== 'waiting_answer' && speech.isListening) {
       speechStop();
     }
@@ -104,11 +114,12 @@ export function AgentInterviewPanel({
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
-  }, [phase, speech.isListening, speechStop]);
+  }, [phase, speech.isListening, speechStop, textMode]);
 
   // Silence auto-submit: N초간 transcript 변화 없으면 자동 제출
   useEffect(() => {
     if (phase !== 'waiting_answer') return;
+    if (textMode) return;
     if (!speech.isListening) return;
     if (tts.isSpeaking) return;
 
@@ -157,6 +168,7 @@ export function AgentInterviewPanel({
     speechStop,
     speechReset,
     submitAnswer,
+    textMode,
   ]);
 
   const handleSubmit = () => {
@@ -228,6 +240,12 @@ export function AgentInterviewPanel({
           면접 나가기
         </Button>
       </div>
+
+      {isAdmin && textMode && (
+        <div data-testid="admin-text-mode-active" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+          Admin 텍스트 모드 활성 (URL ?textMode=1)
+        </div>
+      )}
 
       {/* Progress + Volume */}
       <div className="space-y-2">
@@ -322,8 +340,15 @@ export function AgentInterviewPanel({
             </div>
           )}
 
+          {phase === 'waiting_answer' && textMode && (
+            <TextAnswerInput
+              onSubmit={(text) => submitAnswer(text)}
+              onSkip={skip}
+            />
+          )}
+
           {/* TTS playing */}
-          {phase === 'waiting_answer' && tts.isSpeaking && !speech.isListening && (
+          {phase === 'waiting_answer' && tts.isSpeaking && !speech.isListening && !textMode && (
             <div className="flex flex-col items-center gap-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
                 <Volume2 className="h-8 w-8 animate-pulse text-primary" />
@@ -333,7 +358,7 @@ export function AgentInterviewPanel({
           )}
 
           {/* Listening - voice recording */}
-          {phase === 'waiting_answer' && speech.isListening && (
+          {phase === 'waiting_answer' && speech.isListening && !textMode && (
             <div className="space-y-4">
               <div className="flex flex-col items-center gap-4">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 ring-4 ring-red-100/50 animate-pulse dark:bg-red-900/30 dark:ring-red-900/30">
@@ -372,7 +397,7 @@ export function AgentInterviewPanel({
           )}
 
           {/* Waiting for TTS to finish, not yet listening */}
-          {phase === 'waiting_answer' && !tts.isSpeaking && !speech.isListening && (
+          {phase === 'waiting_answer' && !tts.isSpeaking && !speech.isListening && !textMode && (
             <div className="flex flex-col items-center gap-4">
               <p className="text-sm text-muted-foreground">마이크 준비 중...</p>
             </div>
