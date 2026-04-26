@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import AsyncIterator
 
 from openai import AsyncOpenAI
@@ -14,6 +15,8 @@ from openai import AsyncOpenAI
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+_MOCK_MODE = os.environ.get("E2E_MOCK_LLM") == "1"
 
 _client: AsyncOpenAI | None = None
 
@@ -141,3 +144,17 @@ async def call_llm_vision(
         ],
     )
     return response.choices[0].message.content or ""
+
+
+# ---------------------------------------------------------------------------
+# E2E mock override — when E2E_MOCK_LLM=1, swap real impls for stubs.
+# Kept at the bottom so the real code above stays readable.
+# ---------------------------------------------------------------------------
+if _MOCK_MODE:
+    from app.lib import llm_mock  # noqa: E402
+
+    call_llm = llm_mock.call_llm  # type: ignore[assignment]
+    call_llm_json = llm_mock.call_llm_json  # type: ignore[assignment]
+    call_llm_stream = llm_mock.call_llm_stream  # type: ignore[assignment]
+    call_llm_vision = llm_mock.call_llm_vision  # type: ignore[assignment]
+    logger.warning("E2E_MOCK_LLM=1 — llm_client using stub responses")
