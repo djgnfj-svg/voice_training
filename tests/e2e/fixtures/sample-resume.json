@@ -1,0 +1,10 @@
+{
+  "summary": "백엔드 5년차. Python/FastAPI/PostgreSQL.",
+  "projects": [
+    {"name": "Order System", "techStack": ["Python", "FastAPI", "PostgreSQL"], "description": "주문 처리 시스템 설계 및 구현"}
+  ],
+  "experience": [
+    {"company": "Acme", "role": "Backend Engineer", "period": "2021–2026"}
+  ],
+  "education": []
+}
