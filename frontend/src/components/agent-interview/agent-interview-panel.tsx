@@ -20,6 +20,7 @@ import { normalizeTranscript, hasMeaningfulContent } from '@/lib/transcript';
 import { scoreBg, scoreText } from '@/lib/score-colors';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { TextAnswerInput } from '@/components/admin/text-answer-input';
+import { InterviewerStage, type InterviewerExpression } from './interviewer-stage';
 
 // 답변 중 침묵 자동 제출 타이머. 3s는 사용자가 잠깐 생각만 해도 제출되어 "급해서 연습 안 됨" 피드백의 원인. 30s로 완화.
 const SILENCE_TIMEOUT_MS = 30000;
@@ -46,6 +47,7 @@ export function AgentInterviewPanel({
     submitAnswer,
     skip,
     endEarly,
+    lastInnerThought,
   } = useAgentInterview();
 
   const isAdmin = useIsAdmin();
@@ -227,6 +229,24 @@ export function AgentInterviewPanel({
   // Get last evaluation
   const lastEvaluation = [...messages].reverse().find(m => m.role === 'agent_evaluation');
 
+  const expression: InterviewerExpression = (() => {
+    if (phase === 'evaluating' || phase === 'generating_followup') return 'thinking';
+    if (speech.isListening) return 'listening';
+    const ev = lastEvaluation?.evaluation as { overallScore?: number } | undefined;
+    if (ev && phase === 'waiting_answer' && typeof ev.overallScore === 'number') {
+      if (ev.overallScore >= 80) return 'impressed';
+      if (ev.overallScore >= 60) return 'skeptical';
+      return 'disappointed';
+    }
+    return 'neutral';
+  })();
+
+  const stageThought: string | null = (() => {
+    if (phase === 'evaluating') return '흠... 잠깐 보자';
+    if (speech.isListening) return null;
+    return lastInnerThought ?? null;
+  })();
+
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
       {/* Header */}
@@ -245,6 +265,14 @@ export function AgentInterviewPanel({
         <div data-testid="admin-text-mode-active" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
           Admin 텍스트 모드 활성 (URL ?textMode=1)
         </div>
+      )}
+
+      {/* Interviewer Stage */}
+      {phase !== 'completed' && (
+        <InterviewerStage
+          expression={expression}
+          innerThought={stageThought}
+        />
       )}
 
       {/* Progress + Volume */}
@@ -340,7 +368,7 @@ export function AgentInterviewPanel({
             </div>
           )}
 
-          {phase === 'waiting_answer' && textMode && (
+          {phase === 'waiting_answer' && isAdmin && textMode && (
             <TextAnswerInput
               onSubmit={(text) => submitAnswer(text)}
               onSkip={skip}
