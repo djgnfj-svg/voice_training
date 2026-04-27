@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
 export type InterviewerExpression =
@@ -34,13 +33,11 @@ export function InterviewerStage({
     >
       {/* 좌측 캐릭터 (45%) */}
       <div className="relative h-full w-[45%] flex-shrink-0">
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={`/interviewer/${expression}.svg`}
           alt={`면접관 표정: ${expression}`}
-          fill
-          priority
-          sizes="(max-width: 768px) 45vw, 300px"
-          className="object-contain object-bottom"
+          className="absolute inset-0 h-full w-full object-contain object-bottom"
           data-testid={`interviewer-expression-${expression}`}
         />
       </div>
