@@ -189,6 +189,21 @@ export function useAgentInterview() {
     }
   }, [sessionId, cleanup]);
 
+  const lastInnerThought = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "agent_evaluation") {
+        const t = (m.evaluation as { innerThought?: string } | undefined)?.innerThought;
+        return typeof t === "string" && t.trim() ? t : null;
+      }
+      if (m.role === "agent_question" || m.role === "agent_followup") {
+        // 새 질문이 도착했으면 이전 속마음은 더 이상 표시 안 함
+        return null;
+      }
+    }
+    return null;
+  })();
+
   return {
     phase,
     messages,
@@ -197,6 +212,7 @@ export function useAgentInterview() {
     maxQuestions,
     report,
     error,
+    lastInnerThought,
     start,
     submitAnswer,
     skip,
