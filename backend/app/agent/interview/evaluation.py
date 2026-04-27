@@ -124,6 +124,21 @@ def _normalize_evaluation(evaluation: dict, answer: str = "") -> dict:
             evaluation.get("missingKeywords"), _MISSING_MAX
         )
 
+    # innerThought 정규화: 빈 값/누락 시 점수 기반 fallback, 80자 trim
+    raw_thought = evaluation.get("innerThought")
+    thought = (raw_thought or "").strip() if isinstance(raw_thought, str) else ""
+    if not thought:
+        overall = evaluation["overallScore"]
+        if overall >= 80:
+            thought = "오, 좋은데?"
+        elif overall >= 60:
+            thought = "음... 애매하네"
+        else:
+            thought = "아쉽다..."
+    if len(thought) > 80:
+        thought = thought[:80]
+    evaluation["innerThought"] = thought
+
     return evaluation
 
 
