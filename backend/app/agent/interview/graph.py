@@ -286,6 +286,7 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
             "detailedFeedback": answer_evaluation.get("detailedFeedback", ""),
             "modelAnswer": answer_evaluation.get("modelAnswer", ""),
             "scores": answer_evaluation.get("scores", {}),
+            "innerThought": answer_evaluation.get("innerThought", ""),
         },
     })
     return {
