@@ -45,7 +45,7 @@ test('learning-coach: textMode 시작 → 응답 2회 → 종료', async ({ admi
 
   // Filter noise — same approach as agent-interview
   const real = errors.filter(
-    (e) => !/\/_next\/|favicon|\/api\/learning-coach\/.+\/(respond|end)/.test(e)
+    (e) => !/\/_next\/|favicon|\/api\/learning-coach\/.+\/(turn|end)/.test(e)
   );
   expect(real, `unexpected errors: ${real.join(', ')}`).toEqual([]);
 });
