@@ -226,13 +226,18 @@ export function AgentInterviewPanel({
     m => m.role === 'agent_question' || m.role === 'agent_followup'
   );
 
-  // Get last evaluation
   const lastEvaluation = [...messages].reverse().find(m => m.role === 'agent_evaluation');
+
+  // 새 질문(agent_question/agent_followup)이 도착하면 표정도 lastInnerThought와 동일하게 리셋.
+  const lastAgentMessage = [...messages].reverse().find(
+    m => m.role === 'agent_evaluation' || m.role === 'agent_question' || m.role === 'agent_followup'
+  );
+  const recentEvaluation = lastAgentMessage?.role === 'agent_evaluation' ? lastAgentMessage : undefined;
 
   const expression: InterviewerExpression = (() => {
     if (phase === 'evaluating' || phase === 'generating_followup') return 'thinking';
     if (speech.isListening) return 'listening';
-    const ev = lastEvaluation?.evaluation as { overallScore?: number } | undefined;
+    const ev = recentEvaluation?.evaluation as { overallScore?: number } | undefined;
     if (ev && phase === 'waiting_answer' && typeof ev.overallScore === 'number') {
       if (ev.overallScore >= 80) return 'impressed';
       if (ev.overallScore >= 60) return 'skeptical';

@@ -1,5 +1,5 @@
 // frontend/src/hooks/useAgentInterview.ts
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   startAgentInterview,
   submitAgentAnswer,
@@ -189,7 +189,7 @@ export function useAgentInterview() {
     }
   }, [sessionId, cleanup]);
 
-  const lastInnerThought = (() => {
+  const lastInnerThought = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.role === "agent_evaluation") {
@@ -197,12 +197,11 @@ export function useAgentInterview() {
         return typeof t === "string" && t.trim() ? t : null;
       }
       if (m.role === "agent_question" || m.role === "agent_followup") {
-        // 새 질문이 도착했으면 이전 속마음은 더 이상 표시 안 함
         return null;
       }
     }
     return null;
-  })();
+  }, [messages]);
 
   return {
     phase,
