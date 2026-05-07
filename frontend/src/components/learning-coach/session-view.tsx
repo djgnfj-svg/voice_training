@@ -350,7 +350,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
         <div className="mx-auto w-full max-w-3xl px-4 py-3">
           <Card>
             <CardContent className="flex min-h-[92px] items-center justify-center py-5">
-              {textMode ? (
+              {isAdmin && textMode ? (
                 <div className="w-full">
                   <TextAnswerInput
                     onSubmit={(text) => void handleSend(text)}
