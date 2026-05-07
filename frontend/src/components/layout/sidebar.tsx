@@ -12,6 +12,7 @@ import {
   Sun,
   Monitor,
   GraduationCap,
+  Coffee,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -88,6 +89,16 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 
       {/* User section */}
       <div className="border-t p-3 space-y-1">
+        <a
+          href="https://ctee.kr/place/jacha"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onNavClick}
+          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-accent-foreground hover:translate-x-0.5"
+        >
+          <Coffee className="h-4 w-4" />
+          <span>후원하기</span>
+        </a>
         <ThemeToggle />
         <Button
           variant="ghost"
