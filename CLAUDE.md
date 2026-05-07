@@ -13,6 +13,7 @@
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
 | 2026-04-25 | 초기 구성 (planner/baseliner/implementer/measurer + voiceprep-feature/review/metrics 스킬) | 전체 | 측정 기반 개발 + 통합 리뷰 자동화 |
+| 2026-05-08 | hook 6종을 PowerShell 네이티브로 재작성(`.claude/hooks/*.ps1`), bash/jq 의존 제거. e2e 스킬을 `.claude/skills/`로 이동. harness enabledPlugin 로컬 중복 제거. installed_plugins.json stale 32개 정리. /wrap 2단계를 `tsc --noEmit` + `compileall`로 변경(hook과 중복 제거) | hooks/skills/settings | Windows 환경 hook silent fail 해소 |
 
 ## 구조
 - `frontend/` — Next.js 프론트엔드 + NextAuth 인증만
@@ -229,4 +230,4 @@
 - **콘솔/HTTP 가드**: `auth.ts` fixture가 `errors` 배열 수집 → 각 spec에서 `expect(errors.filter(...)).toEqual([])` 로 회귀 검증
 - **실행 환경변수** (`tests/e2e/.env`): `NEXTAUTH_SECRET`(루트와 동일), `E2E_ADMIN_USER_ID`(DB의 admin User.id), `E2E_ADMIN_EMAIL`, `E2E_BASE_URL=http://localhost:81`
 - **실행**: `cd tests/e2e && set -a && source .env && set +a && npx playwright test`. 단일 spec: `npx playwright test specs/agent-interview.spec.ts --project=desktop`. mock 모드 토글: `.env`에 `E2E_MOCK_LLM=1` 추가 후 `docker compose up -d --force-recreate backend && docker compose restart nginx`
-- **스킬**: `~/.claude/skills/voiceprep-e2e/SKILL.md` (홈 디렉토리). "/e2e", "회귀 테스트", "프론트 깨졌나" 트리거
+- **스킬**: `.claude/skills/voiceprep-e2e/SKILL.md`. "/e2e", "회귀 테스트", "프론트 깨졌나" 트리거
