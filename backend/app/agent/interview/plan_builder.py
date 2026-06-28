@@ -1,4 +1,24 @@
-﻿"""Scan+Dive 플래너 — 순수 코드 (LLM 호출 없음).
+﻿"""Hybrid Plan Builder — LLM Suggester + Rule Validator.
+
+Planner-Executor 패턴의 Planner 역할. Scan 단계는 하이브리드, Dive 단계는 순수 rule-based.
+
+[Scan — Hybrid]
+1. LLM Suggester (`suggest_scan_candidates_llm`): 실제 면접관이 보는 7가지 신호
+   (impact/complexity/ownership/scope/jd_match/red_flag/measurable)로 후보 5개 선정.
+2. Rule Validator (`enforce_scan_rules`): top2(jd_match) + bottom1(jd_unmatched) 구조 강제.
+3. Fallback (`build_scan_plan`): LLM 실패/부족 시 기존 rule-based로 보충.
+
+[Dive — Rule-based]
+- `build_dive_plan`: scan 답변의 depth 점수로 약점(min) + 강점(max) 2주제. LLM 미사용.
+
+[설계 의도]
+- rule-only는 JD 매칭 1개 신호만 봤음 → 7개 신호로 확장하기 위해 LLM Suggester 도입.
+- 단, 재현성/디버깅을 위해 마지막 구조 강제는 코드에 남김.
+- LLM 실패 폴백을 명시해 가용성 보장.
+
+[한계 (정직)]
+- LLM Suggester는 비결정적 (같은 이력서에 다른 후보 셋이 나올 수 있음).
+- Dive 주제 선정이 depth 점수 1축 휴리스틱 — 다축 종합은 다음 후보.
 
 입력:
 - resume: dict (parsedData 형태. projects / experience 포함)
@@ -10,7 +30,14 @@
 """
 from __future__ import annotations
 
+import json
+import logging
+
 from app.agent.interview.state import DiveTopic, ScanItem
+from app.lib.llm_client import call_llm_json
+from app.prompts.agent import SCAN_SUGGESTER_PROMPT
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize(s: str) -> str:
@@ -112,6 +139,139 @@ def build_scan_plan(resume: dict, fit_analysis: dict) -> list[ScanItem]:
             "reason": "jd_match" if score > 0 else "jd_unmatched",
         })
     return plan
+
+
+async def suggest_scan_candidates_llm(resume: dict, fit_analysis: dict | None) -> list[dict]:
+    """LLM Suggester — 7가지 신호로 후보 5개 선정.
+
+    실패 시 빈 리스트 반환 (호출자가 rule-based 폴백 처리).
+    """
+    try:
+        prompt = SCAN_SUGGESTER_PROMPT.format(
+            resume_json=json.dumps(resume or {}, ensure_ascii=False)[:8000],
+            fit_json=json.dumps(fit_analysis or None, ensure_ascii=False),
+        )
+        result = await call_llm_json(
+            prompt,
+            temperature=0.2,
+            max_tokens=1500,
+            tag="scan_suggester",
+        )
+        if isinstance(result, dict):
+            candidates = result.get("candidates") or []
+        else:
+            candidates = []
+        # 최소 필드 검증
+        valid: list[dict] = []
+        for c in candidates:
+            if not isinstance(c, dict):
+                continue
+            if not c.get("project_ref"):
+                continue
+            valid.append(c)
+        return valid[:5]
+    except Exception as exc:
+        logger.warning("scan_suggester LLM failed: %s", exc)
+        return []
+
+
+def enforce_scan_rules(
+    candidates: list[dict],
+    has_jd: bool,
+) -> list[ScanItem]:
+    """Rule Validator — LLM 후보 5개 중 top2 + bottom1 구조 강제.
+
+    - has_jd=True: jd_match 신호 가진 후보 중 score 상위 2 + jd_unmatched 신호 후보 1
+    - has_jd=False: score 상위 3
+    - 부족하면 남은 후보로 채움
+    - 후보 부족 시 가능한 만큼만 반환 (호출자가 rule-based로 보충)
+    """
+    if not candidates:
+        return []
+
+    def _score(c: dict) -> int:
+        try:
+            return int(c.get("score", 50))
+        except (TypeError, ValueError):
+            return 50
+
+    def _to_item(c: dict, reason: str) -> ScanItem:
+        return {
+            "project_ref": str(c.get("project_ref", "프로젝트")),
+            "query": str(c.get("query") or c.get("project_ref") or "프로젝트"),
+            "reason": reason,  # type: ignore[typeddict-item]
+        }
+
+    sorted_cands = sorted(candidates, key=_score, reverse=True)
+
+    if not has_jd:
+        return [_to_item(c, "project_order") for c in sorted_cands[:3]]
+
+    jd_match = [c for c in sorted_cands if "jd_match" in (c.get("signals") or [])]
+    jd_unmatched = [c for c in sorted_cands if "jd_unmatched" in (c.get("signals") or [])]
+    others = [
+        c for c in sorted_cands
+        if c not in jd_match and c not in jd_unmatched
+    ]
+
+    plan: list[ScanItem] = []
+    seen: set[str] = set()
+
+    for c in jd_match[:2]:
+        ref = c.get("project_ref", "")
+        if ref not in seen:
+            plan.append(_to_item(c, "jd_match"))
+            seen.add(ref)
+
+    for c in jd_unmatched[:1]:
+        ref = c.get("project_ref", "")
+        if ref not in seen:
+            plan.append(_to_item(c, "jd_unmatched"))
+            seen.add(ref)
+
+    # 부족분은 others에서 보충
+    for c in others:
+        if len(plan) >= 3:
+            break
+        ref = c.get("project_ref", "")
+        if ref not in seen:
+            plan.append(_to_item(c, "jd_unmatched"))
+            seen.add(ref)
+
+    return plan[:3]
+
+
+async def build_scan_plan_hybrid(
+    resume: dict,
+    fit_analysis: dict | None,
+) -> tuple[list[ScanItem], str]:
+    """하이브리드: LLM Suggester → Rule Validator → 폴백.
+
+    반환: (scan_plan, source)
+    source: "llm" | "llm+rule_fill" | "rule_fallback"
+    """
+    fa = fit_analysis or {}
+    has_jd = bool((fa.get("skill_match") or {}).get("matched"))
+
+    candidates = await suggest_scan_candidates_llm(resume, fa)
+    llm_plan = enforce_scan_rules(candidates, has_jd) if candidates else []
+
+    if len(llm_plan) >= 3:
+        return llm_plan[:3], "llm"
+
+    # 부족분을 기존 rule-based로 채움 (중복 ref 제외)
+    rule_plan = build_scan_plan(resume, fa)
+    if not llm_plan:
+        return rule_plan, "rule_fallback"
+
+    seen = {item["project_ref"] for item in llm_plan}
+    for item in rule_plan:
+        if len(llm_plan) >= 3:
+            break
+        if item["project_ref"] not in seen:
+            llm_plan.append(item)
+            seen.add(item["project_ref"])
+    return llm_plan[:3], "llm+rule_fill"
 
 
 def _topic_label(project_ref: str, angle: str) -> str:

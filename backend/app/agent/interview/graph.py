@@ -13,7 +13,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent import tracing
-from app.agent.interview import evaluation, fit_analysis as fit_analysis_module, plan_builder, profile_memory, questioner, resume_memory
+from app.agent.interview import (
+    evaluation,
+    fit_analysis as fit_analysis_module,
+    plan_builder,
+    profile_memory,
+    questioner,
+    resume_memory,
+)
 from app.agent.interview.state import InterviewState
 
 logger = logging.getLogger(__name__)
@@ -62,7 +69,9 @@ def make_interview_tools(db: AsyncSession, user_id: str):
     @tracing.trace_tool("interview.search_resume")
     async def search_resume(resume_id: str, query: str, top_k: int = 3) -> str:
         """Search embedded resume chunks for this user."""
-        rows = await resume_memory.search_resume(db, user_id, resume_id, query, top_k=top_k)
+        rows = await resume_memory.search_resume(
+            db, user_id, resume_id, query, top_k=top_k
+        )
         return _json(rows)
 
     return [search_profile, search_resume]
@@ -75,14 +84,16 @@ async def _call_tool(
     args: dict[str, Any],
 ) -> list[dict]:
     node = ToolNode(make_interview_tools(db, user_id))
-    result = await node.ainvoke({
-        "messages": [
-            AIMessage(
-                content="",
-                tool_calls=[{"id": f"call_{name}", "name": name, "args": args}],
-            )
-        ]
-    })
+    result = await node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[{"id": f"call_{name}", "name": name, "args": args}],
+                )
+            ]
+        }
+    )
     content = result["messages"][-1].content
     try:
         parsed = json.loads(content or "[]")
@@ -146,7 +157,8 @@ async def load_profile(state: InterviewState, db: AsyncSession) -> InterviewStat
     return {
         **state,
         "user_profile": profile,
-        "pending_events": state.get("pending_events", []) + [
+        "pending_events": state.get("pending_events", [])
+        + [
             {"event": "status", "data": {"phase": "profile_loaded"}},
         ],
     }
@@ -156,16 +168,20 @@ async def fit_analysis(state: InterviewState, db: AsyncSession) -> InterviewStat
     events = list(state.get("pending_events", []))
     events.append({"event": "status", "data": {"phase": "fit_analyzing"}})
 
-    fa = await fit_analysis_module.run_fit_analysis(state["resume"], state.get("job_posting"))
+    fa = await fit_analysis_module.run_fit_analysis(
+        state["resume"], state.get("job_posting")
+    )
     has_emb = False
     rid = state.get("resume_id")
     if rid:
         has_emb = await resume_memory.has_resume_embeddings(db, rid)
 
-    events.append({
-        "event": "status",
-        "data": {"phase": "fit_analyzed", "has_resume_embeddings": has_emb},
-    })
+    events.append(
+        {
+            "event": "status",
+            "data": {"phase": "fit_analyzed", "has_resume_embeddings": has_emb},
+        }
+    )
     return {
         **state,
         "fit_analysis": fa,
@@ -176,13 +192,22 @@ async def fit_analysis(state: InterviewState, db: AsyncSession) -> InterviewStat
 
 
 async def build_scan_plan(state: InterviewState, db: AsyncSession) -> InterviewState:
-    scan_plan = plan_builder.build_scan_plan(state["resume"], state.get("fit_analysis") or {})
+    scan_plan, source = await plan_builder.build_scan_plan_hybrid(
+        state["resume"], state.get("fit_analysis") or {}
+    )
     events = list(state.get("pending_events", []))
     max_q = min(state.get("max_questions", 9), len(scan_plan) + 6)
-    events.append({
-        "event": "status",
-        "data": {"phase": "scan_plan_ready", "scan_count": len(scan_plan), "max_questions": max_q},
-    })
+    events.append(
+        {
+            "event": "status",
+            "data": {
+                "phase": "scan_plan_ready",
+                "scan_count": len(scan_plan),
+                "max_questions": max_q,
+                "scan_plan_source": source,
+            },
+        }
+    )
     return {
         **state,
         "phase": "scan",
@@ -204,7 +229,12 @@ async def scan_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
         return state
 
     scan_item = scan_plan[idx]
-    events.append({"event": "status", "data": {"phase": "generating_question", "phaseKind": "scan"}})
+    events.append(
+        {
+            "event": "status",
+            "data": {"phase": "generating_question", "phaseKind": "scan"},
+        }
+    )
     chunks = await _search_resume_chunks(state, db, scan_item["query"], top_k=3)
     result = await questioner.generate_scan_question(
         resume=state["resume"],
@@ -219,14 +249,16 @@ async def scan_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
     )
     question = result.get("question", "")
     question_count = state.get("question_count", 0) + 1
-    events.append(_format_question_event(
-        question=question,
-        question_count=question_count,
-        follow_up_round=0,
-        phase="scan",
-        phase_label=f"훑기 {idx + 1}/{len(scan_plan)} · {scan_item['project_ref']}",
-        result=result,
-    ))
+    events.append(
+        _format_question_event(
+            question=question,
+            question_count=question_count,
+            follow_up_round=0,
+            phase="scan",
+            phase_label=f"훑기 {idx + 1}/{len(scan_plan)} · {scan_item['project_ref']}",
+            result=result,
+        )
+    )
     return {
         **state,
         "current_question": question,
@@ -262,33 +294,39 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
         dive_plan = state.get("dive_plan") or []
         if 0 <= dive_idx < len(dive_plan):
             topic = dive_plan[dive_idx]
-            meta.update({
-                "diveIdx": dive_idx,
-                "topicLabel": topic.get("topic", ""),
-                "angle": topic.get("angle", ""),
-                "projectRef": topic.get("project_ref", ""),
-                "diveDepth": state.get("current_dive_depth", 0),
-            })
+            meta.update(
+                {
+                    "diveIdx": dive_idx,
+                    "topicLabel": topic.get("topic", ""),
+                    "angle": topic.get("angle", ""),
+                    "projectRef": topic.get("project_ref", ""),
+                    "diveDepth": state.get("current_dive_depth", 0),
+                }
+            )
     answer_evaluation["meta"] = meta
 
     history = list(state.get("conversation_history", []))
-    history.append({
-        "question": state["current_question"],
-        "answer": state["current_answer"],
+    history.append(
+        {
+            "question": state["current_question"],
+            "answer": state["current_answer"],
             "evaluation": answer_evaluation,
-        "question_number": state.get("question_count", 1),
-    })
-    events.append({
-        "event": "evaluation",
-        "data": {
-            "overallScore": answer_evaluation.get("overallScore", 0),
-            "briefFeedback": answer_evaluation.get("briefFeedback", ""),
-            "detailedFeedback": answer_evaluation.get("detailedFeedback", ""),
-            "modelAnswer": answer_evaluation.get("modelAnswer", ""),
-            "scores": answer_evaluation.get("scores", {}),
-            "innerThought": answer_evaluation.get("innerThought", ""),
-        },
-    })
+            "question_number": state.get("question_count", 1),
+        }
+    )
+    events.append(
+        {
+            "event": "evaluation",
+            "data": {
+                "overallScore": answer_evaluation.get("overallScore", 0),
+                "briefFeedback": answer_evaluation.get("briefFeedback", ""),
+                "detailedFeedback": answer_evaluation.get("detailedFeedback", ""),
+                "modelAnswer": answer_evaluation.get("modelAnswer", ""),
+                "scores": answer_evaluation.get("scores", {}),
+                "innerThought": answer_evaluation.get("innerThought", ""),
+            },
+        }
+    )
     return {
         **state,
         "current_evaluation": answer_evaluation,
@@ -302,7 +340,11 @@ async def scan_next(state: InterviewState, db: AsyncSession) -> InterviewState:
     scan_evals = list(state.get("scan_evaluations", []))
     scan_evals.append(state.get("current_evaluation") or {})
     new_scan_idx = state.get("current_scan_idx", 0) + 1
-    action = "build_dive_plan" if new_scan_idx >= len(state.get("scan_plan", [])) else "scan_ask"
+    action = (
+        "build_dive_plan"
+        if new_scan_idx >= len(state.get("scan_plan", []))
+        else "scan_ask"
+    )
     return {
         **state,
         "scan_evaluations": scan_evals,
@@ -318,16 +360,22 @@ async def build_dive_plan(state: InterviewState, db: AsyncSession) -> InterviewS
         state.get("fit_analysis") or {},
     )
     events = list(state.get("pending_events", []))
-    events.append({
-        "event": "status",
-        "data": {
-            "phase": "dive_plan_ready",
-            "dive_topics": [
-                {"topic": t["topic"], "angle": t["angle"], "project_ref": t["project_ref"]}
-                for t in dive_plan
-            ],
-        },
-    })
+    events.append(
+        {
+            "event": "status",
+            "data": {
+                "phase": "dive_plan_ready",
+                "dive_topics": [
+                    {
+                        "topic": t["topic"],
+                        "angle": t["angle"],
+                        "project_ref": t["project_ref"],
+                    }
+                    for t in dive_plan
+                ],
+            },
+        }
+    )
     return {
         **state,
         "phase": "dive",
@@ -348,7 +396,12 @@ async def dive_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
         return state
 
     topic = dive_plan[idx]
-    events.append({"event": "status", "data": {"phase": "generating_question", "phaseKind": "dive"}})
+    events.append(
+        {
+            "event": "status",
+            "data": {"phase": "generating_question", "phaseKind": "dive"},
+        }
+    )
     chunks = await _search_resume_chunks(state, db, topic["query"], top_k=3)
     if depth == 0:
         result = await questioner.generate_dive_question(
@@ -370,14 +423,16 @@ async def dive_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
     question = result.get("question", "")
     question_count = state.get("question_count", 0) + 1
     new_depth = depth + 1
-    events.append(_format_question_event(
-        question=question,
-        question_count=question_count,
-        follow_up_round=depth,
-        phase="dive",
-        phase_label=f"딥다이브 · {topic['topic']} ({new_depth}/{MAX_DIVE_DEPTH})",
-        result=result,
-    ))
+    events.append(
+        _format_question_event(
+            question=question,
+            question_count=question_count,
+            follow_up_round=depth,
+            phase="dive",
+            phase_label=f"딥다이브 · {topic['topic']} ({new_depth}/{MAX_DIVE_DEPTH})",
+            result=result,
+        )
+    )
     return {
         **state,
         "current_question": question,
@@ -543,19 +598,27 @@ def build_answer_graph(db: AsyncSession):
     graph.add_node("update_profile", update_profile_node)
     graph.add_node("generate_report", generate_report_node)
     graph.set_entry_point("evaluate")
-    graph.add_conditional_edges("evaluate", _route_phase, {
-        "scan_next": "scan_next",
-        "decide_in_topic": "decide_in_topic",
-        "end": "update_profile",
-    })
+    graph.add_conditional_edges(
+        "evaluate",
+        _route_phase,
+        {
+            "scan_next": "scan_next",
+            "decide_in_topic": "decide_in_topic",
+            "end": "update_profile",
+        },
+    )
     graph.add_edge("scan_next", "enforce_question_cap")
     graph.add_edge("decide_in_topic", "enforce_question_cap")
-    graph.add_conditional_edges("enforce_question_cap", _route_action, {
-        "scan_ask": "scan_ask",
-        "build_dive_plan": "build_dive_plan",
-        "dive_ask": "dive_ask",
-        "end": "update_profile",
-    })
+    graph.add_conditional_edges(
+        "enforce_question_cap",
+        _route_action,
+        {
+            "scan_ask": "scan_ask",
+            "build_dive_plan": "build_dive_plan",
+            "dive_ask": "dive_ask",
+            "end": "update_profile",
+        },
+    )
     graph.add_edge("build_dive_plan", "dive_ask")
     graph.add_edge("scan_ask", END)
     graph.add_edge("dive_ask", END)
@@ -616,11 +679,14 @@ def build_next_question_graph(db: AsyncSession):
     graph.add_node("build_dive_plan", build_dive_plan_node)
     graph.add_node("scan_ask", scan_ask_node)
     graph.add_node("dive_ask", dive_ask_node)
-    graph.set_conditional_entry_point(_route_next_question, {
-        "build_dive_plan": "build_dive_plan",
-        "scan_ask": "scan_ask",
-        "dive_ask": "dive_ask",
-    })
+    graph.set_conditional_entry_point(
+        _route_next_question,
+        {
+            "build_dive_plan": "build_dive_plan",
+            "scan_ask": "scan_ask",
+            "dive_ask": "dive_ask",
+        },
+    )
     graph.add_edge("build_dive_plan", "dive_ask")
     graph.add_edge("scan_ask", END)
     graph.add_edge("dive_ask", END)
@@ -639,26 +705,40 @@ async def _run_graph(graph_name: str, state: InterviewState, graph_call):
 
 
 async def run_start_graph(state: InterviewState, db: AsyncSession) -> InterviewState:
-    return await _run_graph("start", state, lambda: build_start_graph(db).ainvoke(state))
+    return await _run_graph(
+        "start", state, lambda: build_start_graph(db).ainvoke(state)
+    )
 
 
 async def run_answer_graph(state: InterviewState, db: AsyncSession) -> InterviewState:
-    return await _run_graph("answer", state, lambda: build_answer_graph(db).ainvoke(state))
+    return await _run_graph(
+        "answer", state, lambda: build_answer_graph(db).ainvoke(state)
+    )
 
 
 async def run_end_graph(state: InterviewState, db: AsyncSession) -> InterviewState:
     return await _run_graph("end", state, lambda: build_end_graph(db).ainvoke(state))
 
 
-async def run_scan_plan_graph(state: InterviewState, db: AsyncSession) -> InterviewState:
-    return await _run_graph("scan_plan", state, lambda: build_scan_plan_graph(db).ainvoke(state))
+async def run_scan_plan_graph(
+    state: InterviewState, db: AsyncSession
+) -> InterviewState:
+    return await _run_graph(
+        "scan_plan", state, lambda: build_scan_plan_graph(db).ainvoke(state)
+    )
 
 
-async def run_next_question_graph(state: InterviewState, db: AsyncSession) -> InterviewState:
-    return await _run_graph("next_question", state, lambda: build_next_question_graph(db).ainvoke(state))
+async def run_next_question_graph(
+    state: InterviewState, db: AsyncSession
+) -> InterviewState:
+    return await _run_graph(
+        "next_question", state, lambda: build_next_question_graph(db).ainvoke(state)
+    )
 
 
-async def run_tool_calling_graph(state: ToolCallState, db: AsyncSession, user_id: str) -> ToolCallState:
+async def run_tool_calling_graph(
+    state: ToolCallState, db: AsyncSession, user_id: str
+) -> ToolCallState:
     result, run_id = await tracing.traced_graph_call(
         name="interview.tools",
         metadata={"feature": "interview", "graph_name": "tools", "user_id": user_id},

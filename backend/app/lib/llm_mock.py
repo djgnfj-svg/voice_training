@@ -246,6 +246,20 @@ def _shape_for_json(prompt: str) -> dict | list:
     p = prompt
 
     # --- Interview agent (backend/app/prompts/agent.py) ---
+    if "실제 면접관이 이력서에서 보는 7가지 신호" in p or "scan_suggester" in p:
+        return {
+            "candidates": [
+                {
+                    "project_ref": f"Mock 프로젝트 {i+1}",
+                    "score": 90 - i * 10,
+                    "signals": ["jd_match", "impact"] if i < 2 else ["jd_unmatched", "complexity"],
+                    "rationale": "Mock rationale.",
+                    "probe_hint": "Mock probe.",
+                    "query": f"Mock 프로젝트 {i+1} 쿼리",
+                }
+                for i in range(5)
+            ]
+        }
     if "INTERVIEW_PLANNER" in p or ("search_profile" in p and "evaluate" in p and "decide" in p):
         return _planner_decision_shape()
     if "딥다이브 주제 진행 판정" in p or ('"dig_deeper"' in p and '"next_topic"' in p):

@@ -102,7 +102,7 @@
   - 모듈 (`backend/app/agent/interview/`):
     - `graph.py` — LangGraph 오케스트레이션 (전체 그래프 정의)
     - `state.py` — 그래프 상태
-    - `plan_builder.py` — Scan/Dive 플랜 빌더 (순수 코드)
+    - `plan_builder.py` — **Hybrid Plan Builder**. Scan은 LLM Suggester(7가지 신호: impact/complexity/ownership/scope/jd_match/red_flag/measurable)가 후보 5개 → Rule Validator(top2+bottom1)가 3개로 정제 → 실패 시 rule-based 폴백. Dive는 순수 rule-based(depth 점수)
     - `questioner.py` — 질문 생성 (LLM)
     - `evaluation.py` — 답변 평가 (LLM + 정규화/가드)
     - `profile_memory.py` — 프로필 RAG (pgvector)
