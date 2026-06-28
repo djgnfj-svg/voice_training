@@ -40,15 +40,17 @@ class AuthUser:
     name: str | None = None
 
 
-async def get_current_user(request: Request) -> AuthUser:
-    """Extract user from NextAuth JWT cookie."""
-    # Try both cookie names
+def _user_from_cookies(cookies: dict[str, str]) -> AuthUser | None:
+    """Resolve an AuthUser from NextAuth session cookies, or None on failure.
+
+    Shared core for both HTTP (``Request``) and WebSocket auth paths.
+    """
     cookie_name = None
-    token = request.cookies.get("__Secure-authjs.session-token")
+    token = cookies.get("__Secure-authjs.session-token")
     if token:
         cookie_name = "__Secure-authjs.session-token"
     else:
-        token = request.cookies.get("authjs.session-token")
+        token = cookies.get("authjs.session-token")
         if token:
             cookie_name = "authjs.session-token"
 
@@ -64,9 +66,25 @@ async def get_current_user(request: Request) -> AuthUser:
                 )
         except Exception as e:
             logging.error(f"JWT decode failed: {e}")
-            # Fall through to dev mode or 401
+    return None
 
+
+async def get_current_user(request: Request) -> AuthUser:
+    """Extract user from NextAuth JWT cookie."""
+    user = _user_from_cookies(request.cookies)
+    if user is not None:
+        return user
     raise HTTPException(status_code=401, detail={"error": "로그인이 필요합니다."})
+
+
+async def get_current_user_ws(websocket: WebSocket) -> AuthUser | None:
+    """Resolve the current user for a WebSocket handshake.
+
+    Returns ``None`` when authentication fails so the caller can close the
+    socket with an application code (e.g. 4401) before ``accept``. Reuses the
+    same NextAuth cookie JWE decryption core as the HTTP path.
+    """
+    return _user_from_cookies(websocket.cookies)
 
 
 async def get_admin_user(user: AuthUser = Depends(get_current_user)) -> AuthUser:

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, Loader2, X, Volume2, VolumeX } from 'lucide-react';
+import { Mic, Loader2, X, Volume2, VolumeX, PhoneOff, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { useLearningCoachStream } from '@/hooks/useLearningCoachStream';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
+import { useRealtimeVoice } from '@/hooks/useRealtimeVoice';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { TextAnswerInput } from '@/components/admin/text-answer-input';
 
@@ -52,8 +53,31 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     return new URLSearchParams(window.location.search).get('textMode') === '1';
   });
 
+  // Realtime voice은 textMode가 아닐 때만 시도한다. 연결 실패/미지원/킬스위치 off면
+  // onUnavailable이 realtimeActive=false로 떨어뜨려 기존 턴제 루프로 graceful degradation.
+  const [realtimeActive, setRealtimeActive] = useState<boolean>(!textMode);
+
   const tts = useTextToSpeech({ persona: 'tutor' });
   const { speak: ttsSpeak, stop: ttsStop, isSpeaking: isAiSpeaking } = tts;
+
+  const realtime = useRealtimeVoice({
+    sessionId,
+    onTranscript: (t) => {
+      setMessages((prev) => [...prev, { role: t.role, content: t.text }]);
+    },
+    onMeta: (meta) => {
+      const node = (meta.result?.target_node ?? null) as { title?: string } | null;
+      if (node?.title) setCurrentTopicLabel(node.title);
+    },
+    onGuard: (g) => {
+      setMessages((prev) => [...prev, { role: 'assistant', content: g.message }]);
+    },
+    onUnavailable: () => {
+      // 실시간 음성 불가 → 턴제 루프로 폴백 (메시지 흐름은 유지).
+      setRealtimeActive(false);
+    },
+  });
+  const { status: realtimeStatus, start: startRealtime, hangup: hangupRealtime } = realtime;
 
   const endedRef = useRef(false);
   const finishWithError = useCallback((msg: string) => {
@@ -149,9 +173,9 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, interimTranscript]);
 
-  // AI 메시지가 추가되면 TTS 재생 후 자동으로 듣기 시작
+  // AI 메시지가 추가되면 TTS 재생 후 자동으로 듣기 시작 (턴제 폴백 경로 전용)
   useEffect(() => {
-    if (textMode) return;
+    if (textMode || realtimeActive) return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== 'assistant') return;
 
@@ -173,7 +197,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
       lastHeardRef.current = '';
       tryStartMic();
     })();
-  }, [messages, sessionId, ttsSpeak, resetTranscript, tryStartMic, textMode]);
+  }, [messages, sessionId, ttsSpeak, resetTranscript, tryStartMic, textMode, realtimeActive]);
 
   // 세션 종료 시 모듈 캐시 정리
   useEffect(() => {
@@ -182,15 +206,15 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     };
   }, [sessionId]);
 
-  // AI 발화 시작 시 듣기 중지
+  // AI 발화 시작 시 듣기 중지 (턴제 폴백 경로 전용)
   useEffect(() => {
-    if (textMode) return;
+    if (textMode || realtimeActive) return;
     if (isAiSpeaking && isListening) {
       stopListening();
       resetTranscript();
       lastHeardRef.current = '';
     }
-  }, [isAiSpeaking, isListening, stopListening, resetTranscript, textMode]);
+  }, [isAiSpeaking, isListening, stopListening, resetTranscript, textMode, realtimeActive]);
 
   // 무음 감지 → 자동 전송
   // interim이 있으면 사용자가 말하는 중 → 타이머 취소.
@@ -204,7 +228,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
       setCountdownSec(null);
     };
 
-    if (textMode) {
+    if (textMode || realtimeActive) {
       cancel();
       return;
     }
@@ -231,7 +255,7 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
       setCountdownSec(null);
       void handleSendRef.current?.();
     }, SILENCE_MS);
-  }, [transcript, interimTranscript, isListening, isStreaming, textMode]);
+  }, [transcript, interimTranscript, isListening, isStreaming, textMode, realtimeActive]);
 
   // 카운트다운 초 단위 감소 (표시용)
   useEffect(() => {
@@ -260,7 +284,26 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
     };
   }, [ttsStop]);
 
-  const showInterim = !textMode && isListening && (transcript || interimTranscript);
+  // Realtime 음성 세션 기동 (textMode 아니고 realtime 활성일 때 1회).
+  // 실패/미지원/킬스위치 off → onUnavailable이 realtimeActive=false로 떨어뜨려 턴제 폴백.
+  const realtimeStartedRef = useRef(false);
+  useEffect(() => {
+    if (textMode || !realtimeActive || realtimeStartedRef.current) return;
+    realtimeStartedRef.current = true;
+    void startRealtime();
+  }, [textMode, realtimeActive, startRealtime]);
+
+  // 세션 종료 시 realtime WS도 정리.
+  useEffect(() => {
+    return () => {
+      hangupRealtime();
+    };
+  }, [hangupRealtime]);
+
+  const showInterim =
+    !textMode && !realtimeActive && isListening && (transcript || interimTranscript);
+  const realtimeLive = realtimeActive && realtimeStatus === 'live';
+  const realtimeConnecting = realtimeActive && realtimeStatus === 'connecting';
 
   return (
     <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col bg-background">
@@ -356,6 +399,31 @@ export function SessionView({ sessionId, firstMessage, currentTopic, onEnd }: Pr
                     onSubmit={(text) => void handleSend(text)}
                     disabled={isStreaming}
                   />
+                </div>
+              ) : realtimeConnecting ? (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">음성 통화 연결 중…</span>
+                </div>
+              ) : realtimeLive ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 ring-4 ring-green-100/50 dark:bg-green-900/30 dark:ring-green-900/30">
+                    <Radio className="h-5 w-5 animate-pulse text-green-600 dark:text-green-400" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                      실시간 음성 통화 중
+                    </span>
+                    <button
+                      onClick={() => {
+                        hangupRealtime();
+                        void onEnd();
+                      }}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <PhoneOff className="h-3 w-3" /> 통화 종료
+                    </button>
+                  </div>
                 </div>
               ) : isAiSpeaking ? (
                 <div className="flex items-center gap-3">

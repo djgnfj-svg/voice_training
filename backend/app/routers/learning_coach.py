@@ -4,16 +4,18 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.database import get_db
-from app.dependencies import AuthUser, get_current_user
+from app.config import settings
+from app.database import async_session, get_db
+from app.dependencies import AuthUser, get_current_user, get_current_user_ws
 from app.agent.learning_coach.graph import pick_start_node, run_end_graph, run_start_graph, stream_agent_turn
 from app.agent.learning_coach.curriculum_seed import generate_and_insert_seed, normalize_goal
+from app.agent.learning_coach.realtime_relay import get_daily_seconds_used, run_realtime_session
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,57 @@ async def turn(
             yield {"event": "error", "data": json.dumps({"error": "응답 생성 중 문제가 생겼어요. 다시 시도해주세요."}, ensure_ascii=False)}
 
     return EventSourceResponse(event_stream())
+
+
+@router.websocket("/api/learning-coach/{session_id}/realtime")
+async def realtime(websocket: WebSocket, session_id: str):
+    """Full-duplex voice session over WebSocket (OpenAI Realtime relay).
+
+    Gated before ``accept``: NextAuth cookie auth, kill-switch, session
+    ownership, and a per-day voice-minute pre-check. Falls back to the turn-based
+    ``/turn`` path on any failure (the client downgrades gracefully on close).
+    Uses WebSocket application close codes (4xxx) to signal the reason.
+    """
+    # 1) Auth before accept — close 4401 on failure so the client can fall back.
+    user = await get_current_user_ws(websocket)
+    if user is None:
+        await websocket.close(code=4401)
+        return
+
+    # 2) Kill-switch — feature disabled means immediate fallback to turn-based.
+    if not settings.REALTIME_VOICE_ENABLED:
+        await websocket.close(code=4403)
+        return
+
+    # 3) Ownership + active status (same query as REST /turn) and daily pre-check.
+    async with async_session() as db:
+        own = (
+            await db.execute(
+                text(
+                    "SELECT 1 FROM learning_sessions WHERE id=:s AND user_id=:u AND status='active'"
+                ),
+                {"s": session_id, "u": user.id},
+            )
+        ).one_or_none()
+        if own is None:
+            await websocket.close(code=4404)
+            return
+
+        used = await get_daily_seconds_used(db, user.id)
+        remaining = settings.REALTIME_DAILY_MAX_SEC - used
+        if remaining <= 0:
+            await websocket.close(code=4429)
+            return
+
+        # 4) All gates passed — accept and hand off to the relay.
+        await websocket.accept()
+        await run_realtime_session(
+            websocket,
+            db,
+            session_id,
+            user.id,
+            daily_remaining_sec=remaining,
+        )
 
 
 class EndBody(BaseModel):
