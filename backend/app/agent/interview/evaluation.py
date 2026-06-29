@@ -1,10 +1,12 @@
-﻿# backend/app/agent/evaluator_agent.py
+# backend/app/agent/evaluator_agent.py
 from __future__ import annotations
 
-import json
 import logging
 
-from app.agent.interview.report_metrics import aggregate_evaluations, format_aggregate_for_prompt
+from app.agent.interview.report_metrics import (
+    aggregate_evaluations,
+    format_aggregate_for_prompt,
+)
 from app.config import settings
 from app.lib.llm_client import call_llm_json
 from app.prompts.agent import build_evaluation_messages, build_report_messages
@@ -105,7 +107,9 @@ def _normalize_evaluation(evaluation: dict, answer: str = "") -> dict:
         for key in scores:
             if scores[key] > cap:
                 scores[key] = cap
-        logger.info("Applied quality cap=%d to scores (answer_len=%d)", cap, len(answer or ""))
+        logger.info(
+            "Applied quality cap=%d to scores (answer_len=%d)", cap, len(answer or "")
+        )
 
     overall = sum(scores[k] * w for k, w in SCORE_WEIGHTS.items())
     evaluation["scores"] = scores
@@ -202,7 +206,8 @@ async def generate_report(
                 extra.append(f"누락: {', '.join(miss)}")
             kw_str = " | ".join(extra)
             history_parts.append(
-                f"점수: {ev.get('overallScore', '?')}" + (f" | {kw_str}" if kw_str else "")
+                f"점수: {ev.get('overallScore', '?')}"
+                + (f" | {kw_str}" if kw_str else "")
             )
         history_parts.append("---")
 
@@ -224,8 +229,7 @@ async def generate_report(
     # LLM 산술 오류 방지: 집계 수치는 서버가 계산한 값으로 덮어씀
     report["overallScore"] = aggregate["overallStats"]["avg"]
     report["categoryBreakdown"] = aggregate["categoryBreakdown"]
-    report["phaseAnalysis"] = aggregate["phaseAnalysis"]
-    report["diveTopicAnalysis"] = aggregate["diveTopicAnalysis"]
+    report["coverageAnalysis"] = aggregate["coverageAnalysis"]
     report["keywordStats"] = aggregate["keywordStats"]
 
     return report

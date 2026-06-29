@@ -57,41 +57,37 @@ async def _scenario_A() -> None:
     함수 직접 호출로 결정성 확보. DB는 건드리지 않음.
     """
     from app.agent.interview.fit_analysis import run_fit_analysis
-    from app.agent.interview.questioner import generate_scan_question
+    from app.agent.interview.plan_builder import build_rubric_plan
+    from app.agent.interview.questioner import generate_rubric_question
     from app.agent.interview.evaluation import evaluate_answer, generate_report
-    from app.agent.interview.state import ScanItem
 
     resume = _load_fixture("resume.json")
     jd = _load_fixture("job_posting.json")
 
     fit = await run_fit_analysis(resume, jd)
     avoid = fit.get("avoid_topics") or []
+    rubric_plan, _ = await build_rubric_plan(resume, jd, fit)
 
     user_profile = {"strengths": [], "weaknesses": [], "patterns": [], "context": []}
     history: list[dict] = []
-    projects = resume.get("projects") or []
     answers = [
         "FastAPI 기반으로 색인 파이프라인을 비동기화했고 Redis로 핫 캐시 계층을 두어 p95를 250ms로 맞췄습니다. 인덱싱 지연은 Bulk API 배치 사이즈 튜닝과 백프레셔로 30분에서 2분으로 줄였습니다.",
         "Kafka 토픽을 도메인 단위로 쪼개고 Outbox 패턴으로 트랜잭션 일관성을 유지했습니다. 컨슈머 그룹별 SLA를 정의해 모니터링했고, 재배포 시간을 40분에서 5분으로 단축했습니다.",
         "Airflow DAG로 일/월 정산을 자동화했고, idempotent task 설계 + checkpoint 재시도로 정산 오차를 0.3%에서 0.001%까지 줄였습니다.",
     ]
+    total = min(3, len(rubric_plan)) or 1
 
-    for i in range(3):
-        proj = projects[i % len(projects)]
-        scan_item: ScanItem = {
-            "project_ref": proj["name"],
-            "query": ", ".join(proj.get("techStack") or []),
-            "reason": "jd_match" if i < 2 else "jd_unmatched",
-        }
-        q = await generate_scan_question(
+    for i in range(total):
+        item = rubric_plan[i % len(rubric_plan)]
+        q = await generate_rubric_question(
             resume=resume,
             job_posting=jd,
             user_profile=user_profile,
             conversation_history=history,
-            scan_item=scan_item,
-            scan_idx=i,
-            total_scans=3,
-            resume_chunks=[{"content": proj.get("description", "")}],
+            rubric_item=item,
+            item_idx=i,
+            total_items=len(rubric_plan),
+            resume_chunks=[],
             avoid_topics=avoid,
         )
         question_text = q.get("question") or q.get("text") or "다음 프로젝트의 핵심 기여를 설명해 주세요."

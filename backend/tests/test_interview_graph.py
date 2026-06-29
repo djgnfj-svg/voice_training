@@ -16,7 +16,9 @@ def make_minimal_state(**overrides: Any) -> InterviewState:
         "resume": {
             "summary": "Backend developer",
             "skills": ["Python", "FastAPI"],
-            "projects": [{"name": "VoicePrep", "description": "Interview training service"}],
+            "projects": [
+                {"name": "VoicePrep", "description": "Interview training service"}
+            ],
         },
         "job_posting": None,
         "user_profile": {},
@@ -36,19 +38,29 @@ def make_minimal_state(**overrides: Any) -> InterviewState:
         "fit_analysis": {"avoid_topics": []},
         "has_resume_embeddings": False,
         "current_resume_chunks": [],
-        "phase": "scan",
-        "scan_plan": [
+        "rubric_plan": [
             {
-                "project_ref": "VoicePrep",
-                "query": "VoicePrep FastAPI",
-                "reason": "project_order",
+                "id": "r1",
+                "label": "FastAPI API 설계",
+                "jd_requirement": "FastAPI 기반 API",
+                "importance": "must",
+                "has_evidence": True,
+                "evidence_refs": ["FastAPI"],
+                "query": "FastAPI API 설계",
             }
         ],
-        "dive_plan": [],
-        "scan_evaluations": [],
-        "current_scan_idx": 0,
-        "current_dive_idx": 0,
-        "current_dive_depth": 0,
+        "coverage": [
+            {
+                "id": "r1",
+                "label": "FastAPI API 설계",
+                "importance": "must",
+                "has_evidence": True,
+                "status": "pending",
+                "depth_score": None,
+            }
+        ],
+        "current_rubric_idx": 0,
+        "current_item_depth": 1,
     }
     state.update(overrides)
     return state
@@ -63,9 +75,13 @@ async def test_fit_analysis_node_uses_module(monkeypatch):
         return True
 
     monkeypatch.setattr(graph.fit_analysis_module, "run_fit_analysis", run_fit_analysis)
-    monkeypatch.setattr(graph.resume_memory, "has_resume_embeddings", has_resume_embeddings)
+    monkeypatch.setattr(
+        graph.resume_memory, "has_resume_embeddings", has_resume_embeddings
+    )
 
-    out = await graph.fit_analysis(make_minimal_state(resume_id="resume-1"), db=object())
+    out = await graph.fit_analysis(
+        make_minimal_state(resume_id="resume-1"), db=object()
+    )
 
     assert out["fit_analysis"] == {"skill_match": None, "avoid_topics": ["legacy"]}
     assert out["has_resume_embeddings"] is True
@@ -81,53 +97,107 @@ async def test_start_graph_runs_initial_interview_flow(monkeypatch):
 
     async def fit_analysis(state, db):
         calls.append("fit_analysis")
-        return {**state, "fit_analysis": {"avoid_topics": []}, "has_resume_embeddings": False}
+        return {
+            **state,
+            "fit_analysis": {"avoid_topics": []},
+            "has_resume_embeddings": False,
+        }
 
-    async def build_scan_plan(state, db):
-        calls.append("build_scan_plan")
-        return {**state, "scan_plan": state["scan_plan"], "phase": "scan"}
+    async def build_rubric_plan(state, db):
+        calls.append("build_rubric_plan")
+        return {**state, "rubric_plan": state["rubric_plan"]}
 
-    async def scan_ask(state, db):
-        calls.append("scan_ask")
+    async def rubric_ask(state, db):
+        calls.append("rubric_ask")
         return {**state, "current_question": "첫 질문", "question_count": 1}
 
     monkeypatch.setattr(graph, "load_profile", load_profile)
     monkeypatch.setattr(graph, "fit_analysis", fit_analysis)
-    monkeypatch.setattr(graph, "build_scan_plan", build_scan_plan)
-    monkeypatch.setattr(graph, "scan_ask", scan_ask)
+    monkeypatch.setattr(graph, "build_rubric_plan", build_rubric_plan)
+    monkeypatch.setattr(graph, "rubric_ask", rubric_ask)
 
     out = await graph.run_start_graph(make_minimal_state(question_count=0), db=object())
 
-    assert calls == ["load_profile", "fit_analysis", "build_scan_plan", "scan_ask"]
+    assert calls == ["load_profile", "fit_analysis", "build_rubric_plan", "rubric_ask"]
     assert out["current_question"] == "첫 질문"
     assert out["question_count"] == 1
 
 
 @pytest.mark.asyncio
-async def test_answer_graph_routes_scan_to_next_question(monkeypatch):
+async def test_answer_graph_routes_to_next_question(monkeypatch):
     calls: list[str] = []
 
     async def evaluate_answer(state, db):
         calls.append("evaluate")
-        return {**state, "current_evaluation": {"overallScore": 80}}
+        return {
+            **state,
+            "current_evaluation": {"scores": {"depth": 85}, "overallScore": 80},
+        }
 
-    async def scan_next(state, db):
-        calls.append("scan_next")
-        return {**state, "next_action": "scan_ask", "current_scan_idx": 1}
+    async def coverage_next(state, db):
+        calls.append("coverage_next")
+        return {**state, "next_action": "rubric_ask", "current_rubric_idx": 1}
 
-    async def scan_ask(state, db):
-        calls.append("scan_ask")
+    async def rubric_ask(state, db):
+        calls.append("rubric_ask")
         return {**state, "current_question": "다음 질문", "question_count": 2}
 
     monkeypatch.setattr(graph, "evaluate_answer", evaluate_answer)
-    monkeypatch.setattr(graph, "scan_next", scan_next)
-    monkeypatch.setattr(graph, "scan_ask", scan_ask)
+    monkeypatch.setattr(graph, "coverage_next", coverage_next)
+    monkeypatch.setattr(graph, "rubric_ask", rubric_ask)
 
     out = await graph.run_answer_graph(make_minimal_state(), db=object())
 
-    assert calls == ["evaluate", "scan_next", "scan_ask"]
-    assert out["next_action"] == "scan_ask"
+    assert calls == ["evaluate", "coverage_next", "rubric_ask"]
+    assert out["next_action"] == "rubric_ask"
     assert out["current_question"] == "다음 질문"
+
+
+@pytest.mark.asyncio
+async def test_coverage_next_digs_when_shallow():
+    state = make_minimal_state(
+        current_item_depth=1,
+        current_evaluation={"scores": {"depth": 40}},
+    )
+    out = await graph.coverage_next(state, db=object())
+    # 같은 항목을 한 번 더 판다 (dig).
+    assert out["next_action"] == "rubric_ask"
+    assert out["current_rubric_idx"] == 0
+    assert out["coverage"][0]["status"] == "covered"
+
+
+@pytest.mark.asyncio
+async def test_coverage_next_ends_when_no_pending():
+    state = make_minimal_state(
+        current_item_depth=2,
+        current_evaluation={"scores": {"depth": 90}},
+    )
+    out = await graph.coverage_next(state, db=object())
+    assert out["next_action"] == "end"
+
+
+def test_select_next_rubric_item_skips_extra_gaps():
+    coverage = [
+        {"has_evidence": True, "status": "covered"},
+        {"has_evidence": False, "status": "covered"},  # gap #1 already asked
+        {"has_evidence": False, "status": "pending"},  # extra gap -> unverified
+        {"has_evidence": True, "status": "pending"},  # next askable
+    ]
+    idx = graph._select_next_rubric_item(coverage)
+    assert idx == 3
+    assert coverage[2]["status"] == "unverified"
+
+
+def test_select_next_rubric_item_counts_skipped_gap_toward_cap():
+    # /skip은 gap을 'unverified'로 표기한다. gap_asked가 'unverified'를 세지 않으면
+    # gap-cap이 우회되어 두 번째 gap이 출제된다(OQ-3 위반). unverified도 세야 한다.
+    coverage = [
+        {"has_evidence": False, "status": "unverified"},  # gap #1 skipped
+        {"has_evidence": False, "status": "pending"},  # must NOT be asked (cap reached)
+    ]
+    idx = graph._select_next_rubric_item(coverage)
+    assert idx is None
+    assert coverage[1]["status"] == "unverified"
 
 
 @pytest.mark.asyncio
@@ -136,12 +206,25 @@ async def test_langchain_tools_can_be_called(monkeypatch):
         return [{"user_id": user_id, "content": query, "top_k": top_k}]
 
     async def search_resume(db, user_id, resume_id, query, top_k=3):
-        return [{"user_id": user_id, "resume_id": resume_id, "content": query, "top_k": top_k}]
+        return [
+            {
+                "user_id": user_id,
+                "resume_id": resume_id,
+                "content": query,
+                "top_k": top_k,
+            }
+        ]
 
-    monkeypatch.setattr("app.agent.interview.graph.profile_memory.search_profile", search_profile)
-    monkeypatch.setattr("app.agent.interview.graph.resume_memory.search_resume", search_resume)
+    monkeypatch.setattr(
+        "app.agent.interview.graph.profile_memory.search_profile", search_profile
+    )
+    monkeypatch.setattr(
+        "app.agent.interview.graph.resume_memory.search_resume", search_resume
+    )
 
-    search_profile_tool, search_resume_tool = graph.make_interview_tools(object(), "user-1")
+    search_profile_tool, search_resume_tool = graph.make_interview_tools(
+        object(), "user-1"
+    )
 
     profile_json = await search_profile_tool.ainvoke({"query": "FastAPI", "top_k": 2})
     resume_json = await search_resume_tool.ainvoke(
@@ -157,7 +240,9 @@ async def test_langgraph_tool_node_executes_interview_tool(monkeypatch):
     async def search_profile(db, user_id, query, top_k=5):
         return [{"user_id": user_id, "content": query, "top_k": top_k}]
 
-    monkeypatch.setattr("app.agent.interview.graph.profile_memory.search_profile", search_profile)
+    monkeypatch.setattr(
+        "app.agent.interview.graph.profile_memory.search_profile", search_profile
+    )
 
     state = {
         "messages": [

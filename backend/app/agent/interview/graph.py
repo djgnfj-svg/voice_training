@@ -25,7 +25,12 @@ from app.agent.interview.state import InterviewState
 
 logger = logging.getLogger(__name__)
 
-MAX_DIVE_DEPTH = 3
+# 한 루브릭 항목 안에서의 최대 질문 수(첫 질문 + 1회 dig). OQ-2.
+MAX_ITEM_DEPTH = 2
+# depth 점수가 이 값 미만이고 아직 dig 여유가 있으면 같은 항목을 한 번 더 판다.
+DIG_DEEPER_THRESHOLD = 70
+# 근거 없음(gap) 항목을 면접 질문으로 출제할 최대 개수. OQ-3.
+MAX_GAP_QUESTIONS = 1
 
 
 class ToolCallState(TypedDict, total=False):
@@ -49,7 +54,7 @@ def _trace_meta(state: InterviewState, graph_name: str) -> dict[str, Any]:
         "graph_name": graph_name,
         "session_id": state.get("session_id"),
         "user_id": state.get("user_id"),
-        "phase": state.get("phase"),
+        "rubric_idx": state.get("current_rubric_idx"),
     }
 
 
@@ -147,6 +152,54 @@ def _format_question_event(
     }
 
 
+def _depth_score(evaluation_result: dict) -> int:
+    scores = (evaluation_result or {}).get("scores") or {}
+    try:
+        return int(scores.get("depth", 50))
+    except (TypeError, ValueError):
+        return 50
+
+
+def _coverage_from_plan(rubric_plan: list[dict]) -> list[dict]:
+    return [
+        {
+            "id": it.get("id"),
+            "label": it.get("label"),
+            "importance": it.get("importance"),
+            "has_evidence": it.get("has_evidence"),
+            "status": "pending",
+            "depth_score": None,
+        }
+        for it in rubric_plan
+    ]
+
+
+def _select_next_rubric_item(coverage: list[dict]) -> int | None:
+    """다음에 질문할 pending 항목 인덱스. gap 항목은 MAX_GAP_QUESTIONS개까지만,
+    초과분은 'unverified'로 표기하고 건너뛴다(리포트 미검증 표기용).
+
+    Side-effect: 예산 초과 gap 항목의 status를 coverage 리스트에서 'unverified'로
+    in-place 수정한다(호출자에게 별도 반환 없이 coverage가 변경됨).
+
+    gap_asked는 'covered'(답변 완료)뿐 아니라 'unverified'(/skip 또는 예산 초과)도
+    포함해 센다. /skip이 gap을 'unverified'로 표기하므로, 이를 빼면 gap-cap이
+    우회되어 다음 gap이 추가 출제된다(OQ-3 위반)."""
+    gap_asked = sum(
+        1
+        for c in coverage
+        if not c.get("has_evidence") and c.get("status") in ("covered", "unverified")
+    )
+    for i, c in enumerate(coverage):
+        if c.get("status") != "pending":
+            continue
+        if not c.get("has_evidence"):
+            if gap_asked >= MAX_GAP_QUESTIONS:
+                c["status"] = "unverified"
+                continue
+        return i
+    return None
+
+
 async def load_profile(state: InterviewState, db: AsyncSession) -> InterviewState:
     profile = await profile_memory.load_user_profile(
         db,
@@ -191,71 +244,90 @@ async def fit_analysis(state: InterviewState, db: AsyncSession) -> InterviewStat
     }
 
 
-async def build_scan_plan(state: InterviewState, db: AsyncSession) -> InterviewState:
-    scan_plan, source = await plan_builder.build_scan_plan_hybrid(
-        state["resume"], state.get("fit_analysis") or {}
+async def build_rubric_plan(state: InterviewState, db: AsyncSession) -> InterviewState:
+    rubric_plan, source = await plan_builder.build_rubric_plan(
+        state["resume"],
+        state.get("job_posting"),
+        state.get("fit_analysis") or {},
     )
+    coverage = _coverage_from_plan(rubric_plan)
+
+    # 질문 예산: 출제 가능 항목(evidence 전부 + gap 최대 1)당 최대 2질문, 상한 max_questions.
+    askable = sum(1 for c in coverage if c["has_evidence"]) + min(
+        MAX_GAP_QUESTIONS, sum(1 for c in coverage if not c["has_evidence"])
+    )
+    hard_cap = state.get("max_questions", 9)
+    max_q = (
+        max(askable, min(hard_cap, askable * MAX_ITEM_DEPTH)) if askable else hard_cap
+    )
+
     events = list(state.get("pending_events", []))
-    max_q = min(state.get("max_questions", 9), len(scan_plan) + 6)
     events.append(
         {
             "event": "status",
             "data": {
-                "phase": "scan_plan_ready",
-                "scan_count": len(scan_plan),
+                "phase": "rubric_plan_ready",
+                "rubric_count": len(rubric_plan),
                 "max_questions": max_q,
-                "scan_plan_source": source,
+                "rubric_plan_source": source,
             },
         }
     )
     return {
         **state,
-        "phase": "scan",
-        "scan_plan": scan_plan,
-        "scan_evaluations": [],
-        "current_scan_idx": 0,
-        "current_dive_idx": 0,
-        "current_dive_depth": 0,
+        "rubric_plan": rubric_plan,
+        "coverage": coverage,
+        "current_rubric_idx": 0,
+        "current_item_depth": 0,
+        "max_questions": max_q,
         "pending_events": events,
     }
 
 
-async def scan_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
+async def rubric_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
     events = list(state.get("pending_events", []))
-    scan_plan = state.get("scan_plan", [])
-    idx = state.get("current_scan_idx", 0)
-    if idx >= len(scan_plan):
-        logger.warning("scan_ask called with exhausted scan_plan")
+    rubric_plan = state.get("rubric_plan", [])
+    idx = state.get("current_rubric_idx", 0)
+    depth = state.get("current_item_depth", 0)
+    if idx >= len(rubric_plan):
+        logger.warning("rubric_ask called with exhausted rubric_plan")
         return state
 
-    scan_item = scan_plan[idx]
-    events.append(
-        {
-            "event": "status",
-            "data": {"phase": "generating_question", "phaseKind": "scan"},
-        }
-    )
-    chunks = await _search_resume_chunks(state, db, scan_item["query"], top_k=3)
-    result = await questioner.generate_scan_question(
-        resume=state["resume"],
-        job_posting=state.get("job_posting"),
-        user_profile=state.get("user_profile", {}),
-        conversation_history=state.get("conversation_history", []),
-        scan_item=scan_item,
-        scan_idx=idx,
-        total_scans=len(scan_plan),
-        resume_chunks=chunks,
-        avoid_topics=(state.get("fit_analysis") or {}).get("avoid_topics") or [],
-    )
+    item = rubric_plan[idx]
+    events.append({"event": "status", "data": {"phase": "generating_question"}})
+    chunks = await _search_resume_chunks(state, db, item["query"], top_k=3)
+    if depth == 0:
+        result = await questioner.generate_rubric_question(
+            resume=state["resume"],
+            job_posting=state.get("job_posting"),
+            user_profile=state.get("user_profile", {}),
+            conversation_history=state.get("conversation_history", []),
+            rubric_item=item,
+            item_idx=idx,
+            total_items=len(rubric_plan),
+            resume_chunks=chunks,
+            avoid_topics=(state.get("fit_analysis") or {}).get("avoid_topics") or [],
+        )
+    else:
+        result = await questioner.generate_dig_deeper(
+            state.get("conversation_history", []),
+            state.get("current_evaluation", {}),
+        )
+
     question = result.get("question", "")
     question_count = state.get("question_count", 0) + 1
+    has_evidence = bool(item.get("has_evidence"))
+    phase = "evidence" if has_evidence else "gap"
+    phase_label = f"JD 항목 {idx + 1}/{len(rubric_plan)} · {item['label']}"
+    if not has_evidence:
+        phase_label += " (미검증 영역)"
     events.append(
         _format_question_event(
             question=question,
             question_count=question_count,
-            follow_up_round=0,
-            phase="scan",
-            phase_label=f"훑기 {idx + 1}/{len(scan_plan)} · {scan_item['project_ref']}",
+            follow_up_round=depth,
+            phase=phase,
+            phase_label=phase_label,
             result=result,
         )
     )
@@ -264,6 +336,7 @@ async def scan_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
         "current_question": question,
         "current_resume_chunks": chunks,
         "question_count": question_count,
+        "current_item_depth": depth + 1,
         "pending_events": events,
     }
 
@@ -281,28 +354,18 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
         state.get("conversation_history", []),
     )
 
-    phase = state.get("phase", "scan")
-    meta: dict[str, Any] = {"phase": phase}
-    if phase == "scan":
-        scan_idx = state.get("current_scan_idx", 0)
-        scan_plan = state.get("scan_plan") or []
-        if 0 <= scan_idx < len(scan_plan):
-            meta["scanIdx"] = scan_idx
-            meta["projectRef"] = scan_plan[scan_idx].get("project_ref", "")
-    elif phase == "dive":
-        dive_idx = state.get("current_dive_idx", 0)
-        dive_plan = state.get("dive_plan") or []
-        if 0 <= dive_idx < len(dive_plan):
-            topic = dive_plan[dive_idx]
-            meta.update(
-                {
-                    "diveIdx": dive_idx,
-                    "topicLabel": topic.get("topic", ""),
-                    "angle": topic.get("angle", ""),
-                    "projectRef": topic.get("project_ref", ""),
-                    "diveDepth": state.get("current_dive_depth", 0),
-                }
-            )
+    rubric_plan = state.get("rubric_plan") or []
+    idx = state.get("current_rubric_idx", 0)
+    meta: dict[str, Any] = {}
+    if 0 <= idx < len(rubric_plan):
+        item = rubric_plan[idx]
+        meta = {
+            "rubricId": item.get("id"),
+            "rubricLabel": item.get("label"),
+            "hasEvidence": bool(item.get("has_evidence")),
+            "importance": item.get("importance"),
+            "itemDepth": state.get("current_item_depth", 0),
+        }
     answer_evaluation["meta"] = meta
 
     history = list(state.get("conversation_history", []))
@@ -336,151 +399,40 @@ async def evaluate_answer(state: InterviewState, db: AsyncSession) -> InterviewS
     }
 
 
-async def scan_next(state: InterviewState, db: AsyncSession) -> InterviewState:
-    scan_evals = list(state.get("scan_evaluations", []))
-    scan_evals.append(state.get("current_evaluation") or {})
-    new_scan_idx = state.get("current_scan_idx", 0) + 1
-    action = (
-        "build_dive_plan"
-        if new_scan_idx >= len(state.get("scan_plan", []))
-        else "scan_ask"
-    )
-    return {
-        **state,
-        "scan_evaluations": scan_evals,
-        "current_scan_idx": new_scan_idx,
-        "next_action": action,
-    }
+async def coverage_next(state: InterviewState, db: AsyncSession) -> InterviewState:
+    """현재 항목 커버리지 기록 후 dig_deeper / 다음 미커버 항목 / 종료를 결정."""
+    coverage = [dict(c) for c in state.get("coverage", [])]
+    idx = state.get("current_rubric_idx", 0)
+    item_depth = state.get("current_item_depth", 0)
+    depth_score = _depth_score(state.get("current_evaluation") or {})
 
-
-async def build_dive_plan(state: InterviewState, db: AsyncSession) -> InterviewState:
-    dive_plan = plan_builder.build_dive_plan(
-        state.get("scan_plan", []),
-        state.get("scan_evaluations", []),
-        state.get("fit_analysis") or {},
-    )
-    events = list(state.get("pending_events", []))
-    events.append(
-        {
-            "event": "status",
-            "data": {
-                "phase": "dive_plan_ready",
-                "dive_topics": [
-                    {
-                        "topic": t["topic"],
-                        "angle": t["angle"],
-                        "project_ref": t["project_ref"],
-                    }
-                    for t in dive_plan
-                ],
-            },
-        }
-    )
-    return {
-        **state,
-        "phase": "dive",
-        "dive_plan": dive_plan,
-        "current_dive_idx": 0,
-        "current_dive_depth": 0,
-        "pending_events": events,
-    }
-
-
-async def dive_ask(state: InterviewState, db: AsyncSession) -> InterviewState:
-    events = list(state.get("pending_events", []))
-    dive_plan = state.get("dive_plan", [])
-    idx = state.get("current_dive_idx", 0)
-    depth = state.get("current_dive_depth", 0)
-    if idx >= len(dive_plan):
-        logger.warning("dive_ask called with exhausted dive_plan")
-        return state
-
-    topic = dive_plan[idx]
-    events.append(
-        {
-            "event": "status",
-            "data": {"phase": "generating_question", "phaseKind": "dive"},
-        }
-    )
-    chunks = await _search_resume_chunks(state, db, topic["query"], top_k=3)
-    if depth == 0:
-        result = await questioner.generate_dive_question(
-            resume=state["resume"],
-            job_posting=state.get("job_posting"),
-            user_profile=state.get("user_profile", {}),
-            conversation_history=state.get("conversation_history", []),
-            dive_topic=topic,
-            current_depth=depth,
-            resume_chunks=chunks,
-            avoid_topics=(state.get("fit_analysis") or {}).get("avoid_topics") or [],
-        )
-    else:
-        result = await questioner.generate_dig_deeper(
-            state.get("conversation_history", []),
-            state.get("current_evaluation", {}),
+    if 0 <= idx < len(coverage):
+        cov = coverage[idx]
+        cov["status"] = "covered"
+        prev = cov.get("depth_score")
+        cov["depth_score"] = (
+            max(prev, depth_score) if isinstance(prev, int) else depth_score
         )
 
-    question = result.get("question", "")
-    question_count = state.get("question_count", 0) + 1
-    new_depth = depth + 1
-    events.append(
-        _format_question_event(
-            question=question,
-            question_count=question_count,
-            follow_up_round=depth,
-            phase="dive",
-            phase_label=f"딥다이브 · {topic['topic']} ({new_depth}/{MAX_DIVE_DEPTH})",
-            result=result,
-        )
-    )
+    # 같은 항목 한 번 더 파기 (depth 부족 + dig 여유)
+    if depth_score < DIG_DEEPER_THRESHOLD and item_depth < MAX_ITEM_DEPTH:
+        return {**state, "coverage": coverage, "next_action": "rubric_ask"}
+
+    next_idx = _select_next_rubric_item(coverage)
+    if next_idx is None:
+        return {**state, "coverage": coverage, "next_action": "end"}
     return {
         **state,
-        "current_question": question,
-        "current_resume_chunks": chunks,
-        "question_count": question_count,
-        "current_dive_depth": new_depth,
-        "pending_events": events,
+        "coverage": coverage,
+        "current_rubric_idx": next_idx,
+        "current_item_depth": 0,
+        "next_action": "rubric_ask",
     }
-
-
-async def decide_in_topic(state: InterviewState, db: AsyncSession) -> InterviewState:
-    dive_plan = state.get("dive_plan", [])
-    dive_idx = state.get("current_dive_idx", 0)
-    depth = state.get("current_dive_depth", 0)
-    if dive_idx >= len(dive_plan):
-        return {**state, "next_action": "end"}
-
-    topic = dive_plan[dive_idx]
-    result = await questioner.decide_in_topic(
-        project_ref=topic["project_ref"],
-        angle=topic["angle"],
-        current_depth=depth,
-        last_evaluation=state.get("current_evaluation") or {},
-        remaining_topics=len(dive_plan) - dive_idx,
-    )
-    action = result.get("action", "next_topic")
-    if depth >= MAX_DIVE_DEPTH:
-        action = "next_topic"
-    if action == "next_topic" and dive_idx + 1 >= len(dive_plan):
-        action = "end"
-    if action == "end" and dive_idx + 1 < len(dive_plan):
-        action = "next_topic"
-
-    if action == "next_topic":
-        return {
-            **state,
-            "next_action": "dive_ask",
-            "current_dive_idx": dive_idx + 1,
-            "current_dive_depth": 0,
-        }
-    if action == "dig_deeper":
-        return {**state, "next_action": "dive_ask"}
-    return {**state, "next_action": "end", "phase": "done"}
 
 
 def enforce_question_cap(state: InterviewState) -> InterviewState:
     if state.get("question_count", 0) >= state.get("max_questions", 9):
-        return {**state, "next_action": "end", "phase": "done"}
+        return {**state, "next_action": "end"}
     return state
 
 
@@ -507,29 +459,8 @@ async def generate_report(state: InterviewState, db: AsyncSession) -> InterviewS
     return {**state, "overall_report": report, "pending_events": events}
 
 
-def _route_phase(state: InterviewState) -> str:
-    phase = state.get("phase", "scan")
-    if phase == "scan":
-        return "scan_next"
-    if phase == "dive":
-        return "decide_in_topic"
-    return "end"
-
-
 def _route_action(state: InterviewState) -> str:
-    action = state.get("next_action", "end")
-    if action in {"scan_ask", "build_dive_plan", "dive_ask"}:
-        return action
-    return "end"
-
-
-def _route_next_question(state: InterviewState) -> str:
-    action = state.get("next_action")
-    if action == "build_dive_plan":
-        return "build_dive_plan"
-    if action == "dive_ask":
-        return "dive_ask"
-    return "scan_ask"
+    return "rubric_ask" if state.get("next_action") == "rubric_ask" else "end"
 
 
 def build_start_graph(db: AsyncSession):
@@ -541,21 +472,21 @@ def build_start_graph(db: AsyncSession):
     async def fit_analysis_node(state: InterviewState) -> InterviewState:
         return await fit_analysis(state, db)
 
-    async def build_scan_plan_node(state: InterviewState) -> InterviewState:
-        return await build_scan_plan(state, db)
+    async def build_rubric_plan_node(state: InterviewState) -> InterviewState:
+        return await build_rubric_plan(state, db)
 
-    async def scan_ask_node(state: InterviewState) -> InterviewState:
-        return await scan_ask(state, db)
+    async def rubric_ask_node(state: InterviewState) -> InterviewState:
+        return await rubric_ask(state, db)
 
     graph.add_node("load_profile", load_profile_node)
     graph.add_node("fit_analysis", fit_analysis_node)
-    graph.add_node("build_scan_plan", build_scan_plan_node)
-    graph.add_node("scan_ask", scan_ask_node)
+    graph.add_node("build_rubric_plan", build_rubric_plan_node)
+    graph.add_node("rubric_ask", rubric_ask_node)
     graph.set_entry_point("load_profile")
     graph.add_edge("load_profile", "fit_analysis")
-    graph.add_edge("fit_analysis", "build_scan_plan")
-    graph.add_edge("build_scan_plan", "scan_ask")
-    graph.add_edge("scan_ask", END)
+    graph.add_edge("fit_analysis", "build_rubric_plan")
+    graph.add_edge("build_rubric_plan", "rubric_ask")
+    graph.add_edge("rubric_ask", END)
     return graph.compile()
 
 
@@ -567,20 +498,11 @@ def build_answer_graph(db: AsyncSession):
             return state
         return await evaluate_answer(state, db)
 
-    async def scan_next_node(state: InterviewState) -> InterviewState:
-        return await scan_next(state, db)
+    async def coverage_next_node(state: InterviewState) -> InterviewState:
+        return await coverage_next(state, db)
 
-    async def decide_in_topic_node(state: InterviewState) -> InterviewState:
-        return await decide_in_topic(state, db)
-
-    async def scan_ask_node(state: InterviewState) -> InterviewState:
-        return await scan_ask(state, db)
-
-    async def build_dive_plan_node(state: InterviewState) -> InterviewState:
-        return await build_dive_plan(state, db)
-
-    async def dive_ask_node(state: InterviewState) -> InterviewState:
-        return await dive_ask(state, db)
+    async def rubric_ask_node(state: InterviewState) -> InterviewState:
+        return await rubric_ask(state, db)
 
     async def update_profile_node(state: InterviewState) -> InterviewState:
         return await update_profile(state, db)
@@ -589,39 +511,23 @@ def build_answer_graph(db: AsyncSession):
         return await generate_report(state, db)
 
     graph.add_node("evaluate", evaluate_node)
-    graph.add_node("scan_next", scan_next_node)
-    graph.add_node("decide_in_topic", decide_in_topic_node)
+    graph.add_node("coverage_next", coverage_next_node)
     graph.add_node("enforce_question_cap", enforce_question_cap)
-    graph.add_node("scan_ask", scan_ask_node)
-    graph.add_node("build_dive_plan", build_dive_plan_node)
-    graph.add_node("dive_ask", dive_ask_node)
+    graph.add_node("rubric_ask", rubric_ask_node)
     graph.add_node("update_profile", update_profile_node)
     graph.add_node("generate_report", generate_report_node)
     graph.set_entry_point("evaluate")
-    graph.add_conditional_edges(
-        "evaluate",
-        _route_phase,
-        {
-            "scan_next": "scan_next",
-            "decide_in_topic": "decide_in_topic",
-            "end": "update_profile",
-        },
-    )
-    graph.add_edge("scan_next", "enforce_question_cap")
-    graph.add_edge("decide_in_topic", "enforce_question_cap")
+    graph.add_edge("evaluate", "coverage_next")
+    graph.add_edge("coverage_next", "enforce_question_cap")
     graph.add_conditional_edges(
         "enforce_question_cap",
         _route_action,
         {
-            "scan_ask": "scan_ask",
-            "build_dive_plan": "build_dive_plan",
-            "dive_ask": "dive_ask",
+            "rubric_ask": "rubric_ask",
             "end": "update_profile",
         },
     )
-    graph.add_edge("build_dive_plan", "dive_ask")
-    graph.add_edge("scan_ask", END)
-    graph.add_edge("dive_ask", END)
+    graph.add_edge("rubric_ask", END)
     graph.add_edge("update_profile", "generate_report")
     graph.add_edge("generate_report", END)
     return graph.compile()
@@ -652,44 +558,16 @@ def build_end_graph(db: AsyncSession):
     return graph.compile()
 
 
-def build_scan_plan_graph(db: AsyncSession):
+def build_rubric_ask_graph(db: AsyncSession):
+    """단일 rubric_ask — skip 흐름에서 다음 질문 생성용."""
     graph = StateGraph(InterviewState)
 
-    async def build_scan_plan_node(state: InterviewState) -> InterviewState:
-        return await build_scan_plan(state, db)
+    async def rubric_ask_node(state: InterviewState) -> InterviewState:
+        return await rubric_ask(state, db)
 
-    graph.add_node("build_scan_plan", build_scan_plan_node)
-    graph.set_entry_point("build_scan_plan")
-    graph.add_edge("build_scan_plan", END)
-    return graph.compile()
-
-
-def build_next_question_graph(db: AsyncSession):
-    graph = StateGraph(InterviewState)
-
-    async def build_dive_plan_node(state: InterviewState) -> InterviewState:
-        return await build_dive_plan(state, db)
-
-    async def scan_ask_node(state: InterviewState) -> InterviewState:
-        return await scan_ask(state, db)
-
-    async def dive_ask_node(state: InterviewState) -> InterviewState:
-        return await dive_ask(state, db)
-
-    graph.add_node("build_dive_plan", build_dive_plan_node)
-    graph.add_node("scan_ask", scan_ask_node)
-    graph.add_node("dive_ask", dive_ask_node)
-    graph.set_conditional_entry_point(
-        _route_next_question,
-        {
-            "build_dive_plan": "build_dive_plan",
-            "scan_ask": "scan_ask",
-            "dive_ask": "dive_ask",
-        },
-    )
-    graph.add_edge("build_dive_plan", "dive_ask")
-    graph.add_edge("scan_ask", END)
-    graph.add_edge("dive_ask", END)
+    graph.add_node("rubric_ask", rubric_ask_node)
+    graph.set_entry_point("rubric_ask")
+    graph.add_edge("rubric_ask", END)
     return graph.compile()
 
 
@@ -720,19 +598,11 @@ async def run_end_graph(state: InterviewState, db: AsyncSession) -> InterviewSta
     return await _run_graph("end", state, lambda: build_end_graph(db).ainvoke(state))
 
 
-async def run_scan_plan_graph(
+async def run_rubric_ask_graph(
     state: InterviewState, db: AsyncSession
 ) -> InterviewState:
     return await _run_graph(
-        "scan_plan", state, lambda: build_scan_plan_graph(db).ainvoke(state)
-    )
-
-
-async def run_next_question_graph(
-    state: InterviewState, db: AsyncSession
-) -> InterviewState:
-    return await _run_graph(
-        "next_question", state, lambda: build_next_question_graph(db).ainvoke(state)
+        "rubric_ask", state, lambda: build_rubric_ask_graph(db).ainvoke(state)
     )
 
 

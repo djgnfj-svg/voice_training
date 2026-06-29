@@ -1,4 +1,5 @@
 """Fit Analysis: 이력서와 JD 매칭. skill_match는 코드, avoid_topics는 LLM."""
+
 from __future__ import annotations
 
 import logging
@@ -87,7 +88,9 @@ def _summarize_resume(resume: dict | None) -> str:
     for e in experience[:3]:
         if not isinstance(e, dict):
             continue
-        parts.append(f"- 경력: {e.get('company','')} {e.get('position','')} ({e.get('period','')})")
+        parts.append(
+            f"- 경력: {e.get('company', '')} {e.get('position', '')} ({e.get('period', '')})"
+        )
     return "\n".join(parts) or "이력서 정보 없음"
 
 
@@ -104,9 +107,14 @@ def _summarize_jd(jd: dict | None) -> str:
             parts.append("requirements:\n" + "\n".join(f"- {r}" for r in reqs[:10]))
         else:
             parts.append(f"requirements: {reqs}")
-    if resp := jd.get("responsibilities"):
-        if isinstance(resp, list):
-            parts.append("responsibilities:\n" + "\n".join(f"- {r}" for r in resp[:10]))
+    # responsibilities/duties는 JD 파서가 'duties'로 내보내기도 한다 — 둘 다 수용.
+    for key in ("responsibilities", "duties"):
+        resp = jd.get(key)
+        if isinstance(resp, list) and resp:
+            parts.append(f"{key}:\n" + "\n".join(f"- {r}" for r in resp[:10]))
+    if pref := jd.get("preferred"):
+        if isinstance(pref, list) and pref:
+            parts.append("preferred:\n" + "\n".join(f"- {r}" for r in pref[:6]))
     return "\n".join(parts) or "채용공고 정보 없음"
 
 

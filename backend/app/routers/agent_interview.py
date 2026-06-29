@@ -20,6 +20,7 @@ from app.agent.interview.state import InterviewState
 from app.models.agent_interview import AgentInterviewSession, AgentInterviewMessage
 from app.models.resume import Resume
 from app.models.interview import JobPosting
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -27,6 +28,7 @@ QUESTION_ROLES = ("agent_question", "agent_followup")
 
 
 # ---------- Schemas ----------
+
 
 class StartRequest(BaseModel):
     resumeId: str
@@ -62,29 +64,27 @@ def _latest_question_number(messages: list[AgentInterviewMessage]) -> int:
 
 
 def _question_role_for_state(state: InterviewState) -> str:
-    if state.get("phase") == "dive" and state.get("current_dive_depth", 0) > 1:
-        return "agent_followup"
-    return "agent_question"
+    # item_depth는 rubric_ask에서 ask마다 +1. 첫 질문=1, dig 꼬리질문=2.
+    return (
+        "agent_followup" if state.get("current_item_depth", 0) > 1 else "agent_question"
+    )
 
 
 def _follow_up_round_for_state(state: InterviewState) -> int:
-    if state.get("phase") != "dive":
-        return 0
-    return max(state.get("current_dive_depth", 0) - 1, 0)
+    return max(state.get("current_item_depth", 0) - 1, 0)
 
 
 def _is_next_question_action(action: str) -> bool:
-    return action in {"scan_ask", "dive_ask", "build_dive_plan"}
+    return action == "rubric_ask"
 
 
 def _persist_progress(session: AgentInterviewSession, state: InterviewState) -> None:
-    session.phase = state.get("phase")
-    session.scan_plan = state.get("scan_plan")
-    session.dive_plan = state.get("dive_plan")
-    session.scan_evaluations = state.get("scan_evaluations")
-    session.current_scan_idx = state.get("current_scan_idx", 0)
-    session.current_dive_idx = state.get("current_dive_idx", 0)
-    session.current_dive_depth = state.get("current_dive_depth", 0)
+    # 컬럼 재사용: current_scan_idx ← rubric_idx, current_dive_depth ← item_depth.
+    session.rubric_plan = state.get("rubric_plan")
+    session.coverage = state.get("coverage")
+    session.current_scan_idx = state.get("current_rubric_idx", 0)
+    session.current_dive_depth = state.get("current_item_depth", 0)
+    session.max_questions = state.get("max_questions", session.max_questions)
 
 
 def _complete_session(session: AgentInterviewSession, state: InterviewState) -> None:
@@ -93,16 +93,19 @@ def _complete_session(session: AgentInterviewSession, state: InterviewState) -> 
     session.report_data = state.get("overall_report")
     if state.get("overall_report"):
         session.overall_score = state["overall_report"].get("overallScore")
-    session.phase = "done"
-    session.current_scan_idx = state.get("current_scan_idx", 0)
-    session.current_dive_idx = state.get("current_dive_idx", 0)
-    session.current_dive_depth = state.get("current_dive_depth", 0)
+    session.coverage = state.get("coverage")
+    session.current_scan_idx = state.get("current_rubric_idx", 0)
+    session.current_dive_depth = state.get("current_item_depth", 0)
 
 
-async def _load_resume_data(db: AsyncSession, resume_id: str | None) -> dict:
+async def _load_resume_data(
+    db: AsyncSession, resume_id: str | None, user_id: str
+) -> dict:
     if not resume_id:
         return {}
-    result = await db.execute(select(Resume).where(Resume.id == resume_id))
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
+    )
     resume = result.scalar_one_or_none()
     return resume.parsed_data if resume else {}
 
@@ -125,7 +128,9 @@ async def _load_job_posting_data(
     return job_posting.parsed_data if job_posting else None
 
 
-def _conversation_from_messages(messages: list[AgentInterviewMessage]) -> tuple[list[dict], str, int]:
+def _conversation_from_messages(
+    messages: list[AgentInterviewMessage],
+) -> tuple[list[dict], str, int]:
     conversation_history = []
     current_question = ""
     question_count = 0
@@ -135,12 +140,14 @@ def _conversation_from_messages(messages: list[AgentInterviewMessage]) -> tuple[
             current_question = msg.content
             question_count = msg.question_number or question_count
         elif msg.role == "user_answer" and msg.evaluation:
-            conversation_history.append({
-                "question": current_question,
-                "answer": msg.content,
-                "evaluation": msg.evaluation,
-                "question_number": msg.question_number,
-            })
+            conversation_history.append(
+                {
+                    "question": current_question,
+                    "answer": msg.content,
+                    "evaluation": msg.evaluation,
+                    "question_number": msg.question_number,
+                }
+            )
 
     return conversation_history, current_question, question_count
 
@@ -155,42 +162,31 @@ async def _restore_interview_state(
     require_active_question: bool = False,
 ) -> tuple[InterviewState, list[AgentInterviewMessage]]:
     messages = sorted(session.messages, key=lambda m: m.message_index)
-    conversation_history, current_question, question_count = _conversation_from_messages(messages)
+    conversation_history, current_question, question_count = (
+        _conversation_from_messages(messages)
+    )
 
     if require_active_question:
-        last_question_msg = next((msg for msg in reversed(messages) if msg.role in QUESTION_ROLES), None)
+        last_question_msg = next(
+            (msg for msg in reversed(messages) if msg.role in QUESTION_ROLES), None
+        )
         if not last_question_msg:
             raise HTTPException(400, {"error": "No active question"})
         current_question = last_question_msg.content
         question_count = last_question_msg.question_number or 1
 
-    resume_data = await _load_resume_data(db, session.resume_id)
+    resume_data = await _load_resume_data(db, session.resume_id, user_id)
     job_posting_data = await _load_job_posting_data(
         db,
         job_posting_id=session.job_posting_id,
         user_id=user_id,
     )
     user_profile = await load_user_profile(db, user_id, resume_data, job_posting_data)
-    has_emb = await has_resume_embeddings(db, session.resume_id) if session.resume_id else False
-
-    phase = session.phase or "scan"
-    scan_plan = session.scan_plan or []
-    if not scan_plan:
-        tmp_state: InterviewState = {
-            "session_id": session_id,
-            "user_id": user_id,
-            "resume": resume_data,
-            "job_posting": job_posting_data,
-            "user_profile": user_profile,
-            "fit_analysis": session.fit_analysis,
-            "pending_events": [],
-        }  # type: ignore
-        tmp_state = await interview_graph.run_scan_plan_graph(tmp_state, db)
-        phase = tmp_state.get("phase") or phase
-        scan_plan = tmp_state.get("scan_plan") or []
-        session.phase = phase
-        session.scan_plan = scan_plan
-        logger.info("Legacy session %s scan_plan rebuilt", session_id)
+    has_emb = (
+        await has_resume_embeddings(db, session.resume_id)
+        if session.resume_id
+        else False
+    )
 
     state: InterviewState = {
         "session_id": session_id,
@@ -201,7 +197,7 @@ async def _restore_interview_state(
         "current_question": current_question,
         "current_answer": current_answer,
         "question_count": question_count,
-        "max_questions": session.max_questions or 7,
+        "max_questions": session.max_questions or 9,
         "current_evaluation": {},
         "next_action": "",
         "conversation_history": conversation_history,
@@ -211,15 +207,56 @@ async def _restore_interview_state(
         "resume_id": session.resume_id,
         "has_resume_embeddings": has_emb,
         "current_resume_chunks": [],
-        "phase": phase,
-        "scan_plan": scan_plan,
-        "dive_plan": session.dive_plan or [],
-        "scan_evaluations": session.scan_evaluations or [],
-        "current_scan_idx": session.current_scan_idx or 0,
-        "current_dive_idx": session.current_dive_idx or 0,
-        "current_dive_depth": session.current_dive_depth or 0,
+        # 컬럼 재사용: current_scan_idx → rubric_idx, current_dive_depth → item_depth.
+        "rubric_plan": session.rubric_plan or [],
+        "coverage": session.coverage or [],
+        "current_rubric_idx": session.current_scan_idx or 0,
+        "current_item_depth": session.current_dive_depth or 0,
     }
     return state, messages
+
+
+def _is_legacy_session(session: AgentInterviewSession) -> bool:
+    """rubric_plan 컬럼이 NULL인 진행중 세션 = Scan/Dive 시절 레거시 세션."""
+    return session.rubric_plan is None
+
+
+async def _legacy_finalize_events(
+    *,
+    db: AsyncSession,
+    session: AgentInterviewSession,
+    session_id: str,
+    user_id: str,
+):
+    """레거시 진행중 세션을 즉시 종료(completed)하고 가능하면 리포트 생성.
+
+    rubric rebuild는 하지 않는다 (확정 결정 OQ-4).
+    """
+    legacy_state, _ = await _restore_interview_state(
+        db=db, session=session, session_id=session_id, user_id=user_id
+    )
+    legacy_state.update(
+        {"current_question": "", "current_answer": "", "next_action": "end"}
+    )
+    try:
+        if legacy_state.get("conversation_history"):
+            legacy_state = await interview_graph.run_end_graph(legacy_state, db)
+            for ev in legacy_state.get("pending_events", []):
+                yield {"event": ev["event"], "data": json.dumps(ev["data"])}
+    except Exception:
+        logger.exception("Legacy session %s finalize failed", session_id)
+    _complete_session(session, legacy_state)
+    await db.commit()
+    yield {
+        "event": "action",
+        "data": json.dumps(
+            {
+                "action": "end",
+                "questionCount": legacy_state.get("question_count", 0),
+                "maxQuestions": legacy_state.get("max_questions", 9),
+            }
+        ),
+    }
 
 
 class ProfileContextRequest(BaseModel):
@@ -227,6 +264,7 @@ class ProfileContextRequest(BaseModel):
 
 
 # ---------- POST /api/agent-interview/start ----------
+
 
 @router.post("/api/agent-interview/start")
 async def start_interview(
@@ -245,22 +283,21 @@ async def start_interview(
 
     resume_data = resume.parsed_data or {}
 
-    # Load job posting if provided
-    job_posting_data = None
-    if body.jobPostingId:
-        jp_result = await db.execute(
-            select(JobPosting).where(
-                JobPosting.id == body.jobPostingId,
-                JobPosting.user_id == user.id,
-            )
+    # JD 필수화: 채용공고 없이는 루브릭 커버리지 면접을 진행할 수 없다.
+    if not body.jobPostingId:
+        raise HTTPException(400, {"error": "채용공고를 먼저 입력해주세요."})
+    jp_result = await db.execute(
+        select(JobPosting).where(
+            JobPosting.id == body.jobPostingId,
+            JobPosting.user_id == user.id,
         )
-        jp = jp_result.scalar_one_or_none()
-        if not jp:
-            raise HTTPException(404, {"error": "Job posting not found"})
-        job_posting_data = jp.parsed_data
+    )
+    jp = jp_result.scalar_one_or_none()
+    if not jp:
+        raise HTTPException(404, {"error": "Job posting not found"})
+    job_posting_data = jp.parsed_data
 
-    # Use dynamic scan/dive depth for interview questions.
-    # Free trials use scan only; full sessions use scan and dive.
+    # 질문 수 상한. 실제 종료는 루브릭 커버리지 소진으로 결정된다.
     effective_max_questions = 9
 
     # Create session
@@ -296,13 +333,10 @@ async def start_interview(
         "fit_analysis": None,
         "has_resume_embeddings": False,
         "current_resume_chunks": [],
-        "phase": "scan",
-        "scan_plan": [],
-        "dive_plan": [],
-        "scan_evaluations": [],
-        "current_scan_idx": 0,
-        "current_dive_idx": 0,
-        "current_dive_depth": 0,
+        "rubric_plan": [],
+        "coverage": [],
+        "current_rubric_idx": 0,
+        "current_item_depth": 0,
     }
 
     async def event_generator():
@@ -320,7 +354,9 @@ async def start_interview(
             _persist_progress(session, state)
 
             pending_events = list(state.get("pending_events", []))
-            question_events = [ev for ev in pending_events if ev.get("event") == "question"]
+            question_events = [
+                ev for ev in pending_events if ev.get("event") == "question"
+            ]
             for ev in pending_events:
                 if ev.get("event") != "question":
                     yield {"event": ev["event"], "data": json.dumps(ev["data"])}
@@ -328,11 +364,13 @@ async def start_interview(
             # Send session event before question event.
             yield {
                 "event": "session",
-                "data": json.dumps({
-                    "sessionId": session_id,
-                    "questionCount": state["question_count"],
-                    "maxQuestions": state["max_questions"],
-                }),
+                "data": json.dumps(
+                    {
+                        "sessionId": session_id,
+                        "questionCount": state["question_count"],
+                        "maxQuestions": state["max_questions"],
+                    }
+                ),
             }
 
             for ev in question_events:
@@ -351,14 +389,18 @@ async def start_interview(
             )
             db.add(msg)
             await db.commit()
-        except Exception as e:
+        except Exception:
             logger.exception("Agent interview start failed")
-            yield {"event": "error", "data": json.dumps({"error": "Failed to start interview"})}
+            yield {
+                "event": "error",
+                "data": json.dumps({"error": "Failed to start interview"}),
+            }
 
     return EventSourceResponse(event_generator())
 
 
 # ---------- POST /api/agent-interview/{session_id}/answer ----------
+
 
 @router.post("/api/agent-interview/{session_id}/answer")
 async def submit_answer(
@@ -372,7 +414,9 @@ async def submit_answer(
     if not _is_meaningful_answer(body.answer):
         raise HTTPException(
             400,
-            {"error": "Answer is too short or repetitive. Please add more detail or skip."},
+            {
+                "error": "Answer is too short or repetitive. Please add more detail or skip."
+            },
         )
 
     # Verify session
@@ -388,6 +432,14 @@ async def submit_answer(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(404, {"error": "Session not found"})
+
+    # 레거시(rubric_plan NULL) 진행중 세션은 즉시 종료 처리 (확정 결정 OQ-4).
+    if _is_legacy_session(session):
+        return EventSourceResponse(
+            _legacy_finalize_events(
+                db=db, session=session, session_id=session_id, user_id=user.id
+            )
+        )
 
     state, messages = await _restore_interview_state(
         db=db,
@@ -429,8 +481,7 @@ async def submit_answer(
             # Update answer message with evaluation
             answer_msg.evaluation = state["current_evaluation"]
 
-            # Handle post-decide state for Scan/Dive next actions.
-            # Supported actions: scan_ask, dive_ask, build_dive_plan, end.
+            # 다음 행동: rubric_ask(다음 질문) 또는 end.
             action = state.get("next_action", "end")
 
             if _is_next_question_action(action):
@@ -455,28 +506,32 @@ async def submit_answer(
 
             # Map graph action to legacy frontend action.
             legacy_action = (
-                "next_question"
-                if _is_next_question_action(action)
-                else "end"
+                "next_question" if _is_next_question_action(action) else "end"
             )
 
             yield {
                 "event": "action",
-                "data": json.dumps({
-                    "action": legacy_action,
-                    "questionCount": state.get("question_count", 0),
-                    "maxQuestions": state.get("max_questions", 7),
-                }),
+                "data": json.dumps(
+                    {
+                        "action": legacy_action,
+                        "questionCount": state.get("question_count", 0),
+                        "maxQuestions": state.get("max_questions", 9),
+                    }
+                ),
             }
 
-        except Exception as e:
+        except Exception:
             logger.exception("Agent interview answer processing failed")
-            yield {"event": "error", "data": json.dumps({"error": "Failed to process answer"})}
+            yield {
+                "event": "error",
+                "data": json.dumps({"error": "Failed to process answer"}),
+            }
 
     return EventSourceResponse(event_generator())
 
 
 # ---------- POST /api/agent-interview/{session_id}/skip ----------
+
 
 @router.post("/api/agent-interview/{session_id}/skip")
 async def skip_question(
@@ -497,6 +552,14 @@ async def skip_question(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(404, {"error": "Session not found"})
+
+    # 레거시(rubric_plan NULL) 진행중 세션은 즉시 종료 처리 (확정 결정 OQ-4).
+    if _is_legacy_session(session):
+        return EventSourceResponse(
+            _legacy_finalize_events(
+                db=db, session=session, session_id=session_id, user_id=user.id
+            )
+        )
 
     restored_state, messages = await _restore_interview_state(
         db=db,
@@ -525,45 +588,30 @@ async def skip_question(
             db.add(skip_msg)
             next_message_index += 1
 
-            # 공통 state 빌드
-            state: InterviewState = {**restored_state, "current_question": "", "current_answer": ""}
-            phase = state.get("phase", "scan")
-            scan_plan = state.get("scan_plan", [])
-            dive_plan = state.get("dive_plan", [])
-            current_scan_idx = state.get("current_scan_idx", 0)
-            current_dive_idx = state.get("current_dive_idx", 0)
-            scan_evaluations = state.get("scan_evaluations", [])
+            # 현재 항목 skip → 미검증(unverified) 표기 후 다음 미커버 항목으로.
+            state: InterviewState = {
+                **restored_state,
+                "current_question": "",
+                "current_answer": "",
+            }
+            coverage = [dict(c) for c in state.get("coverage", [])]
+            idx = state.get("current_rubric_idx", 0)
+            if 0 <= idx < len(coverage) and coverage[idx].get("status") == "pending":
+                coverage[idx]["status"] = "unverified"
+            state["coverage"] = coverage
 
             should_end = False
             if question_count >= max_questions:
                 should_end = True
             else:
-                # Handle skip by phase.
-                if phase == "scan":
-                    # scan: dummy eval push, idx++
-                    new_scan_idx = current_scan_idx + 1
-                    state["scan_evaluations"] = scan_evaluations + [{"scores": {"depth": 0}}]
-                    state["current_scan_idx"] = new_scan_idx
-                    if new_scan_idx >= len(scan_plan):
-                        # Build dive plan after scan is complete.
-                        state["next_action"] = "build_dive_plan"
-                        state = await interview_graph.run_next_question_graph(state, db)
-                        if not state.get("dive_plan"):
-                            # End if there is no dive plan.
-                            should_end = True
-                    else:
-                        state["next_action"] = "scan_ask"
-                        state = await interview_graph.run_next_question_graph(state, db)
+                next_idx = interview_graph._select_next_rubric_item(coverage)
+                state["coverage"] = coverage
+                if next_idx is None:
+                    should_end = True
                 else:
-                    # Dive: skip current topic and move to next topic.
-                    new_dive_idx = current_dive_idx + 1
-                    if new_dive_idx >= len(dive_plan):
-                        should_end = True
-                    else:
-                        state["current_dive_idx"] = new_dive_idx
-                        state["current_dive_depth"] = 0
-                        state["next_action"] = "dive_ask"
-                        state = await interview_graph.run_next_question_graph(state, db)
+                    state["current_rubric_idx"] = next_idx
+                    state["current_item_depth"] = 0
+                    state = await interview_graph.run_rubric_ask_graph(state, db)
 
             if should_end:
                 state["next_action"] = "end"
@@ -576,11 +624,15 @@ async def skip_question(
                 await db.commit()
                 yield {
                     "event": "action",
-                    "data": json.dumps({
-                        "action": "end",
-                        "questionCount": state.get("question_count", question_count),
-                        "maxQuestions": max_questions,
-                    }),
+                    "data": json.dumps(
+                        {
+                            "action": "end",
+                            "questionCount": state.get(
+                                "question_count", question_count
+                            ),
+                            "maxQuestions": max_questions,
+                        }
+                    ),
                 }
             else:
                 for ev in state.get("pending_events", []):
@@ -604,21 +656,27 @@ async def skip_question(
 
                 yield {
                     "event": "action",
-                    "data": json.dumps({
-                        "action": "next_question",
-                        "questionCount": state["question_count"],
-                        "maxQuestions": max_questions,
-                    }),
+                    "data": json.dumps(
+                        {
+                            "action": "next_question",
+                            "questionCount": state["question_count"],
+                            "maxQuestions": max_questions,
+                        }
+                    ),
                 }
 
         except Exception:
             logger.exception("Skip question failed")
-            yield {"event": "error", "data": json.dumps({"error": "Failed to skip question"})}
+            yield {
+                "event": "error",
+                "data": json.dumps({"error": "Failed to skip question"}),
+            }
 
     return EventSourceResponse(event_generator())
 
 
 # ---------- POST /api/agent-interview/{session_id}/end ----------
+
 
 @router.post("/api/agent-interview/{session_id}/end")
 async def end_interview(
@@ -655,7 +713,9 @@ async def end_interview(
         try:
             state = await interview_graph.run_end_graph(state, db)
         except Exception:
-            logger.exception("End interview report generation failed for %s", session_id)
+            logger.exception(
+                "End interview report generation failed for %s", session_id
+            )
 
     _complete_session(session, state)
     session.total_questions = question_count
@@ -665,6 +725,7 @@ async def end_interview(
 
 
 # ---------- GET /api/agent-interview/{session_id} ----------
+
 
 @router.get("/api/agent-interview/{session_id}")
 async def get_session(
@@ -713,6 +774,7 @@ async def get_session(
 
 # ---------- GET /api/profile ----------
 
+
 @router.get("/api/profile")
 async def get_profile(
     user: AuthUser = Depends(get_current_user),
@@ -723,7 +785,12 @@ async def get_profile(
 
     profiles = await search_profile(db, user.id, "interview overall summary", top_k=20)
 
-    CATEGORY_KEY = {"strength": "strengths", "weakness": "weaknesses", "pattern": "patterns", "context": "context"}
+    CATEGORY_KEY = {
+        "strength": "strengths",
+        "weakness": "weaknesses",
+        "pattern": "patterns",
+        "context": "context",
+    }
     organized: dict[str, list[str]] = {
         "strengths": [],
         "weaknesses": [],
@@ -740,6 +807,7 @@ async def get_profile(
 
 
 # ---------- POST /api/profile/context ----------
+
 
 @router.post("/api/profile/context")
 async def add_profile_context(

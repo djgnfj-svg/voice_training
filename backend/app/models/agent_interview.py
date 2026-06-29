@@ -1,6 +1,17 @@
 from __future__ import annotations
 
-from sqlalchemy import Column, String, DateTime, Integer, Float, Boolean, JSON, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    String,
+    DateTime,
+    Integer,
+    Float,
+    Boolean,
+    JSON,
+    Text,
+    ForeignKey,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -12,9 +23,18 @@ class AgentInterviewSession(Base):
     __tablename__ = "agent_interview_sessions"
 
     id = Column(String, primary_key=True)
-    user_id = Column("userId", String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    resume_id = Column("resumeId", String, ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True)
-    job_posting_id = Column("jobPostingId", String, ForeignKey("job_postings.id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(
+        "userId", String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    resume_id = Column(
+        "resumeId", String, ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True
+    )
+    job_posting_id = Column(
+        "jobPostingId",
+        String,
+        ForeignKey("job_postings.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     status = Column(String(20), nullable=False, default="in_progress")
     total_questions = Column("totalQuestions", Integer, default=0)
     max_questions = Column("maxQuestions", Integer, default=7)
@@ -23,6 +43,11 @@ class AgentInterviewSession(Base):
     text_mode = Column("textMode", Boolean, default=False)
     fit_analysis = Column("fit_analysis", JSON, nullable=True)
     phase = Column("phase", String, nullable=True)
+    # JD 루브릭 커버리지 (단일 루프)
+    rubric_plan = Column("rubric_plan", JSON, nullable=True)
+    coverage = Column("coverage", JSON, nullable=True)
+    # 레거시 Scan/Dive 컬럼 — int 컬럼은 rubric_idx/item_depth로 재사용.
+    # (scan_plan/dive_plan/scan_evaluations는 폐기, 진행중 레거시 세션 종료 처리용으로만 nullable 유지)
     scan_plan = Column("scan_plan", JSON, nullable=True)
     dive_plan = Column("dive_plan", JSON, nullable=True)
     scan_evaluations = Column("scan_evaluations", JSON, nullable=True)
@@ -32,17 +57,26 @@ class AgentInterviewSession(Base):
     created_at = Column("createdAt", DateTime, server_default=func.now())
     updated_at = Column("updatedAt", DateTime, default=func.now(), onupdate=func.now())
 
-    messages = relationship("AgentInterviewMessage", back_populates="session", cascade="all, delete-orphan")
+    messages = relationship(
+        "AgentInterviewMessage", back_populates="session", cascade="all, delete-orphan"
+    )
 
 
 class AgentInterviewMessage(Base):
     __tablename__ = "agent_interview_messages"
     __table_args__ = (
-        UniqueConstraint("sessionId", "messageIndex", name="agent_messages_session_index_key"),
+        UniqueConstraint(
+            "sessionId", "messageIndex", name="agent_messages_session_index_key"
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True)
-    session_id = Column("sessionId", String, ForeignKey("agent_interview_sessions.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(
+        "sessionId",
+        String,
+        ForeignKey("agent_interview_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     message_index = Column("messageIndex", Integer, nullable=False)
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)

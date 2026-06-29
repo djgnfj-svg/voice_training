@@ -4,17 +4,21 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 
 
-class ScanItem(TypedDict):
-    project_ref: str
-    query: str
-    reason: Literal["jd_match", "jd_unmatched", "project_order"]
+class RubricItem(TypedDict):
+    """JD에서 추출한 단일 평가 루브릭 항목.
 
+    - has_evidence: 이력서(스킬/RAG)에 이 요구를 뒷받침하는 근거가 있는지.
+      True → 근거 연결 질문, False → gap 질문(면접에서 1개까지만 출제).
+    - evidence_refs: 매칭된 이력서 스킬/근거 표시용.
+    - query: 이력서 RAG 검색용 쿼리(label + 핵심 키워드 결합).
+    """
 
-class DiveTopic(TypedDict):
-    topic: str
-    project_ref: str
-    angle: Literal["weakness", "strength"]
-    scan_question_idx: int
+    id: str
+    label: str
+    jd_requirement: str
+    importance: Literal["must", "nice"]
+    has_evidence: bool
+    evidence_refs: list[str]
     query: str
 
 
@@ -64,11 +68,8 @@ class InterviewState(TypedDict, total=False):
     has_resume_embeddings: bool
     current_resume_chunks: list[dict]
 
-    # Scan + Dive 페이즈 (신규)
-    phase: Literal["scan", "dive", "done"]
-    scan_plan: list[ScanItem]
-    dive_plan: list[DiveTopic]
-    scan_evaluations: list[dict]
-    current_scan_idx: int
-    current_dive_idx: int
-    current_dive_depth: int
+    # JD 루브릭 커버리지 (단일 루프)
+    rubric_plan: list[RubricItem]
+    coverage: list[dict]
+    current_rubric_idx: int
+    current_item_depth: int

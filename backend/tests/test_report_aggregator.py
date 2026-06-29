@@ -12,7 +12,7 @@ def _turn(q: str, score: int, *, scores: dict | None = None, meta: dict | None =
             "overallScore": score,
             "demonstratedKeywords": demo or [],
             "missingKeywords": miss or [],
-            "meta": meta or {"phase": "scan"},
+            "meta": meta or {"rubricLabel": "FastAPI", "hasEvidence": True, "importance": "must"},
         },
     }
 
@@ -21,8 +21,7 @@ def test_empty_history_returns_safe_defaults():
     out = aggregate_evaluations([])
     assert out["overallStats"]["count"] == 0
     assert out["categoryBreakdown"] == {}
-    assert out["phaseAnalysis"] == {"scan": {"avg": 0, "count": 0, "qIndices": []}, "dive": {"avg": 0, "count": 0, "qIndices": []}}
-    assert out["diveTopicAnalysis"] == []
+    assert out["coverageAnalysis"] == []
     assert out["keywordStats"] == {"demonstrated": [], "missing": []}
     assert out["extremes"]["best"] is None
     assert out["extremes"]["worst"] is None
@@ -38,15 +37,19 @@ def test_category_breakdown_avg_min_max():
     assert out["categoryBreakdown"]["accuracy"] == {"avg": 80, "min": 70, "max": 90}
 
 
-def test_phase_analysis_splits_scan_and_dive():
+def test_coverage_analysis_groups_by_rubric_label():
     history = [
-        _turn("Q1", 80, meta={"phase": "scan", "scanIdx": 0, "projectRef": "P1"}),
-        _turn("Q2", 60, meta={"phase": "scan", "scanIdx": 1, "projectRef": "P2"}),
-        _turn("Q3", 40, meta={"phase": "dive", "diveIdx": 0, "topicLabel": "T", "angle": "weakness", "projectRef": "P1"}),
+        _turn("Q1", 80, meta={"rubricLabel": "FastAPI API", "hasEvidence": True, "importance": "must"}),
+        _turn("Q2", 60, meta={"rubricLabel": "FastAPI API", "hasEvidence": True, "importance": "must"}),
+        _turn("Q3", 40, meta={"rubricLabel": "Kafka 메시징", "hasEvidence": False, "importance": "nice"}),
     ]
     out = aggregate_evaluations(history)
-    assert out["phaseAnalysis"]["scan"] == {"avg": 70, "count": 2, "qIndices": [1, 2]}
-    assert out["phaseAnalysis"]["dive"] == {"avg": 40, "count": 1, "qIndices": [3]}
+    cov = {c["label"]: c for c in out["coverageAnalysis"]}
+    assert cov["FastAPI API"]["avg"] == 70
+    assert cov["FastAPI API"]["qIndices"] == [1, 2]
+    assert cov["FastAPI API"]["hasEvidence"] is True
+    assert cov["Kafka 메시징"]["avg"] == 40
+    assert cov["Kafka 메시징"]["hasEvidence"] is False
 
 
 def test_extremes_best_and_worst():
@@ -60,19 +63,6 @@ def test_extremes_best_and_worst():
     assert out["extremes"]["best"]["score"] == 90
     assert out["extremes"]["worst"]["qIdx"] == 2
     assert out["extremes"]["worst"]["score"] == 40
-
-
-def test_dive_topic_analysis_groups_by_topic_and_angle():
-    history = [
-        _turn("Q1", 50, meta={"phase": "dive", "diveIdx": 0, "topicLabel": "분산 TX", "angle": "weakness", "projectRef": "P1"}),
-        _turn("Q2", 60, meta={"phase": "dive", "diveIdx": 0, "topicLabel": "분산 TX", "angle": "weakness", "projectRef": "P1"}),
-        _turn("Q3", 85, meta={"phase": "dive", "diveIdx": 1, "topicLabel": "React 최적화", "angle": "strength", "projectRef": "P2"}),
-    ]
-    out = aggregate_evaluations(history)
-    topics = {(t["topicLabel"], t["angle"]): t for t in out["diveTopicAnalysis"]}
-    assert topics[("분산 TX", "weakness")]["avg"] == 55
-    assert topics[("분산 TX", "weakness")]["qIndices"] == [1, 2]
-    assert topics[("React 최적화", "strength")]["avg"] == 85
 
 
 def test_keyword_stats_count_and_indices():
@@ -113,9 +103,9 @@ def test_format_aggregate_renders_all_sections():
     from app.agent.interview.report_metrics import format_aggregate_for_prompt
     history = [
         _turn("React에서 useMemo를 썼나요?", 80, demo=["useMemo", "의존성 배열"], miss=["useCallback"],
-              meta={"phase": "scan", "scanIdx": 0, "projectRef": "P1"}),
+              meta={"rubricLabel": "프론트 렌더 최적화", "hasEvidence": True, "importance": "must"}),
         _turn("상태관리 라이브러리 선택 기준?", 50, demo=["Redux"], miss=["Context API", "Zustand"],
-              meta={"phase": "dive", "diveIdx": 0, "topicLabel": "상태관리", "angle": "weakness", "projectRef": "P1"}),
+              meta={"rubricLabel": "상태관리 설계", "hasEvidence": False, "importance": "nice"}),
     ]
     agg = aggregate_evaluations(history)
     text = format_aggregate_for_prompt(agg)
@@ -123,13 +113,11 @@ def test_format_aggregate_renders_all_sections():
     assert "전체: 2개 답변" in text
     # 역량별
     assert "[역량별 평균/최저/최고]" in text
-    # 페이즈별
-    assert "[페이즈별 성과]" in text
-    assert "훑기(scan)" in text
-    assert "딥다이브(dive)" in text
-    # 딥다이브 주제별
-    assert "[딥다이브 주제별]" in text
-    assert "상태관리" in text
+    # JD 루브릭 커버리지
+    assert "[JD 루브릭 커버리지" in text
+    assert "프론트 렌더 최적화" in text
+    assert "상태관리 설계" in text
+    assert "근거 없음(gap)" in text
     # 최고/최저
     assert "[최고/최저 답변]" in text
     # 키워드
@@ -156,7 +144,7 @@ def test_qidx_uses_question_number_when_present():
             "evaluation": {
                 "scores": {"clarity": 80, "accuracy": 80, "practicality": 80, "depth": 80, "completeness": 80},
                 "overallScore": 80,
-                "meta": {"phase": "scan"},
+                "meta": {"rubricLabel": "A", "hasEvidence": True, "importance": "must"},
             },
         },
         {
@@ -166,12 +154,13 @@ def test_qidx_uses_question_number_when_present():
             "evaluation": {
                 "scores": {"clarity": 50, "accuracy": 50, "practicality": 50, "depth": 50, "completeness": 50},
                 "overallScore": 50,
-                "meta": {"phase": "dive", "topicLabel": "X", "angle": "weakness"},
+                "meta": {"rubricLabel": "B", "hasEvidence": False, "importance": "nice"},
             },
         },
     ]
     agg = aggregate_evaluations(history)
     assert agg["extremes"]["best"]["qIdx"] == 1
     assert agg["extremes"]["worst"]["qIdx"] == 3
-    assert agg["phaseAnalysis"]["scan"]["qIndices"] == [1]
-    assert agg["phaseAnalysis"]["dive"]["qIndices"] == [3]
+    cov = {c["label"]: c for c in agg["coverageAnalysis"]}
+    assert cov["A"]["qIndices"] == [1]
+    assert cov["B"]["qIndices"] == [3]

@@ -82,8 +82,31 @@ def _followup_shape() -> dict[str, Any]:
     }
 
 
-def _decide_shape() -> dict[str, Any]:
-    return {"action": "next_topic", "reason": "Mock decision."}
+def _rubric_builder_shape() -> dict[str, Any]:
+    """Shape for RUBRIC_BUILDER_PROMPT (plan_builder.build_rubric_plan).
+
+    has_evidence는 코드에서 matched 스킬과의 매칭으로 결정되므로, label/jd_requirement에
+    매칭 스킬(FastAPI/PostgreSQL)이 들어간 항목 2개 + gap 항목 1개로 혼합.
+    """
+    return {
+        "rubric": [
+            {
+                "label": "FastAPI 비동기 API 설계",
+                "jd_requirement": "FastAPI 기반 백엔드 API 설계/운영 경험",
+                "importance": "must",
+            },
+            {
+                "label": "PostgreSQL 데이터 모델링",
+                "jd_requirement": "PostgreSQL 스키마 및 인덱스 설계",
+                "importance": "must",
+            },
+            {
+                "label": "Kafka 비동기 메시징",
+                "jd_requirement": "Kafka 기반 이벤트 스트리밍 처리",
+                "importance": "nice",
+            },
+        ]
+    }
 
 
 def _fit_shape() -> dict[str, Any]:
@@ -177,13 +200,20 @@ def _resume_parse_shape() -> dict[str, Any]:
 
 
 def _job_posting_parse_shape() -> dict[str, Any]:
+    """JOB_POSTING_ANALYSIS_PROMPT 실제 스키마(company/position/requirements/preferred/
+    techStack/duties/teamInfo/culture)에 맞춤. techStack은 mock 이력서 스킬과 겹치도록."""
     return {
-        "position": "Mock Position",
         "company": "Mock Co",
-        "requirements": ["Mock requirement"],
-        "responsibilities": ["Mock responsibility"],
-        "requiredSkills": ["Python", "FastAPI"],
-        "techStack": ["Python", "FastAPI"],
+        "position": "Backend Engineer",
+        "requirements": [
+            "FastAPI 기반 백엔드 API 설계/운영 경험",
+            "PostgreSQL 스키마 및 인덱스 설계 경험",
+        ],
+        "preferred": ["Kafka 기반 이벤트 스트리밍 경험"],
+        "techStack": ["Python", "FastAPI", "PostgreSQL"],
+        "duties": ["대용량 트래픽 처리", "비동기 메시징 파이프라인 운영"],
+        "teamInfo": "",
+        "culture": ["오너십"],
     }
 
 
@@ -246,34 +276,30 @@ def _shape_for_json(prompt: str) -> dict | list:
     p = prompt
 
     # --- Interview agent (backend/app/prompts/agent.py) ---
-    if "실제 면접관이 이력서에서 보는 7가지 신호" in p or "scan_suggester" in p:
-        return {
-            "candidates": [
-                {
-                    "project_ref": f"Mock 프로젝트 {i+1}",
-                    "score": 90 - i * 10,
-                    "signals": ["jd_match", "impact"] if i < 2 else ["jd_unmatched", "complexity"],
-                    "rationale": "Mock rationale.",
-                    "probe_hint": "Mock probe.",
-                    "query": f"Mock 프로젝트 {i+1} 쿼리",
-                }
-                for i in range(5)
-            ]
-        }
+    # RUBRIC builder 먼저 — jd_brief가 'duties'/'responsibilities'를 포함해 JD-parse 분기와
+    # 충돌할 수 있고, 프롬프트가 '면접 설계 전문가'를 포함해 fit 분기와도 충돌하므로 최우선.
+    if "평가 루브릭" in p or '"rubric"' in p:
+        return _rubric_builder_shape()
     if "INTERVIEW_PLANNER" in p or ("search_profile" in p and "evaluate" in p and "decide" in p):
         return _planner_decision_shape()
-    if "딥다이브 주제 진행 판정" in p or ('"dig_deeper"' in p and '"next_topic"' in p):
-        return _decide_shape()
+    # 질문 생성(현재 주제 플랜)은 꼬리질문보다 먼저 — 질문 프롬프트가 '꼬리질문' 어휘를
+    # 포함할 수 있어 followup 분기로 오매칭되는 것을 방지. dig_deeper(followup) 프롬프트는
+    # '현재 주제 플랜'을 포함하지 않으므로 충돌하지 않는다.
+    if (
+        "현재 주제 플랜" in p
+        or "current_topic_plan" in p
+        or "다음 면접 질문 1개를 생성" in p
+        or "다음 질문 1개를 생성" in p
+    ):
+        return _question_shape()
     if "꼬리질문" in p:
         return _followup_shape()
-    # 더 구체적인 builder들을 먼저 검사. fit은 마지막 fallback으로 둬야 question/eval/report의
+    # 더 구체적인 builder들을 먼저 검사. fit은 마지막 fallback으로 둬야 eval/report의
     # variable 슬롯 안에 들어간 "avoid_topics"가 잘못 매칭되는 것을 막을 수 있다.
     if "면접 질문" in p and "지원자 답변" in p and "demonstratedKeywords" in p:
         return _agent_evaluation_shape()
     if "종합 리포트를 생성" in p or "questionHighlights" in p or "면접 종합 리포트 생성기" in p:
         return _report_shape()
-    if "다음 질문 1개를 생성" in p or "current_topic_plan" in p or "현재 주제 플랜" in p or "다음 면접 질문 1개를 생성" in p:
-        return _question_shape()
     if "면접 설계 전문가" in p:
         return _fit_shape()
     if "프로필 인사이트를 추출" in p:
@@ -292,7 +318,9 @@ def _shape_for_json(prompt: str) -> dict | list:
     # --- Resume / JD / matching / model answer ---
     if "이력서" in p and ("parsedData" in p or "resumeText" in p or "summary" in p and "skills" in p and "projects" in p):
         return _resume_parse_shape()
-    if "채용공고" in p and ("requiredSkills" in p or "techStack" in p or "responsibilities" in p):
+    if ("채용공고" in p or "채용 공고" in p) and (
+        "requiredSkills" in p or "techStack" in p or "responsibilities" in p or "duties" in p
+    ):
         return _job_posting_parse_shape()
     if "matchScore" in p or "matchedSkills" in p:
         return _matching_shape()

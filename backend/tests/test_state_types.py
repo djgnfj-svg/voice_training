@@ -1,36 +1,31 @@
-"""Verify new InterviewState fields for Scan+Dive structure."""
-from app.agent.interview.state import InterviewState, ScanItem, DiveTopic
+"""Verify InterviewState fields for JD rubric coverage structure."""
+from app.agent.interview.state import InterviewState, RubricItem
 
 
-def test_scan_item_shape():
-    item: ScanItem = {
-        "project_ref": "크롤링",
-        "query": "웹 크롤링 Selenium",
-        "reason": "jd_match",
+def test_rubric_item_shape():
+    item: RubricItem = {
+        "id": "r1",
+        "label": "FastAPI 비동기 API 설계",
+        "jd_requirement": "FastAPI 기반 비동기 API 설계 경험",
+        "importance": "must",
+        "has_evidence": True,
+        "evidence_refs": ["FastAPI"],
+        "query": "FastAPI 비동기 API",
     }
-    assert item["project_ref"] == "크롤링"
-    assert item["reason"] in ("jd_match", "jd_unmatched", "project_order")
+    assert item["id"] == "r1"
+    assert item["importance"] in ("must", "nice")
+    assert item["has_evidence"] is True
+    assert "FastAPI" in item["evidence_refs"]
 
 
-def test_dive_topic_shape():
-    topic: DiveTopic = {
-        "topic": "크롤링 안정성",
-        "project_ref": "크롤링",
-        "angle": "weakness",
-        "scan_question_idx": 0,
-        "query": "크롤링 실패 대응",
-    }
-    assert topic["angle"] in ("weakness", "strength")
-
-
-def test_interview_state_has_phase_fields():
+def test_interview_state_has_rubric_fields():
     state: InterviewState = {
-        "phase": "scan",
-        "scan_plan": [],
-        "dive_plan": [],
-        "current_scan_idx": 0,
-        "current_dive_idx": 0,
-        "current_dive_depth": 0,
+        "rubric_plan": [],
+        "coverage": [],
+        "current_rubric_idx": 0,
+        "current_item_depth": 0,
     }
-    assert state["phase"] == "scan"
-    assert state["current_dive_depth"] == 0
+    assert state["rubric_plan"] == []
+    assert state["coverage"] == []
+    assert state["current_rubric_idx"] == 0
+    assert state["current_item_depth"] == 0

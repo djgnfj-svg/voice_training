@@ -53,50 +53,36 @@ def _aggregate_categories(turns: list[tuple[int, dict]]) -> dict:
     return out
 
 
-def _aggregate_phase(turns: list[tuple[int, dict]]) -> dict:
-    buckets = {"scan": [], "dive": []}
-    indices = {"scan": [], "dive": []}
+def _aggregate_coverage(turns: list[tuple[int, dict]]) -> list[dict]:
+    """JD 루브릭 항목(rubricLabel)별로 검증 성과를 집계. meta.rubricLabel 기준."""
+    groups: dict[str, dict] = {}
+    order: list[str] = []
     for q_idx, turn in turns:
         meta = turn["evaluation"].get("meta") or {}
-        phase = meta.get("phase")
-        if phase not in buckets:
-            continue
-        overall = turn["evaluation"].get("overallScore")
-        if isinstance(overall, (int, float)):
-            buckets[phase].append(float(overall))
-            indices[phase].append(q_idx)
-    return {
-        "scan": {"avg": _avg(buckets["scan"]), "count": len(buckets["scan"]), "qIndices": indices["scan"]},
-        "dive": {"avg": _avg(buckets["dive"]), "count": len(buckets["dive"]), "qIndices": indices["dive"]},
-    }
-
-
-def _aggregate_dive_topics(turns: list[tuple[int, dict]]) -> list[dict]:
-    groups: dict[tuple[str, str], dict] = defaultdict(lambda: {"scores": [], "qIndices": [], "projectRef": ""})
-    for q_idx, turn in turns:
-        meta = turn["evaluation"].get("meta") or {}
-        if meta.get("phase") != "dive":
-            continue
-        label = meta.get("topicLabel") or ""
-        angle = meta.get("angle") or ""
+        label = meta.get("rubricLabel")
         if not label:
             continue
-        key = (label, angle)
+        if label not in groups:
+            groups[label] = {
+                "scores": [],
+                "qIndices": [],
+                "hasEvidence": bool(meta.get("hasEvidence")),
+                "importance": meta.get("importance") or "",
+            }
+            order.append(label)
         overall = turn["evaluation"].get("overallScore")
         if isinstance(overall, (int, float)):
-            groups[key]["scores"].append(float(overall))
-        groups[key]["qIndices"].append(q_idx)
-        if not groups[key]["projectRef"]:
-            groups[key]["projectRef"] = meta.get("projectRef", "")
+            groups[label]["scores"].append(float(overall))
+        groups[label]["qIndices"].append(q_idx)
     return [
         {
-            "topicLabel": label,
-            "angle": angle,
-            "projectRef": g["projectRef"],
-            "avg": _avg(g["scores"]),
-            "qIndices": g["qIndices"],
+            "label": label,
+            "hasEvidence": groups[label]["hasEvidence"],
+            "importance": groups[label]["importance"],
+            "avg": _avg(groups[label]["scores"]),
+            "qIndices": groups[label]["qIndices"],
         }
-        for (label, angle), g in groups.items()
+        for label in order
     ]
 
 
@@ -164,8 +150,7 @@ def aggregate_evaluations(conversation_history: list[dict]) -> dict:
     return {
         "overallStats": overall_stats,
         "categoryBreakdown": _aggregate_categories(turns),
-        "phaseAnalysis": _aggregate_phase(turns),
-        "diveTopicAnalysis": _aggregate_dive_topics(turns),
+        "coverageAnalysis": _aggregate_coverage(turns),
         "keywordStats": {
             "demonstrated": _aggregate_keywords(turns, "demonstratedKeywords"),
             "missing": _aggregate_keywords(turns, "missingKeywords"),
@@ -190,21 +175,17 @@ def format_aggregate_for_prompt(agg: dict) -> str:
                 c = cat[key]
                 lines.append(f"- {labels[key]}: 평균 {c['avg']} (최저 {c['min']} / 최고 {c['max']})")
 
-    phase = agg.get("phaseAnalysis") or {}
-    if phase.get("scan", {}).get("count") or phase.get("dive", {}).get("count"):
+    coverage = agg.get("coverageAnalysis") or []
+    if coverage:
         lines.append("")
-        lines.append("[페이즈별 성과]")
-        s = phase.get("scan", {})
-        d = phase.get("dive", {})
-        lines.append(f"- 훑기(scan): {s.get('count', 0)}개, 평균 {s.get('avg', 0)}점, Q{','.join(map(str, s.get('qIndices', [])))}")
-        lines.append(f"- 딥다이브(dive): {d.get('count', 0)}개, 평균 {d.get('avg', 0)}점, Q{','.join(map(str, d.get('qIndices', [])))}")
-
-    dives = agg.get("diveTopicAnalysis") or []
-    if dives:
-        lines.append("")
-        lines.append("[딥다이브 주제별]")
-        for t in dives:
-            lines.append(f"- '{t['topicLabel']}' ({t['angle']}, {t['projectRef']}): 평균 {t['avg']}점, Q{','.join(map(str, t['qIndices']))}")
+        lines.append("[JD 루브릭 커버리지 — 검증된 요구역량별 성과]")
+        for c in coverage:
+            mode = "근거 있음" if c.get("hasEvidence") else "근거 없음(gap)"
+            imp = c.get("importance") or ""
+            lines.append(
+                f"- '{c['label']}' ({mode}{', ' + imp if imp else ''}): "
+                f"평균 {c['avg']}점, Q{','.join(map(str, c['qIndices']))}"
+            )
 
     ext = agg.get("extremes") or {}
     if ext.get("best") or ext.get("worst"):
