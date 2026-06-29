@@ -56,6 +56,9 @@ frontend/prisma/migrations/
 # App icons (Next.js App Router convention) — 강제 포함
 !frontend/src/app/icon.png
 !frontend/src/app/apple-icon.png
+# README/docs 에셋 — 강제 포함
+!docs/assets/*.png
+!docs/assets/*.jpg
 
 # Python
 __pycache__/
