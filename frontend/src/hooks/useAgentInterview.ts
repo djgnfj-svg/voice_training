@@ -14,7 +14,7 @@ export interface AgentMessage {
   evaluation?: Record<string, unknown>;
   questionNumber?: number;
   followUpRound?: number;
-  phase?: "scan" | "dive";
+  phase?: "evidence" | "gap";
   phaseLabel?: string;
 }
 
@@ -28,8 +28,7 @@ type Phase =
   | "generating_report"
   | "completed"
   | "error"
-  | "scan_plan_ready"
-  | "dive_plan_ready"
+  | "rubric_plan_ready"
   | "fit_analyzing"
   | "fit_analyzed"
   | "profile_loaded"
@@ -125,8 +124,10 @@ export function useAgentInterview() {
 
       source.addEventListener("error", (e: MessageEvent) => {
         try {
+          // FastAPI HTTPException은 {"detail":{"error":...}} 형태로 직렬화되고,
+          // SSE 에러 프레임은 본문을 그대로 전달하므로 detail.error를 먼저 읽는다.
           const data = JSON.parse(e.data);
-          setError(data.error || "오류가 발생했습니다");
+          setError(data.detail?.error ?? data.error ?? "오류가 발생했습니다");
         } catch {
           setError("연결이 끊어졌습니다");
         }

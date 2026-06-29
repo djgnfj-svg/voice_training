@@ -13,7 +13,7 @@ import { ResumeSelector } from '@/components/resume/resume-selector';
 import { JobPostingInput, JobPostingResult } from '@/components/job-posting/job-posting-input';
 import { useToast } from '@/hooks/useToast';
 import {
-  Sparkles, ArrowRight, SkipForward, PlayCircle, Bot,
+  Sparkles, ArrowRight, PlayCircle, Bot,
   Mic, Upload, FileText, CheckCircle, Loader2, Trash2, Pencil,
   ChevronDown, ChevronUp,
 } from 'lucide-react';
@@ -156,10 +156,6 @@ function InterviewTab() {
     setStep('job-posting');
   };
 
-  const skipJobPosting = () => {
-    setStep('start');
-  };
-
   const handleJobPostingAnalyzed = (data: {
     id: string;
     rawText: string;
@@ -173,6 +169,11 @@ function InterviewTab() {
   const startInterview = () => {
     if (!selectedResumeId) {
       toast({ title: '이력서를 선택해주세요', variant: 'destructive' });
+      return;
+    }
+    if (!jobPostingData) {
+      toast({ title: '채용공고를 먼저 입력해주세요', variant: 'destructive' });
+      setStep('job-posting');
       return;
     }
 
@@ -269,21 +270,15 @@ function InterviewTab() {
         </>
       )}
 
-      {/* Step 2: Job Posting (optional) */}
+      {/* Step 2: Job Posting (required) */}
       {step === 'job-posting' && (
         <>
           {!jobPostingData ? (
             <>
+              <p className="text-sm text-muted-foreground">
+                AI가 채용공고에서 평가 루브릭을 뽑아 JD 요구역량 중심으로 면접을 진행합니다. 채용공고 입력은 필수입니다.
+              </p>
               <JobPostingInput onAnalyzed={handleJobPostingAnalyzed} />
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full"
-                onClick={skipJobPosting}
-              >
-                <SkipForward className="mr-2 h-4 w-4" />
-                건너뛰기 (이력서만으로 면접 진행)
-              </Button>
             </>
           ) : (
             <JobPostingResult
@@ -357,7 +352,7 @@ function InterviewTab() {
           setShowMicCheck(false);
           const params = new URLSearchParams({
             resumeId: selectedResumeId!,
-            ...(jobPostingData?.id ? { jobPostingId: jobPostingData.id } : {}),
+            jobPostingId: jobPostingData!.id,
           });
           router.push(`/agent-interview/session/new?${params}`);
         }}

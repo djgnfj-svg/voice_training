@@ -51,7 +51,7 @@ export default function AgentInterviewSessionPage() {
   const isNewSession = sessionId === 'new';
 
   const resumeId = searchParams.get('resumeId') || '';
-  const jobPostingId = searchParams.get('jobPostingId') || undefined;
+  const jobPostingId = searchParams.get('jobPostingId') || '';
 
   const { data: session, isLoading } = useQuery({
     queryKey: ['agent-session', sessionId],
@@ -59,8 +59,8 @@ export default function AgentInterviewSessionPage() {
     enabled: !isNewSession,
   });
 
-  // New session requires resumeId
-  if (isNewSession && !resumeId) {
+  // New session requires resumeId + jobPostingId (JD 필수화)
+  if (isNewSession && (!resumeId || !jobPostingId)) {
     router.replace('/interview/setup');
     return null;
   }
@@ -298,28 +298,34 @@ export default function AgentInterviewSessionPage() {
             );
           })()}
 
-          {/* Phase Insight */}
-          {(report?.phaseInsight || report?.phaseAnalysis) && (
+          {/* JD 루브릭 커버리지 */}
+          {(report?.phaseInsight || (Array.isArray(report?.coverageAnalysis) && report.coverageAnalysis.length > 0)) && (
             <Card>
               <CardHeader>
-                <CardTitle>페이즈별 분석</CardTitle>
+                <CardTitle>JD 커버리지 분석</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {report?.phaseInsight && <p className="text-sm leading-relaxed">{report.phaseInsight as string}</p>}
-                {report?.phaseAnalysis && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {(['scan', 'dive'] as const).map((k) => {
-                      const pa = report.phaseAnalysis as Record<string, { avg: number; count: number }>;
-                      const p = pa[k];
-                      if (!p || p.count === 0) return null;
-                      return (
-                        <div key={k} className="rounded-md border bg-muted/30 p-3">
-                          <div className="text-xs text-muted-foreground">{k === 'scan' ? '훑기' : '딥다이브'}</div>
-                          <div className={cn('text-2xl font-bold', scoreText(p.avg))}>{p.avg}</div>
-                          <div className="text-xs text-muted-foreground">{p.count}개 답변</div>
+                {Array.isArray(report?.coverageAnalysis) && report.coverageAnalysis.length > 0 && (
+                  <div className="space-y-2">
+                    {(report.coverageAnalysis as Array<{ label: string; hasEvidence: boolean; avg: number; qIndices: number[] }>).map((c, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-md border bg-muted/30 p-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-medium">{c.label}</span>
+                            {!c.hasEvidence && (
+                              <Badge variant="outline" className="shrink-0 text-xs">미검증 영역</Badge>
+                            )}
+                          </div>
+                          {c.qIndices?.length > 0 && (
+                            <div className="text-xs text-muted-foreground">Q{c.qIndices.join(', Q')}</div>
+                          )}
                         </div>
-                      );
-                    })}
+                        <div className={cn('shrink-0 text-2xl font-bold', c.hasEvidence ? scoreText(c.avg) : 'text-muted-foreground')}>
+                          {c.hasEvidence ? c.avg : '-'}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>

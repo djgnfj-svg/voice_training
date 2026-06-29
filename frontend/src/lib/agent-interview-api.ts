@@ -2,7 +2,7 @@
 
 export interface AgentStartParams {
   resumeId: string;
-  jobPostingId?: string;
+  jobPostingId: string;
   textMode?: boolean;
 }
 

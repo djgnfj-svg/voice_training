@@ -27,7 +27,7 @@ const SILENCE_TIMEOUT_MS = 30000;
 
 interface AgentInterviewPanelProps {
   resumeId: string;
-  jobPostingId?: string;
+  jobPostingId: string;
   onComplete?: (sessionId: string) => void;
 }
 
@@ -210,8 +210,7 @@ export function AgentInterviewPanel({
     'profile_loaded',
     'fit_analyzing',
     'fit_analyzed',
-    'scan_plan_ready',
-    'dive_plan_ready',
+    'rubric_plan_ready',
     'generating_question',
     'evaluating',
     'generating_followup',
@@ -320,20 +319,20 @@ export function AgentInterviewPanel({
                   <span
                     className={cn(
                       'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
-                      currentQuestion.phase === 'dive'
-                        ? 'border-primary/30 bg-primary/10 text-primary'
+                      currentQuestion.phase === 'gap'
+                        ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
                         : 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300'
                     )}
                     aria-label={
-                      currentQuestion.phase === 'dive'
-                        ? `딥다이브 단계: ${currentQuestion.phaseLabel}`
-                        : `훑기 단계: ${currentQuestion.phaseLabel}`
+                      currentQuestion.phase === 'gap'
+                        ? `JD 미검증 영역: ${currentQuestion.phaseLabel}`
+                        : `JD 요구역량 검증: ${currentQuestion.phaseLabel}`
                     }
                   >
-                    {currentQuestion.phase === 'dive' ? (
-                      <Target className="h-3 w-3" />
-                    ) : (
+                    {currentQuestion.phase === 'gap' ? (
                       <Search className="h-3 w-3" />
+                    ) : (
+                      <Target className="h-3 w-3" />
                     )}
                     {currentQuestion.phaseLabel}
                   </span>
@@ -361,9 +360,8 @@ export function AgentInterviewPanel({
                 {phase === 'loading_profile' && '프로필 분석 중...'}
                 {phase === 'profile_loaded' && '프로필 로드 완료, 적합도 분석 준비 중...'}
                 {phase === 'fit_analyzing' && '이력서와 공고 적합도 분석 중...'}
-                {phase === 'fit_analyzed' && '적합도 분석 완료, 질문 계획 수립 중...'}
-                {phase === 'scan_plan_ready' && '훑기 질문 계획 완료, 첫 질문 생성 중...'}
-                {phase === 'dive_plan_ready' && '딥다이브 계획 완료, 다음 질문 생성 중...'}
+                {phase === 'fit_analyzed' && '적합도 분석 완료, JD 루브릭 구성 중...'}
+                {phase === 'rubric_plan_ready' && 'JD 루브릭 구성 완료, 첫 질문 생성 중...'}
                 {phase === 'generating_question' && '질문 생성 중...'}
                 {phase === 'evaluating' && '답변을 평가하고 있습니다...'}
                 {phase === 'generating_followup' && '꼬리질문 생성 중...'}
