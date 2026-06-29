@@ -1,5 +1,15 @@
 import { test, expect } from '../fixtures/auth';
 
+const JD_TEXT = `채용공고
+포지션: 백엔드 엔지니어
+회사: 목코퍼레이션
+자격요건:
+- FastAPI 기반 백엔드 API 설계/운영 경험
+- PostgreSQL 스키마 및 인덱스 설계 경험
+우대사항:
+- Kafka 기반 이벤트 스트리밍 경험
+기술스택: Python, FastAPI, PostgreSQL`;
+
 const ANSWERS = [
   '주문 처리 시스템에서 동시성 문제를 해결하기 위해 PostgreSQL의 SELECT FOR UPDATE를 활용했습니다. 비관적 락으로 재고 차감 충돌을 방지하면서, 인덱스 설계와 쿼리 플랜 분석으로 응답 시간을 200ms 이하로 유지했습니다.',
   'FastAPI의 의존성 주입을 활용해 데이터베이스 세션과 인증 토큰 검증 로직을 재사용 가능한 형태로 분리했습니다. Pydantic 모델로 요청/응답 검증을 일원화하고 OpenAPI 스펙도 자동 생성하여 프론트엔드 팀과의 인터페이스 협업 비용을 줄였습니다.',
@@ -16,9 +26,18 @@ test('agent-interview: textMode으로 답변 루프', async ({ adminPage, errors
   expect(Array.isArray(items) && items.length > 0).toBeTruthy();
   const resumeId: string = items[0].id;
 
-  // Direct entry: /session/new with textMode=1 — panel mounts with textMode=true,
-  // skips voice setup, skips mic check dialog
-  await adminPage.goto(`/agent-interview/session/new?resumeId=${resumeId}&textMode=1`);
+  // JD 필수화: 채용공고를 먼저 생성해야 /start가 통과 (없으면 400).
+  const jdRes = await ctx.request.post('/api/job-posting', { data: { rawText: JD_TEXT } });
+  expect(jdRes.ok(), `jd create failed: ${jdRes.status()}`).toBeTruthy();
+  const jd = await jdRes.json();
+  const jobPostingId: string = jd.id;
+  expect(jobPostingId, 'jobPostingId missing from JD response').toBeTruthy();
+
+  // Direct entry: /session/new with resumeId + jobPostingId + textMode=1 — panel mounts
+  // with textMode=true, skips voice setup, skips mic check dialog
+  await adminPage.goto(
+    `/agent-interview/session/new?resumeId=${resumeId}&jobPostingId=${jobPostingId}&textMode=1`
+  );
 
   // textMode 활성: TextAnswerInput 컴포넌트의 textarea가 보이면 OK
   // (외부 admin 배지는 isAdmin 체크 — 부수적)

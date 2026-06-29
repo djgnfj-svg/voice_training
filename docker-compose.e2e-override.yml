@@ -1,0 +1,9 @@
+# dev frontend가 http://localhost:81에서 e2e 세션 쿠키를 디코드하도록 NEXTAUTH_URL을
+# 오버라이드하는 opt-in override (기본 dev 스택은 루트 .env의 prod https URL을 사용).
+# 적용: docker compose -f docker-compose.yml -f docker-compose.e2e-override.yml up -d frontend && docker compose restart nginx
+# 복귀: docker compose up -d --force-recreate frontend
+services:
+  frontend:
+    environment:
+      - NEXTAUTH_URL=http://localhost:81
+      - AUTH_URL=http://localhost:81
